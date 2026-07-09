@@ -10,7 +10,7 @@
       padding: 30px;
     }
     .box {
-      max-width: 900px;
+      max-width: 1000px;
       margin: auto;
       background: #111827;
       padding: 25px;
@@ -28,6 +28,7 @@
       background: #020617;
       color: white;
       border: 1px solid #334155;
+      box-sizing: border-box;
     }
     button, select {
       margin-top: 12px;
@@ -44,23 +45,24 @@
     .quick button {
       background: #334155;
       margin-right: 8px;
+      margin-bottom: 8px;
     }
     pre {
       background: #020617;
       color: #22c55e;
       padding: 15px;
       border-radius: 10px;
-      min-height: 150px;
+      min-height: 180px;
       white-space: pre-wrap;
     }
   </style>
 </head>
 <body>
   <div class="box">
-    <h1>🤖 Jarvis Local Agent</h1>
+    <h1>🤖 Jarvis Local Agent - Phase 2</h1>
     <p>Type your command below and click Execute.</p>
 
-    <textarea id="cmd" placeholder="Example: open notepad"></textarea>
+    <textarea id="cmd" placeholder="Example: system status"></textarea>
 
     <br>
 
@@ -74,9 +76,17 @@
 
     <div class="quick">
       <h3>Quick Commands</h3>
+      <button onclick="setCmd('system status')">System Status</button>
+      <button onclick="setCmd('take screenshot')">Take Screenshot</button>
       <button onclick="setCmd('open notepad')">Open Notepad</button>
       <button onclick="setCmd('open calculator')">Open Calculator</button>
       <button onclick="setCmd('open downloads')">Open Downloads</button>
+      <button onclick="setCmd('open app paint')">Open Paint</button>
+      <button onclick="setCmd('open website youtube.com')">Open YouTube</button>
+      <button onclick="setCmd('google latest AI tools')">Google Search</button>
+      <button onclick="setCmd('create note Continue Jarvis setup')">Create Note</button>
+      <button onclick="setCmd('list notes')">List Notes</button>
+      <button onclick="setCmd('list models')">List Models</button>
       <button onclick="setCmd('Who are you?')">Ask Jarvis</button>
     </div>
 
@@ -106,30 +116,14 @@ async function runCommand() {
 
   output.textContent = "Jarvis working...";
 
-  let endpoint = "/command";
-  let body = {
-    command: command,
-    mode: mode
-  };
-
-  if (
-    command.toLowerCase().includes("who are you") ||
-    command.toLowerCase().includes("what can you do") ||
-    command.toLowerCase().includes("explain") ||
-    command.toLowerCase().includes("tell me")
-  ) {
-    endpoint = "/chat";
-    body = {
-      message: command,
-      mode: mode
-    };
-  }
-
   try {
-    const res = await fetch(endpoint, {
+    const res = await fetch("/agent", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(body)
+      body: JSON.stringify({
+        command: command,
+        mode: mode
+      })
     });
 
     const data = await res.json();
