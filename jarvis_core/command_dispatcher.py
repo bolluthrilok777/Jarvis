@@ -39,7 +39,7 @@ def confirm_action(req: ConfirmRequest) -> dict:
     pending_actions.pop(req.action_id, None)
     return {
         "status": "confirmed",
-        "message": "Action acknowledged and queued for execution.",
+        "message": "Confirmation recorded, but execution of this protected action is not implemented in the current safe version.",
         "command": original_command,
     }
 

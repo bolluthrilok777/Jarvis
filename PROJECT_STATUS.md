@@ -82,7 +82,7 @@ C:\Jarvis\
 - **Playwright webpage reading** — headless Chromium
 - **Playwright website screenshots**
 - **AI fallback** — unmatched commands go to Ollama
-- **Dangerous command confirmation** — delete/payment/etc require explicit confirmation
+- **Dangerous command confirmation** — delete/payment/etc require explicit confirmation; execution of protected actions is not implemented in the current safe version
 - **Pending action expiry** — confirmations expire after 300 seconds
 
 ---
@@ -178,7 +178,7 @@ cd C:\Jarvis
 python -m pytest tests/ -v
 ```
 
-Expected: 22 passed, 0 failed (1 may be skipped if no internet)
+Expected: 23 passed, 0 failed (1 may be skipped if no internet)
 
 ---
 

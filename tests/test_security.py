@@ -88,6 +88,33 @@ def test_expired_pending_action():
     assert action_id not in pending_actions
 
 
+# Test 19b: Confirmed action returns correct non-execution message
+def test_confirmed_action_message():
+    from jarvis_core.models import ConfirmRequest
+    from jarvis_core.command_dispatcher import confirm_action, pending_actions
+    import time
+    import uuid
+
+    action_id = str(uuid.uuid4())
+    pending_actions[action_id] = {
+        "command": "delete something",
+        "created_at": time.time(),  # fresh — not expired
+    }
+
+    req = ConfirmRequest(action_id=action_id, confirm=True)
+    result = confirm_action(req)
+
+    assert result["status"] == "confirmed"
+    # Must NOT imply the action was executed, scheduled, or queued
+    msg = result["message"]
+    assert "queued" not in msg.lower()
+    assert "executed" not in msg.lower()
+    assert "scheduled" not in msg.lower()
+    assert "Confirmation recorded" in msg
+    assert "not implemented" in msg
+    assert action_id not in pending_actions
+
+
 # Test 20: select_model("light") returns gemma2:2b
 def test_select_model_light():
     from jarvis_core.ollama_service import select_model
