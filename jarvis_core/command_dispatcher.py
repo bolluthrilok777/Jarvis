@@ -45,6 +45,14 @@ def confirm_action(req: ConfirmRequest) -> dict:
 
 
 def run_agent_command(req: CommandRequest) -> dict:
+    # ── Action Engine (Phase 4.5) ──────────────────────────────────────────
+    from jarvis_core.config import ACTION_ENGINE_ENABLED
+    if ACTION_ENGINE_ENABLED:
+        from jarvis_core.action_engine import engine as _engine
+        _result = _engine.run(req)
+        if _result.get("status") != "no_match":
+            return _result
+    # ── End Action Engine ──────────────────────────────────────────────────
     text = req.command.strip()
     cmd = text.lower()
     logger.info("Command received: %s", text)

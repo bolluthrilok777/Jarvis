@@ -79,3 +79,9 @@ VOICE_IDLE_UNLOAD_SECONDS: int = 120
 WHISPER_MODEL_DIR: pathlib.Path = BASE_DIR / "models" / "whisper"
 
 WHISPER_MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+# ── Action Engine (Phase 4.5) ─────────────────────────────────────────────
+CONFIDENCE_THRESHOLD: float = 0.7
+ACTION_ENGINE_ENABLED: bool = True
+ENGINE_USE_OLLAMA_FALLBACK: bool = True
+ENGINE_MAX_STEPS: int = 5

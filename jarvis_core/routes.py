@@ -80,3 +80,9 @@ def command(req: CommandRequest):
 @router.post("/confirm-action")
 def confirm_action_route(req: ConfirmRequest):
     return confirm_action(req)
+
+
+@router.post("/action")
+def action(req: CommandRequest):
+    from jarvis_core.action_engine import engine
+    return engine.run(req)
