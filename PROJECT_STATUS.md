@@ -276,3 +276,67 @@ Expected: 57 passed (23 existing + 29 voice + 5 property tests)
 - Requires Ollama running locally for AI features
 - Calculator GUI automation requires Windows Calculator app
 - Playwright requires Chromium browser installed (`playwright install chromium`)
+
+---
+
+## Phase 4.5 — Universal Natural-Language Action Engine
+
+**Added:** 2026  
+**Status:** Complete — 82/82 tests passing
+
+### What Changed
+
+Phase 4.5 replaces ad-hoc string matching in `command_dispatcher.py` with a structured, deterministic action engine. All natural-language commands now flow through a four-stage pipeline before falling back to the legacy AI path.
+
+### Engine Pipeline
+
+```
+CommandRequest
+  │
+  ▼
+1. DANGEROUS_WORDS pre-filter  →  confirmation_required
+  │
+  ▼
+2. Normalizer (strip fillers, spoken operators, spoken numbers)
+  │
+  ▼
+3. RuleMatcher (compiled regex → ActionPlan, confidence=1.0)
+  │
+  ▼ (no match)
+4. Ollama planner (only for high-confidence plans, confidence=1.0)
+  │
+  ▼ (no_match)
+5. Legacy command_dispatcher (AI fallback, existing commands)
+```
+
+### New Modules
+
+| File | Purpose |
+|------|---------|
+| `jarvis_core/action_models.py` | Pydantic models: ActionStep, ActionPlan, ActionResult, ExecutionReport |
+| `jarvis_core/action_engine.py` | Orchestrator: routes commands through pipeline, executes plans |
+| `jarvis_core/skill_registry.py` | 18 registered skills with validated executors |
+| `jarvis_core/rule_matcher.py` | 19 deterministic regex rules, all produce confidence=1.0 |
+| `jarvis_core/normalizer.py` | Filler removal, spoken-operator conversion, spoken-number conversion |
+| `jarvis_core/ollama_planner.py` | Ollama-based plan generation (structured JSON prompt) |
+| `tests/test_action_engine.py` | 21 unit tests + 4 property-based tests |
+
+### Key Design Decisions
+
+- **Rule-matched plans always execute** (confidence=1.0, deterministic)
+- **Planner-generated plans require confidence=1.0** to execute; all lower-confidence planner results fall through to the legacy AI chat path (prevents hallucinated plans from running)
+- **No new external dependencies** — all tools already in venv
+- **Backwards-compatible** — existing command_dispatcher routes unchanged; engine returns `no_match` for unrecognized commands
+
+### Test Results
+
+```
+82 passed in ~173s
+  25  tests/test_action_engine.py  (new Phase 4.5 tests)
+   7  tests/test_routes.py
+  34  tests/test_voice.py
+   5  tests/test_tools.py
+   9  tests/test_security.py
+   1  tests/test_imports.py
+   1  tests/test_tools.py
+```

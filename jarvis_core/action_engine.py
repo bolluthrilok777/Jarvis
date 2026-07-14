@@ -63,13 +63,17 @@ class ActionEngine:
             from jarvis_core.ollama_planner import plan as ollama_plan
             result = ollama_plan(normalized, raw)
             if isinstance(result, dict):
-                # Surface clarification requests to the user.
-                # For all other error cases (Ollama down, bad JSON, etc.),
-                # return no_match so the legacy dispatcher can fall through.
-                if result.get("status") == "clarification_needed":
-                    return result
+                # Planner could not produce a valid ActionPlan (error, no skills matched,
+                # service unavailable). Fall through to the legacy AI chat path.
                 return {"status": "no_match", "message": result.get("message", "No plan found.")}
             plan = result
+            # If the planner found a plan but confidence is too low, use AI chat instead.
+            # We use a strict threshold here (1.0) for planner-generated plans because the
+            # Ollama planner may hallucinate plans for conversational queries. Only rule-matched
+            # plans (always confidence=1.0) should proceed to execution; planner plans route
+            # to the legacy AI chat path for safety.
+            if plan.confidence < 1.0:
+                return {"status": "no_match", "message": "Low confidence — routing to AI chat."}
 
         # 5. Confidence gate
         if plan.clarification_needed or plan.confidence < CONFIDENCE_THRESHOLD:
