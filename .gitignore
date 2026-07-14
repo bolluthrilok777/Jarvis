@@ -6,3 +6,10 @@ screenshots/
 web_screenshots/
 notes/
 .kiro/
+
+# Phase 4 — Voice
+models/whisper/
+temp_audio/
+*.webm
+*.ogg
+*.opus

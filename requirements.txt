@@ -6,6 +6,8 @@ psutil~=7.2.0
 Pillow~=12.3.0
 playwright~=1.61.0
 pyautogui~=0.9.54
+faster-whisper==1.1.1
+python-multipart==0.0.20
 
 # Dev/test dependencies (install separately if needed):
 # pytest~=9.1.0
