@@ -42,6 +42,19 @@
       color: white;
       cursor: pointer;
     }
+    #voice-btn {
+      background: #16a34a;
+      color: white;
+      cursor: pointer;
+    }
+    #voice-btn.recording {
+      background: #dc2626;
+    }
+    #voice-status {
+      font-size: 14px;
+      color: #94a3b8;
+      margin-top: 6px;
+    }
     .quick button {
       background: #334155;
       margin-right: 8px;
@@ -73,6 +86,8 @@
 
     <button onclick="runCommand()">Execute</button>
     <button onclick="clearAll()">Clear</button>
+    <button id="voice-btn" onclick="toggleRecording()">🎙 Start Listening</button>
+    <div id="voice-status"></div>
 
     <div class="quick">
       <h3>Quick Commands</h3>
@@ -132,6 +147,119 @@ async function runCommand() {
     output.textContent = "Error: " + err;
   }
 }
+// ── Voice Input (Phase 4) ──────────────────────────────────────────────────
+const MAX_DURATION_MS = 15000;
+
+let mediaRecorder = null;
+let audioChunks = [];
+let recordingTimer = null;
+let isRecording = false;
+let isUploading = false;
+let mediaStream = null;
+
+async function startRecording() {
+  if (isRecording || isUploading) return;
+
+  document.getElementById("voice-status").textContent = "Microphone permission required";
+
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+      document.getElementById("voice-status").textContent = "No microphone detected";
+    } else {
+      document.getElementById("voice-status").textContent = "Microphone permission denied";
+    }
+    return;
+  }
+
+  audioChunks = [];
+  isRecording = true;
+
+  const voiceBtn = document.getElementById("voice-btn");
+  voiceBtn.textContent = "⏹ Stop Listening";
+  voiceBtn.classList.add("recording");
+  document.getElementById("voice-status").textContent = "Recording...";
+
+  mediaRecorder = new MediaRecorder(mediaStream, { mimeType: "audio/ogg; codecs=opus" });
+
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) audioChunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = async () => {
+    // Stop all tracks to release the microphone
+    mediaStream.getTracks().forEach(track => track.stop());
+    mediaStream = null;
+
+    isRecording = false;
+    voiceBtn.textContent = "🎙 Start Listening";
+    voiceBtn.classList.remove("recording");
+
+    if (audioChunks.length === 0) {
+      document.getElementById("voice-status").textContent = "Recording too short";
+      return;
+    }
+
+    isUploading = true;
+    document.getElementById("voice-status").textContent = "Processing audio...";
+
+    const blob = new Blob(audioChunks, { type: "audio/ogg" });
+    const formData = new FormData();
+    formData.append("audio", blob, "recording.ogg");
+
+    document.getElementById("voice-status").textContent = "Jarvis is transcribing locally...";
+
+    try {
+      const res = await fetch("/voice/transcribe", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok && data.text) {
+        document.getElementById("cmd").value = data.text;
+        document.getElementById("voice-status").textContent =
+          `Transcription ready (${data.processing_seconds}s): "${data.text}"`;
+      } else {
+        document.getElementById("voice-status").textContent =
+          "Transcription failed: " + (data.detail || "unknown error");
+      }
+    } catch (err) {
+      document.getElementById("voice-status").textContent = "Transcription failed: " + err;
+    } finally {
+      isUploading = false;
+    }
+  };
+
+  mediaRecorder.start();
+
+  // Auto-stop after 15 seconds
+  recordingTimer = setTimeout(() => {
+    document.getElementById("voice-status").textContent = "Maximum recording duration reached";
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.stop();
+    }
+  }, MAX_DURATION_MS);
+}
+
+function stopRecording() {
+  if (recordingTimer) {
+    clearTimeout(recordingTimer);
+    recordingTimer = null;
+  }
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stop();
+  }
+}
+
+function toggleRecording() {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+}
+// ── End Voice Input ────────────────────────────────────────────────────────
 </script>
 </body>
 </html>

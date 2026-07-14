@@ -6,9 +6,11 @@ The following phases are planned but NOT yet implemented. They are listed here f
 
 ---
 
-## Phase 4 — Voice Input
+## ✅ Phase 4 — Local Voice Input (COMPLETED)
 
-Add microphone-based voice input using a local speech-to-text model (e.g. faster-whisper). Commands spoken aloud are transcribed and sent to the agent dispatcher.
+Push-to-talk voice input implemented using `faster-whisper` (base.en, CPU INT8).
+Spoken commands are transcribed locally and placed in the command textarea for manual review.
+No auto-execution. No cloud dependency. No always-on listening.
 
 **Scope:** Input only. No voice output in this phase.
 

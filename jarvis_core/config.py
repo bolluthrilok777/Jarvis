@@ -64,3 +64,18 @@ ALLOWED_ROOTS = [
 ]
 
 ALLOWED_EXTENSIONS = [".txt", ".md", ".py", ".json", ".csv", ".log"]
+
+# ── Voice Input (Phase 4) ─────────────────────────────────────────────────
+VOICE_ENABLED: bool = True
+VOICE_MODEL: str = "base.en"
+VOICE_DEVICE: str = "cpu"
+VOICE_COMPUTE_TYPE: str = "int8"
+VOICE_LANGUAGE: str = "en"
+VOICE_BEAM_SIZE: int = 1
+VOICE_VAD_FILTER: bool = True
+VOICE_MAX_DURATION_SECONDS: int = 15
+VOICE_MAX_UPLOAD_MB: int = 10
+VOICE_IDLE_UNLOAD_SECONDS: int = 120
+WHISPER_MODEL_DIR: pathlib.Path = BASE_DIR / "models" / "whisper"
+
+WHISPER_MODEL_DIR.mkdir(parents=True, exist_ok=True)
