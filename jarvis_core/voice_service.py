@@ -61,6 +61,7 @@ SAFE_MIME_TYPES: frozenset = frozenset({
     "audio/ogg",
     "audio/wav",
     "audio/x-wav",
+    "audio/webm",
     "application/octet-stream",
 })
 
@@ -138,6 +139,7 @@ def _mime_to_extension(content_type: str) -> str:
         "audio/ogg": ".ogg",
         "audio/wav": ".wav",
         "audio/x-wav": ".wav",
+        "audio/webm": ".wav",        # browser converts to WAV before uploading
         "application/octet-stream": ".bin",
     }
     return mapping.get(content_type, ".bin")

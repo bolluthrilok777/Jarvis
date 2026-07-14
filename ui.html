@@ -157,6 +157,66 @@ let isRecording = false;
 let isUploading = false;
 let mediaStream = null;
 
+// Encode a Float32Array of mono audio samples as a 16-bit PCM WAV blob.
+function encodeWav(samples, sampleRate) {
+  const numSamples = samples.length;
+  const buffer = new ArrayBuffer(44 + numSamples * 2);
+  const view = new DataView(buffer);
+  function writeStr(off, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i));
+  }
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + numSamples * 2, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true);       // PCM chunk size
+  view.setUint16(20, 1, true);        // PCM format
+  view.setUint16(22, 1, true);        // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);        // block align
+  view.setUint16(34, 16, true);       // bits per sample
+  writeStr(36, "data");
+  view.setUint32(40, numSamples * 2, true);
+  for (let i = 0; i < numSamples; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(44 + i * 2, s < 0 ? s * 32768 : s * 32767, true);
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+// Decode any recorded audio blob to mono 16 kHz WAV using AudioContext.
+async function blobToWav(blob) {
+  const arrayBuf = await blob.arrayBuffer();
+  const audioCtx = new AudioContext({ sampleRate: 16000 });
+  try {
+    const decoded = await audioCtx.decodeAudioData(arrayBuf);
+    // Mix down to mono
+    const mono = decoded.numberOfChannels === 1
+      ? decoded.getChannelData(0)
+      : (() => {
+          const left  = decoded.getChannelData(0);
+          const right = decoded.getChannelData(1);
+          const out   = new Float32Array(left.length);
+          for (let i = 0; i < left.length; i++) out[i] = (left[i] + right[i]) / 2;
+          return out;
+        })();
+    // Resample to 16 kHz if AudioContext gave a different rate
+    let final = mono;
+    if (decoded.sampleRate !== 16000) {
+      const ratio = decoded.sampleRate / 16000;
+      const outLen = Math.round(mono.length / ratio);
+      final = new Float32Array(outLen);
+      for (let i = 0; i < outLen; i++) {
+        final[i] = mono[Math.min(mono.length - 1, Math.round(i * ratio))];
+      }
+    }
+    return encodeWav(final, 16000);
+  } finally {
+    audioCtx.close();
+  }
+}
+
 async function startRecording() {
   if (isRecording || isUploading) return;
 
@@ -174,23 +234,44 @@ async function startRecording() {
   }
 
   audioChunks = [];
-  isRecording = true;
 
+  // Pick the best supported MIME type — prefer webm (Chrome/Edge), fall back to ogg (Firefox)
+  const preferredTypes = [
+    "audio/webm; codecs=opus",
+    "audio/webm",
+    "audio/ogg; codecs=opus",
+    "audio/ogg",
+    "",   // browser default
+  ];
+  const chosenMime = preferredTypes.find(t => t === "" || MediaRecorder.isTypeSupported(t)) || "";
+
+  try {
+    mediaRecorder = chosenMime
+      ? new MediaRecorder(mediaStream, { mimeType: chosenMime })
+      : new MediaRecorder(mediaStream);
+  } catch (err) {
+    mediaStream.getTracks().forEach(t => t.stop());
+    mediaStream = null;
+    document.getElementById("voice-status").textContent = "Unsupported browser";
+    return;
+  }
+
+  isRecording = true;
   const voiceBtn = document.getElementById("voice-btn");
   voiceBtn.textContent = "⏹ Stop Listening";
   voiceBtn.classList.add("recording");
   document.getElementById("voice-status").textContent = "Recording...";
-
-  mediaRecorder = new MediaRecorder(mediaStream, { mimeType: "audio/ogg; codecs=opus" });
 
   mediaRecorder.ondataavailable = (e) => {
     if (e.data.size > 0) audioChunks.push(e.data);
   };
 
   mediaRecorder.onstop = async () => {
-    // Stop all tracks to release the microphone
-    mediaStream.getTracks().forEach(track => track.stop());
-    mediaStream = null;
+    // Release microphone immediately
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(track => track.stop());
+      mediaStream = null;
+    }
 
     isRecording = false;
     voiceBtn.textContent = "🎙 Start Listening";
@@ -204,13 +285,15 @@ async function startRecording() {
     isUploading = true;
     document.getElementById("voice-status").textContent = "Processing audio...";
 
-    const blob = new Blob(audioChunks, { type: "audio/ogg" });
-    const formData = new FormData();
-    formData.append("audio", blob, "recording.ogg");
-
-    document.getElementById("voice-status").textContent = "Jarvis is transcribing locally...";
-
     try {
+      // Decode whatever format the browser produced and re-encode as 16 kHz mono WAV
+      const rawBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+      document.getElementById("voice-status").textContent = "Jarvis is transcribing locally...";
+      const wavBlob = await blobToWav(rawBlob);
+
+      const formData = new FormData();
+      formData.append("audio", wavBlob, "recording.wav");
+
       const res = await fetch("/voice/transcribe", {
         method: "POST",
         body: formData,

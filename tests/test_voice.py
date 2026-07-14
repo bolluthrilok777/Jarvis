@@ -525,7 +525,7 @@ try:
 except ImportError:
     HYPOTHESIS_AVAILABLE = False
 
-_SAFE_MIME_TYPES_SET = {"audio/ogg", "audio/wav", "audio/x-wav", "application/octet-stream"}
+_SAFE_MIME_TYPES_SET = {"audio/ogg", "audio/wav", "audio/x-wav", "audio/webm", "application/octet-stream"}
 
 
 @pytest.mark.skipif(not HYPOTHESIS_AVAILABLE, reason="hypothesis not installed")
