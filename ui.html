@@ -1,96 +1,225 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Jarvis Local Agent</title>
+  <title>Jarvis AI Command Center</title>
   <style>
+    * { box-sizing: border-box; }
     body {
-      font-family: Arial;
+      font-family: Arial, sans-serif;
       background: #0f172a;
-      color: white;
-      padding: 30px;
+      color: #e2e8f0;
+      padding: 20px;
+      margin: 0;
     }
-    .box {
-      max-width: 1000px;
+    .container {
+      max-width: 1100px;
       margin: auto;
-      background: #111827;
-      padding: 25px;
-      border-radius: 15px;
     }
-    h1 {
-      color: #38bdf8;
+    .card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      border: 1px solid #334155;
+    }
+    h1 { color: #38bdf8; margin: 0 0 4px 0; font-size: 24px; }
+    h2 { color: #94a3b8; font-size: 16px; margin: 0 0 12px 0; font-weight: normal; }
+    h3 { color: #38bdf8; font-size: 14px; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 1px; }
+    .input-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
     }
     textarea {
-      width: 100%;
-      height: 130px;
-      font-size: 18px;
-      padding: 15px;
-      border-radius: 10px;
-      background: #020617;
-      color: white;
-      border: 1px solid #334155;
-      box-sizing: border-box;
-    }
-    button, select {
-      margin-top: 12px;
-      padding: 12px 18px;
+      flex: 1;
+      height: 80px;
       font-size: 16px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #e2e8f0;
+      border: 1px solid #475569;
+      resize: vertical;
+      font-family: inherit;
+    }
+    textarea:focus { outline: none; border-color: #38bdf8; }
+    .btn {
+      padding: 10px 20px;
+      font-size: 15px;
       border-radius: 8px;
       border: none;
-    }
-    button {
-      background: #2563eb;
-      color: white;
       cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-primary:disabled { background: #475569; cursor: not-allowed; }
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-success { background: #16a34a; color: white; }
+    .btn-success:hover { background: #15803d; }
+    .btn-warning { background: #d97706; color: white; }
+    .btn-warning:hover { background: #b45309; }
+    .btn-sm { padding: 6px 12px; font-size: 13px; }
+    .btn-ghost { background: transparent; color: #94a3b8; border: 1px solid #475569; }
+    .btn-ghost:hover { background: #334155; }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+    .mode-select {
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: #0f172a;
+      color: #e2e8f0;
+      border: 1px solid #475569;
+      font-size: 14px;
     }
     #voice-btn {
       background: #16a34a;
       color: white;
       cursor: pointer;
     }
-    #voice-btn.recording {
-      background: #dc2626;
-    }
-    #voice-status {
-      font-size: 14px;
-      color: #94a3b8;
-      margin-top: 6px;
-    }
-    .quick button {
+    #voice-btn.recording { background: #dc2626; }
+    #voice-status { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+    .quick-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+    .quick-btns button {
       background: #334155;
-      margin-right: 8px;
-      margin-bottom: 8px;
+      color: #cbd5e1;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
     }
-    pre {
-      background: #020617;
-      color: #22c55e;
-      padding: 15px;
-      border-radius: 10px;
-      min-height: 180px;
-      white-space: pre-wrap;
+    .quick-btns button:hover { background: #475569; }
+
+    /* Task Queue */
+    .task-list { display: flex; flex-direction: column; gap: 6px; }
+    .task-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: #0f172a;
+      border-radius: 8px;
+      border-left: 4px solid #475569;
+      font-size: 14px;
     }
+    .task-item.queued { border-left-color: #6366f1; }
+    .task-item.interpreting { border-left-color: #f59e0b; }
+    .task-item.waiting_for_confirmation { border-left-color: #f97316; }
+    .task-item.running { border-left-color: #22c55e; }
+    .task-item.completed { border-left-color: #16a34a; opacity: 0.8; }
+    .task-item.partially_completed { border-left-color: #84cc16; opacity: 0.8; }
+    .task-item.failed { border-left-color: #ef4444; }
+    .task-item.cancelled { border-left-color: #6b7280; opacity: 0.6; }
+    .task-id { color: #64748b; font-size: 11px; font-family: monospace; min-width: 80px; }
+    .task-input { flex: 1; color: #e2e8f0; }
+    .task-input .original { color: #94a3b8; }
+    .task-input .interpreted { color: #22c55e; font-size: 13px; margin-top: 2px; }
+    .task-status {
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .status-queued { background: #312e81; color: #a5b4fc; }
+    .status-interpreting { background: #78350f; color: #fcd34d; }
+    .status-waiting_for_confirmation { background: #7c2d12; color: #fdba74; }
+    .status-running { background: #14532d; color: #86efac; }
+    .status-completed { background: #14532d; color: #86efac; }
+    .status-partially_completed { background: #3f6212; color: #bef264; }
+    .status-failed { background: #7f1d1d; color: #fca5a5; }
+    .status-cancelled { background: #1f2937; color: #9ca3af; }
+    .task-actions { display: flex; gap: 4px; }
+    .task-result {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 4px;
+      max-height: 60px;
+      overflow-y: auto;
+    }
+    .task-result pre { margin: 0; font-size: 11px; color: #64748b; }
+
+    /* Confirmation Dialog */
+    .confirm-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .confirm-dialog {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 500px;
+      width: 90%;
+      border: 1px solid #475569;
+    }
+    .confirm-dialog h3 { color: #f97316; margin: 0 0 12px 0; }
+    .confirm-dialog p { color: #cbd5e1; margin: 0 0 16px 0; line-height: 1.5; }
+    .confirm-dialog .actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+    /* Response area */
+    #response-area {
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 60px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    #response-area .entry { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #1e293b; }
+    #response-area .entry:last-child { border-bottom: none; }
+    #response-area .entry .label { color: #64748b; font-size: 12px; }
+    #response-area .entry .original { color: #e2e8f0; }
+    #response-area .entry .understood { color: #22c55e; font-size: 13px; }
+    #response-area .entry .reply { color: #38bdf8; }
+    #response-area .entry .error { color: #f87171; }
+
+    .hidden { display: none; }
+    .mt-8 { margin-top: 8px; }
+    .mb-8 { margin-bottom: 8px; }
+    .flex { display: flex; }
+    .gap-8 { gap: 8px; }
+    .items-center { align-items: center; }
   </style>
 </head>
 <body>
-  <div class="box">
-    <h1>🤖 Jarvis Local Agent - Phase 2</h1>
-    <p>Type your command below and click Execute.</p>
+<div class="container">
+  <div class="card">
+    <h1>🤖 Jarvis AI Command Center</h1>
+    <h2>Type a command or question. Enter to submit. Shift+Enter for new line.</h2>
 
-    <textarea id="cmd" placeholder="Example: system status"></textarea>
+    <textarea id="cmd" placeholder="Example: system status&#10;open calculator&#10;Who are you?"></textarea>
 
-    <br>
-
-    <select id="mode">
-      <option value="light">Light Mode - Fast</option>
-      <option value="heavy">Heavy Mode - Deep Thinking</option>
-    </select>
-
-    <button onclick="runCommand()">Execute</button>
-    <button onclick="clearAll()">Clear</button>
-    <button id="voice-btn" onclick="toggleRecording()">🎙 Start Listening</button>
+    <div class="controls">
+      <select id="mode" class="mode-select">
+        <option value="light">Light Mode</option>
+        <option value="heavy">Heavy Mode</option>
+      </select>
+      <button class="btn btn-primary" id="execute-btn" onclick="submitCommand()">Execute</button>
+      <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+      <button class="btn" id="voice-btn" onclick="toggleRecording()">🎙 Start Listening</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearCompleted()">Clear Completed</button>
+    </div>
     <div id="voice-status"></div>
+  </div>
 
-    <div class="quick">
-      <h3>Quick Commands</h3>
+  <div class="card">
+    <h3>Response</h3>
+    <div id="response-area">Waiting for command...</div>
+  </div>
+
+  <div class="card">
+    <h3>Quick Commands</h3>
+    <div class="quick-btns">
       <button onclick="setCmd('system status')">System Status</button>
       <button onclick="setCmd('take screenshot')">Take Screenshot</button>
       <button onclick="setCmd('open notepad')">Open Notepad</button>
@@ -104,52 +233,248 @@
       <button onclick="setCmd('list models')">List Models</button>
       <button onclick="setCmd('Who are you?')">Ask Jarvis</button>
     </div>
-
-    <h3>Response</h3>
-    <pre id="output">Waiting for command...</pre>
   </div>
 
+  <div class="card">
+    <h3>Task Queue</h3>
+    <div id="task-list" class="task-list">
+      <div style="color:#64748b; font-size:13px; text-align:center; padding:20px;">No tasks yet.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmation Dialog -->
+<div id="confirm-overlay" class="confirm-overlay hidden">
+  <div class="confirm-dialog">
+    <h3>⚠️ Confirmation Required</h3>
+    <p id="confirm-message">This action requires your confirmation.</p>
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="rejectTask()">Cancel</button>
+      <button class="btn btn-warning" onclick="confirmTask()">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <script>
-function setCmd(text) {
-  document.getElementById("cmd").value = text;
-}
+// ── State ────────────────────────────────────────────────────────────────────
+let pendingConfirmTaskId = null;
+let pollInterval = null;
+let isSubmitting = false;
 
-function clearAll() {
-  document.getElementById("cmd").value = "";
-  document.getElementById("output").textContent = "Waiting for command...";
-}
+// ── Textarea: Enter submits, Shift+Enter newline ─────────────────────────────
+document.getElementById("cmd").addEventListener("keydown", function(e) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    submitCommand();
+  }
+});
 
-async function runCommand() {
-  const command = document.getElementById("cmd").value;
-  const mode = document.getElementById("mode").value;
-  const output = document.getElementById("output");
-
-  if (!command.trim()) {
-    output.textContent = "Please enter a command.";
+// ── Core: Submit command(s) ──────────────────────────────────────────────────
+async function submitCommand() {
+  if (isSubmitting) return;
+  const text = document.getElementById("cmd").value;
+  if (!text.trim()) {
+    showResponse("Please enter a command or question.");
     return;
   }
 
-  output.textContent = "Jarvis working...";
+  isSubmitting = true;
+  document.getElementById("execute-btn").disabled = true;
 
   try {
-    const res = await fetch("/agent", {
+    // Submit via the new task API
+    const res = await fetch("/tasks/submit", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({
-        command: command,
-        mode: mode
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text })
     });
-
     const data = await res.json();
-    output.textContent = JSON.stringify(data, null, 2);
+
+    if (data.status === "ok") {
+      // Show results
+      let html = "";
+      for (const r of data.results) {
+        if (r.action === "chat") {
+          // Route to AI chat
+          html += `<div class="entry">
+            <div class="label">Original request:</div>
+            <div class="original">${escapeHtml(r.message || text)}</div>
+            <div class="label">Jarvis understood:</div>
+            <div class="understood">Conversational question — routing to AI chat</div>
+          </div>`;
+          // Fire AI chat
+          const mode = document.getElementById("mode").value;
+          const chatRes = await fetch("/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: text, mode: mode })
+          });
+          const chatData = await chatRes.json();
+          html += `<div class="entry">
+            <div class="label">Jarvis:</div>
+            <div class="reply">${escapeHtml(chatData.reply || chatData.message || "No response")}</div>
+          </div>`;
+        } else if (r.action === "blocked") {
+          html += `<div class="entry">
+            <div class="label">Original request:</div>
+            <div class="original">${escapeHtml(text)}</div>
+            <div class="label">Jarvis understood:</div>
+            <div class="understood">${escapeHtml(r.message)}</div>
+            <div class="error">⛔ This action is blocked for safety.</div>
+          </div>`;
+        } else if (r.action === "created") {
+          html += `<div class="entry">
+            <div class="label">Original request:</div>
+            <div class="original">${escapeHtml(text)}</div>
+            <div class="label">Jarvis understood:</div>
+            <div class="understood">${escapeHtml(r.message)}</div>
+          </div>`;
+          if (r.status === "waiting_for_confirmation") {
+            pendingConfirmTaskId = r.task_id;
+            showConfirmDialog(r.message);
+          }
+        } else {
+          html += `<div class="entry">
+            <div class="label">Original request:</div>
+            <div class="original">${escapeHtml(text)}</div>
+            <div class="label">Jarvis understood:</div>
+            <div class="understood">${escapeHtml(r.message)}</div>
+          </div>`;
+        }
+      }
+      showResponse(html);
+      document.getElementById("cmd").value = "";
+    } else {
+      showResponse(`Error: ${escapeHtml(data.message || "Unknown error")}`);
+    }
+
+    // Refresh task list
+    refreshTasks();
   } catch (err) {
-    output.textContent = "Error: " + err;
+    showResponse(`Error: ${escapeHtml(err.message || err)}`);
+  } finally {
+    isSubmitting = false;
+    document.getElementById("execute-btn").disabled = false;
   }
 }
-// ── Voice Input (Phase 4) ──────────────────────────────────────────────────
-const MAX_DURATION_MS = 15000;
 
+// ── Task List ────────────────────────────────────────────────────────────────
+async function refreshTasks() {
+  try {
+    const res = await fetch("/tasks");
+    const data = await res.json();
+    if (data.status !== "ok") return;
+    renderTasks(data.tasks || []);
+  } catch (e) {
+    // Silently fail — poll will retry
+  }
+}
+
+function renderTasks(tasks) {
+  const container = document.getElementById("task-list");
+  if (!tasks.length) {
+    container.innerHTML = '<div style="color:#64748b; font-size:13px; text-align:center; padding:20px;">No tasks yet.</div>';
+    return;
+  }
+
+  let html = "";
+  for (const t of tasks) {
+    const statusClass = t.status.replace(/_/g, "_");
+    const statusLabel = t.status.replace(/_/g, " ").toUpperCase();
+    const isTerminal = ["completed", "failed", "cancelled"].includes(t.status);
+    const isWaiting = t.status === "waiting_for_confirmation";
+
+    html += `<div class="task-item ${statusClass}">
+      <div class="task-id">${escapeHtml(t.task_id.slice(0, 8))}</div>
+      <div class="task-input">
+        <div class="original">${escapeHtml(t.original_input)}</div>
+        ${t.interpreted_command ? `<div class="interpreted">→ ${escapeHtml(t.interpreted_command)}</div>` : ""}
+        ${t.error ? `<div class="task-result" style="color:#f87171;">Error: ${escapeHtml(t.error)}</div>` : ""}
+        ${t.result ? `<div class="task-result"><pre>${escapeHtml(JSON.stringify(t.result, null, 2))}</pre></div>` : ""}
+      </div>
+      <div class="task-status status-${statusClass}">${statusLabel}</div>
+      <div class="task-actions">
+        ${isWaiting ? `<button class="btn btn-success btn-sm" onclick="confirmTaskById('${t.task_id}')">✓</button>
+          <button class="btn btn-danger btn-sm" onclick="cancelTask('${t.task_id}')">✗</button>` : ""}
+        ${!isTerminal && !isWaiting ? `<button class="btn btn-danger btn-sm" onclick="cancelTask('${t.task_id}')">✕</button>` : ""}
+      </div>
+    </div>`;
+  }
+  container.innerHTML = html;
+}
+
+// ── Task Actions ─────────────────────────────────────────────────────────────
+async function cancelTask(taskId) {
+  try {
+    await fetch(`/tasks/${taskId}/cancel`, { method: "POST" });
+    refreshTasks();
+  } catch (e) {
+    showResponse(`Error cancelling task: ${escapeHtml(e.message)}`);
+  }
+}
+
+async function confirmTaskById(taskId) {
+  try {
+    await fetch(`/tasks/${taskId}/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true })
+    });
+    pendingConfirmTaskId = null;
+    hideConfirmDialog();
+    refreshTasks();
+  } catch (e) {
+    showResponse(`Error confirming task: ${escapeHtml(e.message)}`);
+  }
+}
+
+async function clearCompleted() {
+  try {
+    await fetch("/tasks/clear-completed", { method: "POST" });
+    refreshTasks();
+  } catch (e) {
+    showResponse(`Error: ${escapeHtml(e.message)}`);
+  }
+}
+
+// ── Confirmation Dialog ──────────────────────────────────────────────────────
+function showConfirmDialog(message) {
+  document.getElementById("confirm-message").textContent = message;
+  document.getElementById("confirm-overlay").classList.remove("hidden");
+}
+
+function hideConfirmDialog() {
+  document.getElementById("confirm-overlay").classList.add("hidden");
+  pendingConfirmTaskId = null;
+}
+
+async function confirmTask() {
+  if (pendingConfirmTaskId) {
+    await confirmTaskById(pendingConfirmTaskId);
+  }
+}
+
+async function rejectTask() {
+  if (pendingConfirmTaskId) {
+    await cancelTask(pendingConfirmTaskId);
+  }
+  hideConfirmDialog();
+}
+
+// ── Response Display ─────────────────────────────────────────────────────────
+function showResponse(html) {
+  document.getElementById("response-area").innerHTML = html;
+}
+
+function escapeHtml(str) {
+  if (!str) return "";
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ── Voice Input (Phase 4, preserved) ─────────────────────────────────────────
+const MAX_DURATION_MS = 15000;
 let mediaRecorder = null;
 let audioChunks = [];
 let recordingTimer = null;
@@ -157,7 +482,6 @@ let isRecording = false;
 let isUploading = false;
 let mediaStream = null;
 
-// Encode a Float32Array of mono audio samples as a 16-bit PCM WAV blob.
 function encodeWav(samples, sampleRate) {
   const numSamples = samples.length;
   const buffer = new ArrayBuffer(44 + numSamples * 2);
@@ -169,13 +493,13 @@ function encodeWav(samples, sampleRate) {
   view.setUint32(4, 36 + numSamples * 2, true);
   writeStr(8, "WAVE");
   writeStr(12, "fmt ");
-  view.setUint32(16, 16, true);       // PCM chunk size
-  view.setUint16(20, 1, true);        // PCM format
-  view.setUint16(22, 1, true);        // mono
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
   view.setUint32(24, sampleRate, true);
   view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);        // block align
-  view.setUint16(34, 16, true);       // bits per sample
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
   writeStr(36, "data");
   view.setUint32(40, numSamples * 2, true);
   for (let i = 0; i < numSamples; i++) {
@@ -185,13 +509,11 @@ function encodeWav(samples, sampleRate) {
   return new Blob([buffer], { type: "audio/wav" });
 }
 
-// Decode any recorded audio blob to mono 16 kHz WAV using AudioContext.
 async function blobToWav(blob) {
   const arrayBuf = await blob.arrayBuffer();
   const audioCtx = new AudioContext({ sampleRate: 16000 });
   try {
     const decoded = await audioCtx.decodeAudioData(arrayBuf);
-    // Mix down to mono
     const mono = decoded.numberOfChannels === 1
       ? decoded.getChannelData(0)
       : (() => {
@@ -201,7 +523,6 @@ async function blobToWav(blob) {
           for (let i = 0; i < left.length; i++) out[i] = (left[i] + right[i]) / 2;
           return out;
         })();
-    // Resample to 16 kHz if AudioContext gave a different rate
     let final = mono;
     if (decoded.sampleRate !== 16000) {
       const ratio = decoded.sampleRate / 16000;
@@ -219,32 +540,20 @@ async function blobToWav(blob) {
 
 async function startRecording() {
   if (isRecording || isUploading) return;
-
   document.getElementById("voice-status").textContent = "Microphone permission required";
-
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
-    if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-      document.getElementById("voice-status").textContent = "No microphone detected";
-    } else {
-      document.getElementById("voice-status").textContent = "Microphone permission denied";
-    }
+    document.getElementById("voice-status").textContent =
+      err.name === "NotFoundError" ? "No microphone detected" : "Microphone permission denied";
     return;
   }
-
   audioChunks = [];
-
-  // Pick the best supported MIME type — prefer webm (Chrome/Edge), fall back to ogg (Firefox)
   const preferredTypes = [
-    "audio/webm; codecs=opus",
-    "audio/webm",
-    "audio/ogg; codecs=opus",
-    "audio/ogg",
-    "",   // browser default
+    "audio/webm; codecs=opus", "audio/webm",
+    "audio/ogg; codecs=opus", "audio/ogg", ""
   ];
   const chosenMime = preferredTypes.find(t => t === "" || MediaRecorder.isTypeSupported(t)) || "";
-
   try {
     mediaRecorder = chosenMime
       ? new MediaRecorder(mediaStream, { mimeType: chosenMime })
@@ -255,54 +564,40 @@ async function startRecording() {
     document.getElementById("voice-status").textContent = "Unsupported browser";
     return;
   }
-
   isRecording = true;
   const voiceBtn = document.getElementById("voice-btn");
   voiceBtn.textContent = "⏹ Stop Listening";
   voiceBtn.classList.add("recording");
   document.getElementById("voice-status").textContent = "Recording...";
-
-  mediaRecorder.ondataavailable = (e) => {
-    if (e.data.size > 0) audioChunks.push(e.data);
-  };
-
+  mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
   mediaRecorder.onstop = async () => {
-    // Release microphone immediately
     if (mediaStream) {
       mediaStream.getTracks().forEach(track => track.stop());
       mediaStream = null;
     }
-
     isRecording = false;
     voiceBtn.textContent = "🎙 Start Listening";
     voiceBtn.classList.remove("recording");
-
     if (audioChunks.length === 0) {
       document.getElementById("voice-status").textContent = "Recording too short";
       return;
     }
-
     isUploading = true;
     document.getElementById("voice-status").textContent = "Processing audio...";
-
     try {
-      // Decode whatever format the browser produced and re-encode as 16 kHz mono WAV
       const rawBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || "audio/webm" });
       document.getElementById("voice-status").textContent = "Jarvis is transcribing locally...";
       const wavBlob = await blobToWav(rawBlob);
-
       const formData = new FormData();
       formData.append("audio", wavBlob, "recording.wav");
-
-      const res = await fetch("/voice/transcribe", {
-        method: "POST",
-        body: formData,
-      });
+      const res = await fetch("/voice/transcribe", { method: "POST", body: formData });
       const data = await res.json();
       if (res.ok && data.text) {
         document.getElementById("cmd").value = data.text;
         document.getElementById("voice-status").textContent =
           `Transcription ready (${data.processing_seconds}s): "${data.text}"`;
+        // Auto-execute safe voice commands
+        submitCommand();
       } else {
         document.getElementById("voice-status").textContent =
           "Transcription failed: " + (data.detail || "unknown error");
@@ -313,36 +608,46 @@ async function startRecording() {
       isUploading = false;
     }
   };
-
   mediaRecorder.start();
-
-  // Auto-stop after 15 seconds
   recordingTimer = setTimeout(() => {
     document.getElementById("voice-status").textContent = "Maximum recording duration reached";
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-      mediaRecorder.stop();
-    }
+    if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
   }, MAX_DURATION_MS);
 }
 
 function stopRecording() {
-  if (recordingTimer) {
-    clearTimeout(recordingTimer);
-    recordingTimer = null;
-  }
-  if (mediaRecorder && mediaRecorder.state !== "inactive") {
-    mediaRecorder.stop();
-  }
+  if (recordingTimer) { clearTimeout(recordingTimer); recordingTimer = null; }
+  if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
 }
 
 function toggleRecording() {
-  if (isRecording) {
-    stopRecording();
-  } else {
-    startRecording();
-  }
+  if (isRecording) stopRecording();
+  else startRecording();
 }
-// ── End Voice Input ────────────────────────────────────────────────────────
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function setCmd(text) {
+  document.getElementById("cmd").value = text;
+}
+
+function clearAll() {
+  document.getElementById("cmd").value = "";
+  document.getElementById("response-area").innerHTML = "Waiting for command...";
+}
+
+// ── Polling ──────────────────────────────────────────────────────────────────
+function startPolling() {
+  refreshTasks();
+  pollInterval = setInterval(refreshTasks, 2000);
+}
+
+function stopPolling() {
+  if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+}
+
+// Start polling when page loads
+document.addEventListener("DOMContentLoaded", startPolling);
+window.addEventListener("beforeunload", stopPolling);
 </script>
 </body>
 </html>

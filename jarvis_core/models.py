@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Optional
 
 
 class ChatRequest(BaseModel):
@@ -13,4 +14,17 @@ class CommandRequest(BaseModel):
 
 class ConfirmRequest(BaseModel):
     action_id: str
+    confirm: bool
+
+
+# ── Phase 5A-1 Task Models ────────────────────────────────────────────────────
+
+
+class TaskSubmitRequest(BaseModel):
+    """Request to submit one or more command lines."""
+    text: str
+
+
+class TaskConfirmRequest(BaseModel):
+    """Request to confirm or cancel a task."""
     confirm: bool

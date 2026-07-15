@@ -13,3 +13,8 @@ temp_audio/
 *.webm
 *.ogg
 *.opus
+
+# Phase 5A-1 — Testing artifacts
+.hypothesis/
+probe_routes.py
+_test_imports.py
