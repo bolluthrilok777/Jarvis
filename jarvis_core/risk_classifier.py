@@ -45,11 +45,16 @@ BROWSER_SKILLS: frozenset[str] = frozenset({
 })
 
 
-def classify_risk(plan: ActionPlan) -> RiskLevel:
+def classify_risk(plan: ActionPlan | str) -> RiskLevel:
     """
     Inspect every skill_id in the plan and return the highest risk level.
     CRITICAL > PROTECTED > SAFE
+
+    If a raw string is passed (no ActionPlan available), return SAFE.
     """
+    if isinstance(plan, str):
+        return RiskLevel.SAFE
+
     skill_ids = {step.skill_id for step in plan.steps}
 
     if skill_ids & CRITICAL_SKILLS:
@@ -59,11 +64,16 @@ def classify_risk(plan: ActionPlan) -> RiskLevel:
     return RiskLevel.SAFE
 
 
-def classify_concurrency(plan: ActionPlan) -> ConcurrencyGroup:
+def classify_concurrency(plan: ActionPlan | str) -> ConcurrencyGroup:
     """
     Assign the plan to the highest-priority concurrency group.
     desktop_focus > browser > background
+
+    If a raw string is passed (no ActionPlan available), return background.
     """
+    if isinstance(plan, str):
+        return ConcurrencyGroup.background
+
     skill_ids = {step.skill_id for step in plan.steps}
 
     if skill_ids & DESKTOP_FOCUS_SKILLS:
@@ -73,11 +83,16 @@ def classify_concurrency(plan: ActionPlan) -> ConcurrencyGroup:
     return ConcurrencyGroup.background
 
 
-def build_interpreted_command(plan: ActionPlan) -> str:
+def build_interpreted_command(plan: ActionPlan | str) -> str:
     """
     Build a human-readable single-line description of what the plan will do.
     Uses the step descriptions if present, otherwise generates from skill_id + params.
+
+    If a raw string is passed (no ActionPlan available), return the string as-is.
     """
+    if isinstance(plan, str):
+        return plan
+
     parts = []
     for step in plan.steps:
         if step.description:

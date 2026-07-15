@@ -1,6 +1,6 @@
 # Jarvis Local Agent — Roadmap
 
-**Current phase:** Phase 2 — Stabilized & Modularized
+**Current phase:** Phase 5A-1 — AI Command Center & Multitask Queue (COMPLETED)
 
 The following phases are planned but NOT yet implemented. They are listed here for planning purposes only.
 
@@ -8,11 +8,17 @@ The following phases are planned but NOT yet implemented. They are listed here f
 
 ## ✅ Phase 4 — Local Voice Input (COMPLETED)
 
-Push-to-talk voice input implemented using `faster-whisper` (base.en, CPU INT8).
-Spoken commands are transcribed locally and placed in the command textarea for manual review.
-No auto-execution. No cloud dependency. No always-on listening.
+---
 
-**Scope:** Input only. No voice output in this phase.
+## ✅ Phase 4.5 — Universal Natural-Language Action Engine (COMPLETED)
+
+---
+
+## ✅ Phase 5A-1 — AI Command Center & Multitask Queue (COMPLETED)
+
+Phase 5A-1 adds a structured task queue with risk-based execution, concurrency control, and a full task lifecycle API. Users can submit multiple commands at once, review protected actions before execution, and track task status through the UI.
+
+**Scope:** Task queue, risk classification, concurrency control, duplicate prevention, safety validation.
 
 ---
 

@@ -1,7 +1,7 @@
 # Jarvis Local Agent — Project Status
 
-**Phase:** 4 — Local Push-To-Talk Voice Input  
-**Last updated:** 2025  
+**Phase:** 5A-1 — AI Command Center & Multitask Queue  
+**Last updated:** 2026-07-15  
 **Status:** Stable, all routes verified
 
 ---
@@ -12,7 +12,13 @@ Jarvis is a local Windows AI assistant built on FastAPI + Ollama. After Phase 2 
 
 ```
 app.py  (entry point — ~14 lines, wiring only)
-  └── jarvis_core/routes.py  (7 route handlers, no business logic)
+  └── jarvis_core/routes.py  (route handlers + Phase 5A-1 task API)
+        ├── jarvis_core/orchestrator.py  (Phase 5A-1: task lifecycle, risk, concurrency)
+        │     ├── jarvis_core/intent_classifier.py  (intent detection)
+        │     ├── jarvis_core/risk_classifier.py  (SAFE/PROTECTED/CRITICAL)
+        │     ├── jarvis_core/task_manager.py  (task CRUD, concurrency slots)
+        │     ├── jarvis_core/task_models.py  (Task, TaskStatus, RiskLevel enums)
+        │     └── jarvis_core/action_engine.py  (Phase 4.5 action pipeline)
         ├── jarvis_core/command_dispatcher.py  (all command routing)
         ├── jarvis_core/ollama_service.py  (Ollama API + error handling)
         ├── jarvis_core/system_tools.py  (screenshots, system status)
@@ -50,9 +56,20 @@ C:\Jarvis\
     file_tools.py           Safe file reading with path traversal protection
     app_tools.py            App/folder launching, notes, Google search
     command_dispatcher.py   Command routing, pending actions, confirmation
-    routes.py               FastAPI APIRouter with 7 routes
+    routes.py               FastAPI APIRouter with Phase 5A-1 task API
     voice_service.py        Lazy-loading Whisper, validation, transcription
     voice_routes.py         POST /voice/transcribe, GET /voice/status, POST /voice/unload
+    action_models.py        Phase 4.5: ActionStep, ActionPlan, ActionResult, ExecutionReport
+    action_engine.py        Phase 4.5: Action pipeline orchestrator
+    skill_registry.py       Phase 4.5: 18 registered skills with executors
+    rule_matcher.py         Phase 4.5: 19 deterministic regex rules
+    normalizer.py           Phase 4.5: Filler removal, spoken-operator conversion
+    ollama_planner.py       Phase 4.5: Ollama-based plan generation
+    intent_classifier.py    Phase 5A-1: Intent detection (command vs conversational)
+    risk_classifier.py      Phase 5A-1: SAFE/PROTECTED/CRITICAL risk classification
+    task_manager.py         Phase 5A-1: Task CRUD, concurrency slots, duplicate prevention
+    task_models.py          Phase 5A-1: Task, TaskStatus, RiskLevel, ConcurrencyGroup enums
+    orchestrator.py         Phase 5A-1: Task lifecycle orchestration
   tests\
     __init__.py
     test_imports.py         Test 1: import validation
@@ -60,6 +77,10 @@ C:\Jarvis\
     test_tools.py           Tests 9-13: tools and calculator
     test_security.py        Tests 14-22: security and path blocking
     test_voice.py           Phase 4 voice tests (29 unit + 5 property = 34 tests)
+    test_action_engine.py   Phase 4.5: 21 unit + 4 property tests
+    test_orchestrator.py    Phase 5A-1: Orchestrator tests (23 tests)
+    test_task_manager.py    Phase 5A-1: Task manager tests (24 tests)
+    test_task_routes.py     Phase 5A-1: Task API route tests (10 tests)
   logs\                     Rotating logs (gitignored)
   notes\                    User notes (gitignored)
   screenshots\              Desktop screenshots (gitignored)
@@ -158,6 +179,12 @@ Jarvis supports safe, local push-to-talk voice input with no cloud dependency.
 | POST | /voice/transcribe | Upload audio file, get transcription |
 | GET  | /voice/status     | Voice model status (loaded/unloaded) |
 | POST | /voice/unload     | Unload voice model from memory |
+| POST | /tasks/submit | Submit one or more command lines (multi-line = separate tasks) |
+| GET  | /tasks | List all visible tasks |
+| GET  | /tasks/{task_id} | Get a single task by ID |
+| POST | /tasks/{task_id}/cancel | Cancel a task |
+| POST | /tasks/{task_id}/confirm | Confirm or reject a task |
+| POST | /tasks/clear-completed | Hide all completed/failed/cancelled tasks |
 
 ---
 
@@ -240,7 +267,7 @@ cd C:\Jarvis
 python -m pytest tests/ -v
 ```
 
-Expected: 57 passed (23 existing + 29 voice + 5 property tests)
+Expected: 147 passed (Phase 5A-1: 66 Phase 5A-1 tests + 81 pre-existing tests)
 
 ---
 
@@ -276,6 +303,9 @@ Expected: 57 passed (23 existing + 29 voice + 5 property tests)
 - Requires Ollama running locally for AI features
 - Calculator GUI automation requires Windows Calculator app
 - Playwright requires Chromium browser installed (`playwright install chromium`)
+- Task queue executes sequentially (no parallel execution in Phase 5A-1)
+- No persistent task storage — tasks lost on server restart
+- Duplicate submission prevention is best-effort (based on text hash)
 
 ---
 
@@ -284,59 +314,69 @@ Expected: 57 passed (23 existing + 29 voice + 5 property tests)
 **Added:** 2026  
 **Status:** Complete — 82/82 tests passing
 
+---
+
+## Phase 5A-1 — AI Command Center & Multitask Queue
+
+**Added:** 2026-07-15  
+**Status:** Complete — 66/66 Phase 5A-1 tests passing (147/148 total)
+
 ### What Changed
 
-Phase 4.5 replaces ad-hoc string matching in `command_dispatcher.py` with a structured, deterministic action engine. All natural-language commands now flow through a four-stage pipeline before falling back to the legacy AI path.
-
-### Engine Pipeline
-
-```
-CommandRequest
-  │
-  ▼
-1. DANGEROUS_WORDS pre-filter  →  confirmation_required
-  │
-  ▼
-2. Normalizer (strip fillers, spoken operators, spoken numbers)
-  │
-  ▼
-3. RuleMatcher (compiled regex → ActionPlan, confidence=1.0)
-  │
-  ▼ (no match)
-4. Ollama planner (only for high-confidence plans, confidence=1.0)
-  │
-  ▼ (no_match)
-5. Legacy command_dispatcher (AI fallback, existing commands)
-```
+Phase 5A-1 adds a structured task queue with risk-based execution, concurrency control, and a full task lifecycle API. Users can submit multiple commands at once, review protected actions before execution, and track task status through the UI.
 
 ### New Modules
 
 | File | Purpose |
 |------|---------|
-| `jarvis_core/action_models.py` | Pydantic models: ActionStep, ActionPlan, ActionResult, ExecutionReport |
-| `jarvis_core/action_engine.py` | Orchestrator: routes commands through pipeline, executes plans |
-| `jarvis_core/skill_registry.py` | 18 registered skills with validated executors |
-| `jarvis_core/rule_matcher.py` | 19 deterministic regex rules, all produce confidence=1.0 |
-| `jarvis_core/normalizer.py` | Filler removal, spoken-operator conversion, spoken-number conversion |
-| `jarvis_core/ollama_planner.py` | Ollama-based plan generation (structured JSON prompt) |
-| `tests/test_action_engine.py` | 21 unit tests + 4 property-based tests |
+| `jarvis_core/intent_classifier.py` | Classifies input as `conversational_query` or `executable_command` |
+| `jarvis_core/risk_classifier.py` | Classifies plans as SAFE, PROTECTED, or CRITICAL |
+| `jarvis_core/task_models.py` | Enums: TaskStatus, RiskLevel, ConcurrencyGroup |
+| `jarvis_core/task_manager.py` | Task CRUD, concurrency slots, duplicate prevention |
+| `jarvis_core/orchestrator.py` | Task lifecycle: submit, confirm, cancel, execute |
+| `tests/test_orchestrator.py` | 23 orchestrator tests |
+| `tests/test_task_manager.py` | 24 task manager tests |
+| `tests/test_task_routes.py` | 10 task API route tests |
 
-### Key Design Decisions
+### Key Behaviors
 
-- **Rule-matched plans always execute** (confidence=1.0, deterministic)
-- **Planner-generated plans require confidence=1.0** to execute; all lower-confidence planner results fall through to the legacy AI chat path (prevents hallucinated plans from running)
-- **No new external dependencies** — all tools already in venv
-- **Backwards-compatible** — existing command_dispatcher routes unchanged; engine returns `no_match` for unrecognized commands
+- **Enter** submits the command (single-line)
+- **Shift+Enter** inserts a new line (multi-line input)
+- **Multiple non-empty lines** create separate tasks
+- **Blank lines** are ignored
+- **Execute button and Enter** use the same submission function
+- **SAFE commands** auto-execute (queued immediately)
+- **PROTECTED commands** wait for user confirmation
+- **CRITICAL commands** are blocked for safety
+- **Conversational queries** route to AI chat (not task queue)
+- **Duplicate submissions** are prevented (same text hash within a session)
+- **Desktop-focus concurrency** limited to one slot
+- **No arbitrary shell execution** — all commands go through the action engine
+- **No AI-generated Python or PowerShell** is executed
+
+### Task Lifecycle
+
+```
+created → interpreting → queued → running → completed
+                                    ↓
+                              waiting_for_confirmation → queued → running → completed
+                                    ↓
+                                  cancelled
+```
+
+### Safety Controls
+
+- NEVER_EXECUTE_PATTERNS block dangerous Python/PowerShell patterns
+- PROTECTED_KEYWORDS require user confirmation
+- CRITICAL_KEYWORDS are blocked immediately
+- `_validate_plan()` rejects unsafe AI-generated plans
+- Concurrency slots prevent resource exhaustion
+- Duplicate submission prevention prevents accidental re-submission
 
 ### Test Results
 
 ```
-82 passed in ~173s
-  25  tests/test_action_engine.py  (new Phase 4.5 tests)
-   7  tests/test_routes.py
-  34  tests/test_voice.py
-   5  tests/test_tools.py
-   9  tests/test_security.py
-   1  tests/test_imports.py
-   1  tests/test_tools.py
+147 passed in ~107s
+  66  Phase 5A-1 tests (orchestrator + task_manager + task_routes)
+  81  pre-existing tests (imports, routes, tools, security, voice, action_engine)
 ```
