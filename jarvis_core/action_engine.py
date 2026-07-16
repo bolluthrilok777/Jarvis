@@ -170,7 +170,7 @@ class ActionEngine:
             return True
 
         if sid == "calculator.calculate":
-            result = out.get("result")
+            result = out.get("result") or out.get("value")
             try:
                 return result is not None and math.isfinite(float(result))
             except (TypeError, ValueError):

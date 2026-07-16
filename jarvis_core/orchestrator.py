@@ -268,6 +268,13 @@ class Orchestrator:
             result = action_engine.run(cmd_req)
 
             if result.get("status") in ("done", "partial"):
+                # Verify calculator results actually contain numeric value before marking completed
+                if self._has_calculator_step(result) and not self._has_calculator_result(result):
+                    task_manager.set_status(task_id, TaskStatus.failed.value)
+                    error_msg = "Calculator did not produce a numeric result"
+                    task_manager.set_error(task_id, error_msg)
+                    task_manager.set_result(task_id, result)
+                    return {"status": "failed", "error": error_msg}
                 task_manager.set_status(task_id, TaskStatus.completed.value)
                 task_manager.set_result(task_id, result)
                 return {"status": "completed", "result": result}
@@ -283,6 +290,33 @@ class Orchestrator:
             return {"status": "failed", "error": str(e)}
         finally:
             task_manager.release_slot(concurrency_group)
+
+    def _has_calculator_step(self, result: dict) -> bool:
+        """Check if the result contains a calculator.calculate step."""
+        for step_result in result.get("results", []):
+            step = step_result.get("step", {})
+            if isinstance(step, dict) and step.get("skill_id") == "calculator.calculate":
+                return True
+            if isinstance(step, str) and "calculator" in step.lower():
+                return True
+        return False
+
+    def _has_calculator_result(self, result: dict) -> bool:
+        """Check if the calculator step produced a numeric result."""
+        import math
+        for step_result in result.get("results", []):
+            step = step_result.get("step", {})
+            if isinstance(step, dict) and step.get("skill_id") == "calculator.calculate":
+                output = step_result.get("output", {})
+                if isinstance(output, dict):
+                    val = output.get("result") or output.get("value")
+                    if val is not None:
+                        try:
+                            return math.isfinite(float(val))
+                        except (TypeError, ValueError):
+                            return False
+                return False
+        return False
 
     def submit_multiple(self, lines: list[str]) -> list[dict]:
         """Submit multiple command lines as separate tasks."""

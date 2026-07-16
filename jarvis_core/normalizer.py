@@ -23,12 +23,13 @@ from typing import Union
 # Ordered longest-first so "hey jarvis" is removed before "jarvis"
 FILLER_PHRASES: list[str] = [
     "hey jarvis",
-    "jarvis",
     "can you",
     "could you",
     "would you",
     "for me",
     "please",
+    "hey",
+    "calculated",
 ]
 
 # Leading articles to strip after filler removal

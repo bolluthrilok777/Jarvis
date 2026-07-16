@@ -112,6 +112,8 @@ def _summarize_output(output: dict) -> str:
         return ""
     if "result" in output:
         return str(output["result"])
+    if "value" in output:
+        return str(output["value"])
     if "message" in output:
         return str(output["message"])
     if "reply" in output:

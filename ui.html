@@ -394,7 +394,12 @@ function renderTasks(tasks) {
         <div class="original">${escapeHtml(t.original_input)}</div>
         ${t.interpreted_command ? `<div class="interpreted">→ ${escapeHtml(t.interpreted_command)}</div>` : ""}
         ${t.error ? `<div class="task-result" style="color:#f87171;">Error: ${escapeHtml(t.error)}</div>` : ""}
-        ${t.result ? `<div class="task-result"><pre>${escapeHtml(JSON.stringify(t.result, null, 2))}</pre></div>` : ""}
+        ${t.result_summary ? `<div class="task-result" style="color:#22c55e;">${escapeHtml(t.result_summary)}</div>` : ""}
+        ${t.step_results && t.step_results.length > 0 ? `<div class="task-result">${t.step_results.map(sr => {
+          const output = sr.output_summary ? ` → ${escapeHtml(sr.output_summary)}` : "";
+          const err = sr.error ? ` <span style="color:#f87171;">Error: ${escapeHtml(sr.error)}</span>` : "";
+          return `<div>${escapeHtml(sr.description)}${output}${err}</div>`;
+        }).join("")}</div>` : ""}
       </div>
       <div class="task-status status-${statusClass}">${statusLabel}</div>
       <div class="task-actions">

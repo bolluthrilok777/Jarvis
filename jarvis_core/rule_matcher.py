@@ -38,6 +38,7 @@ _APP_ALIASES: dict[str, str] = {
     "calc":             "calculator",
     "calculator":       "calculator",
     "notepad":          "notepad",
+    "note pad":         "notepad",
     "chrome":           "chrome",
     "edge":             "edge",
     "paint":            "paint",
@@ -85,7 +86,7 @@ def _build_rules():
     # ── 1. Open calculator AND calculate (must come before bare "open calc") ──
     rules.append((
         re.compile(
-            r"^open\s+calc(?:ulator)?\s+and\s+(?:calculate|compute|evaluate)\s+(.+)$",
+            r"^open\s+calc(?:ulator)?\s+and\s+(?:calculate|compute|evaluate|do)\s+(.+)$",
             re.IGNORECASE,
         ),
         lambda m, raw, norm: _plan([
@@ -97,7 +98,7 @@ def _build_rules():
     # ── 2. Open notepad AND type ───────────────────────────────────────────────
     rules.append((
         re.compile(
-            r"^open\s+notepad\s+and\s+type\s+(.+)$",
+            r"^open\s+(?:notepad|note\s+pad)\s+and\s+type\s+(.+)$",
             re.IGNORECASE,
         ),
         lambda m, raw, norm: _plan([
@@ -106,7 +107,19 @@ def _build_rules():
         ], raw, norm),
     ))
 
-    # ── 3. Take screenshot AND open folder ────────────────────────────────────
+    # ── 3. Open YouTube and search (must come before generic "open X and search") ──
+    rules.append((
+        re.compile(
+            r"^(?:open\s+youtube\s+and\s+search|search\s+youtube\s+for)\s+(.+)$",
+            re.IGNORECASE,
+        ),
+        lambda m, raw, norm: _plan([
+            _step("browser.open", {"url": "https://www.youtube.com"}, "Open YouTube"),
+            _step("browser.youtube_search", {"query": m.group(1).strip()}, "Search YouTube"),
+        ], raw, norm),
+    ))
+
+    # ── 4. Take screenshot AND open folder ────────────────────────────────────
     rules.append((
         re.compile(
             r"^take\s+(?:a\s+)?screenshot\s+and\s+open\s+(?:the\s+)?(\w+)(?:\s+folder)?$",
@@ -118,7 +131,7 @@ def _build_rules():
         ], raw, norm),
     ))
 
-    # ── 4. Open folder AND find files ─────────────────────────────────────────
+    # ── 5. Open folder AND find files ─────────────────────────────────────────
     rules.append((
         re.compile(
             r"^open\s+(\w+)(?:\s+folder)?\s+and\s+(?:find|search(?:\s+for)?)\s+(?:the\s+)?(.+)$",
@@ -130,18 +143,6 @@ def _build_rules():
                 "folder": _normalize_folder_name(m.group(1)),
                 "pattern": m.group(2).strip(),
             }, "Search files"),
-        ], raw, norm),
-    ))
-
-    # ── 5. Open YouTube and search ────────────────────────────────────────────
-    rules.append((
-        re.compile(
-            r"^(?:open\s+youtube\s+and\s+search|search\s+youtube\s+for)\s+(.+)$",
-            re.IGNORECASE,
-        ),
-        lambda m, raw, norm: _plan([
-            _step("browser.open", {"url": "https://www.youtube.com"}, "Open YouTube"),
-            _step("browser.youtube_search", {"query": m.group(1).strip()}, "Search YouTube"),
         ], raw, norm),
     ))
 
@@ -284,6 +285,30 @@ def _build_rules():
         re.compile(r"^(?:list|show)\s+notes?$", re.IGNORECASE),
         lambda m, raw, norm: _plan([
             _step("note.create", {"content": "__list__"}, "List notes"),
+        ], raw, norm),
+    ))
+
+    # ── 20. "do <math>" prefix (e.g. "do 55 + 5") ─────────────────────────────
+    rules.append((
+        re.compile(
+            r"^do\s+(\d+(?:\.\d+)?\s*[+\-*/]\s*\d+(?:\s*[+\-*/]\s*\d+(?:\.\d+)?)*)$",
+            re.IGNORECASE,
+        ),
+        lambda m, raw, norm: _plan([
+            _step("calculator.calculate", {"expression": m.group(1).strip()}, "Calculate"),
+        ], raw, norm),
+    ))
+
+    # ── 21. Bare math expression (e.g. "79 + 8", "51 + 79") ───────────────────
+    # Must come after all other rules that might contain math-like patterns.
+    # Matches expressions that start with a number and contain math operators.
+    rules.append((
+        re.compile(
+            r"^(\d+(?:\.\d+)?\s*[+\-*/]\s*\d+(?:\s*[+\-*/]\s*\d+(?:\.\d+)?)*)$",
+            re.IGNORECASE,
+        ),
+        lambda m, raw, norm: _plan([
+            _step("calculator.calculate", {"expression": m.group(1).strip()}, "Calculate"),
         ], raw, norm),
     ))
 

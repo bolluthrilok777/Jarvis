@@ -76,6 +76,16 @@ def classify(normalized: str) -> str:
     if not text:
         return "executable_command"
 
+    # Check for math expressions first — these are always executable commands
+    # even if they start with "what is" or other conversational prefixes.
+    _MATH_WORDS = frozenset({
+        "plus", "minus", "times", "multiplied", "divided", "into",
+        "+", "-", "*", "/", "x",
+    })
+    words = text.split()
+    if any(w in _MATH_WORDS for w in words):
+        return "executable_command"
+
     # Exact matches
     if text in _CONV_EXACT:
         return "conversational_query"
