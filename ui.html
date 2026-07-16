@@ -195,6 +195,25 @@
     .nav-btn { display:block; width:100%; text-align:left; padding:11px 12px; margin:3px 0; border:0; border-radius:10px; background:transparent; color:#d4d4d4; cursor:pointer; }
     .nav-btn:hover,.nav-btn.active { background:#1b1b1b; color:#f4cf63; }
     .command-header { display:flex; align-items:center; justify-content:space-between; gap:14px; }
+    .jarvis-title { display:flex; align-items:center; gap:11px; }
+    .ollama-wrap { position:relative; display:inline-flex; }
+    .ollama-core { position:relative; width:34px; height:34px; padding:0; border:0; border-radius:50%; background:#111; color:#d4af37; cursor:pointer; box-shadow:0 0 0 1px #4a3d16,0 0 18px rgba(212,175,55,.18); }
+    .ollama-core .core-center { position:absolute; inset:11px; border-radius:50%; background:currentColor; box-shadow:0 0 10px currentColor; }
+    .ollama-core .core-ring { position:absolute; inset:5px; border:2px solid transparent; border-top-color:currentColor; border-right-color:currentColor; border-radius:50%; }
+    .ollama-core.mode-auto .core-ring { animation:coreSpin 2.2s linear infinite; }
+    .ollama-core.mode-light .core-center { animation:corePulse 1.5s ease-in-out infinite; }
+    .ollama-core.mode-heavy .core-ring { inset:3px; border-width:3px; animation:coreSpin .8s linear infinite reverse; }
+    .ollama-core.working { color:#fff1a8; animation:workingGlow .7s ease-in-out infinite alternate; }
+    .ollama-core.offline { color:#737373; box-shadow:0 0 0 1px #404040; }
+    .ollama-core.offline .core-ring,.ollama-core.offline .core-center { animation:none; box-shadow:none; }
+    @keyframes coreSpin { to{transform:rotate(360deg)} }
+    @keyframes corePulse { 50%{transform:scale(1.45);opacity:.55} }
+    @keyframes workingGlow { to{box-shadow:0 0 0 1px #d4af37,0 0 28px rgba(212,175,55,.75)} }
+    .ollama-menu { position:absolute; top:43px; left:0; z-index:60; width:245px; padding:8px; border:1px solid #4a3d16; border-radius:14px; background:#101010; box-shadow:0 18px 50px rgba(0,0,0,.55); }
+    .ollama-menu button { width:100%; display:flex; justify-content:space-between; gap:12px; padding:10px; border:0; border-radius:9px; background:transparent; color:#f5f5f5; text-align:left; cursor:pointer; }
+    .ollama-menu button:hover,.ollama-menu button.selected { background:#24200f; color:#f4cf63; }
+    .ollama-menu small { color:#8c8c8c; }
+    #ollama-connection { display:block; padding:7px 10px; color:#a3a3a3; font-size:11px; }
     .monitor-live { float:right; margin-top:-42px; display:flex; align-items:center; gap:9px; padding:8px 12px; border:1px solid #4a3d16; border-radius:999px; background:#111; color:#f4cf63; font-size:12px; cursor:pointer; }
     .monitor-live.hidden { display:none; }
     .monitor-live.paused { color:#d4d4d4; border-color:#525252; }
@@ -253,7 +272,17 @@
 </aside>
 <div class="container">
   <div class="card">
-    <h1>🤖 Jarvis AI Command Center</h1>
+    <h1 class="jarvis-title"><span class="ollama-wrap">
+      <button id="ollama-core" class="ollama-core mode-auto offline" type="button" aria-label="Ollama model and connection status" aria-expanded="false" onclick="toggleOllamaMenu(event)">
+        <span class="core-ring" aria-hidden="true"></span><span class="core-center" aria-hidden="true"></span>
+      </button>
+      <span id="ollama-menu" class="ollama-menu hidden">
+        <span id="ollama-connection">Checking Ollama…</span>
+        <button type="button" data-mode="auto" class="selected" onclick="selectOllamaMode('auto')"><span>Auto</span><small>Smart selection</small></button>
+        <button type="button" data-mode="light" onclick="selectOllamaMode('light')"><span>Light</span><small>gemma2:2b</small></button>
+        <button type="button" data-mode="heavy" onclick="selectOllamaMode('heavy')"><span>Heavy</span><small>qwen2.5:7b</small></button>
+      </span>
+    </span>Jarvis AI Command Center</h1>
     <button id="monitor-live" class="monitor-live hidden" type="button" onclick="openMonitoring()" aria-live="polite">
       <span class="monitor-orbit" aria-hidden="true"></span>
       <span id="monitor-live-text">Monitoring active</span>
@@ -263,10 +292,6 @@
     <textarea id="cmd" placeholder="Example: system status&#10;open calculator&#10;Who are you?"></textarea>
 
     <div class="controls">
-      <select id="mode" class="mode-select">
-        <option value="light">Light Mode</option>
-        <option value="heavy">Heavy Mode</option>
-      </select>
       <button class="btn btn-primary" id="execute-btn" onclick="submitCommand()">Execute</button>
       <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
       <button class="btn" id="voice-btn" onclick="toggleRecording()">🎙 Start Listening</button>
@@ -347,6 +372,8 @@
 let pendingConfirmTaskId = null;
 let pollInterval = null;
 let isSubmitting = false;
+let ollamaMode = "auto";
+let ollamaPollInterval = null;
 
 // ── Textarea: Enter submits, Shift+Enter newline ─────────────────────────────
 document.getElementById("cmd").addEventListener("keydown", function(e) {
@@ -394,7 +421,8 @@ async function submitCommand() {
             <div class="understood">Conversational question — routing to AI chat</div>
           </div>`;
           // Fire AI chat
-          const mode = document.getElementById("mode").value;
+          const mode = resolveOllamaMode(lineText);
+          setOllamaWorking(true);
           const chatRes = await fetch("/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -444,6 +472,7 @@ async function submitCommand() {
   } catch (err) {
     showResponse(`Error: ${escapeHtml(err.message || err)}`);
   } finally {
+    setOllamaWorking(false);
     isSubmitting = false;
     document.getElementById("execute-btn").disabled = false;
   }
@@ -738,6 +767,36 @@ function clearAll() {
 function monitoringValues() {
   return {start:document.getElementById("monitor-start").value, end:document.getElementById("monitor-end").value, interval:Number(document.getElementById("monitor-interval").value), sound:document.getElementById("monitor-sound").value};
 }
+
+function resolveOllamaMode(text) {
+  if (ollamaMode !== "auto") return ollamaMode;
+  const complex = /\b(analyze|compare|reason|strategy|detailed|complex|step by step|research)\b/i.test(text) || text.length > 220;
+  return complex ? "heavy" : "light";
+}
+function toggleOllamaMenu(event) {
+  event.stopPropagation();
+  const menu=document.getElementById("ollama-menu"), core=document.getElementById("ollama-core"), opening=menu.classList.contains("hidden");
+  menu.classList.toggle("hidden",!opening); core.setAttribute("aria-expanded",String(opening));
+}
+function selectOllamaMode(mode) {
+  ollamaMode=mode;
+  const core=document.getElementById("ollama-core");
+  core.classList.remove("mode-auto","mode-light","mode-heavy"); core.classList.add(`mode-${mode}`);
+  document.querySelectorAll("#ollama-menu button[data-mode]").forEach(button=>button.classList.toggle("selected",button.dataset.mode===mode));
+  document.getElementById("ollama-menu").classList.add("hidden"); core.setAttribute("aria-expanded","false");
+  refreshOllamaStatus();
+}
+function setOllamaWorking(working) { document.getElementById("ollama-core").classList.toggle("working",working); }
+async function refreshOllamaStatus() {
+  const core=document.getElementById("ollama-core"), label=document.getElementById("ollama-connection");
+  try {
+    const res=await fetch("/health"), data=await res.json(), connected=data.ollama==="running";
+    core.classList.toggle("offline",!connected);
+    label.textContent=connected?`Ollama connected · ${ollamaMode.toUpperCase()}`:"Ollama offline";
+    core.title=label.textContent;
+  } catch(e) { core.classList.add("offline"); label.textContent="Ollama unavailable"; }
+}
+document.addEventListener("click",event=>{if(!event.target.closest(".ollama-wrap")){document.getElementById("ollama-menu").classList.add("hidden");document.getElementById("ollama-core").setAttribute("aria-expanded","false");}});
 function updateSchedulePreview() {
   const v=monitoringValues(); let current=new Date(`2000-01-01T${v.start}:00`); const end=new Date(`2000-01-01T${v.end}:00`), times=[];
   while ((current=new Date(current.getTime()+v.interval*60000))<=end) times.push(current.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}));
@@ -767,11 +826,14 @@ document.getElementById("monitor-interval").addEventListener("change",updateSche
 function startPolling() {
   refreshTasks();
   refreshMonitoringStatus();
+  refreshOllamaStatus();
   pollInterval = setInterval(()=>{refreshTasks();refreshMonitoringStatus();}, 2000);
+  ollamaPollInterval = setInterval(refreshOllamaStatus, 15000);
 }
 
 function stopPolling() {
   if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+  if (ollamaPollInterval) { clearInterval(ollamaPollInterval); ollamaPollInterval = null; }
 }
 
 // Start polling when page loads

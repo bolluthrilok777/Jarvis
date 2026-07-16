@@ -34,3 +34,22 @@ def test_homepage_has_animated_monitoring_status():
     assert "@keyframes monitorSpin" in html
     assert "refreshMonitoringStatus" in html
     assert "Monitoring active · Next" in html
+
+
+def test_ollama_icon_is_animated_status_and_click_menu():
+    html = client.get("/ui").text
+    assert 'id="ollama-core"' in html
+    assert 'aria-label="Ollama model and connection status"' in html
+    assert 'id="ollama-menu" class="ollama-menu hidden"' in html
+    assert 'data-mode="auto"' in html
+    assert 'data-mode="light"' in html
+    assert 'data-mode="heavy"' in html
+    assert "@keyframes coreSpin" in html
+    assert "@keyframes corePulse" in html
+    assert "refreshOllamaStatus" in html
+
+
+def test_visible_composer_model_dropdown_removed():
+    html = client.get("/ui").text
+    assert '<select id="mode"' not in html
+    assert "resolveOllamaMode(lineText)" in html
