@@ -4,7 +4,8 @@ from unittest.mock import patch
 import pytest
 
 from jarvis_core.monitoring import (
-    MonitoringService, activity_file, append_activity, generate_schedule,
+    ACTIVITY_CHECK_ENTRY, MonitoringService, activity_file, append_activity,
+    generate_schedule,
 )
 
 
@@ -53,6 +54,25 @@ def test_trigger_plays_sound_and_opens_fixed_notepad(tmp_path):
     assert result["status"] == "done"
     sound.assert_called_once_with("soft")
     assert opened.call_args.args[0][0] == "notepad.exe"
+    content = (tmp_path / datetime.now().strftime("activity_%Y-%m-%d.txt")).read_text(
+        encoding="utf-8"
+    )
+    assert f"{ACTIVITY_CHECK_ENTRY}\n\n" in content
+
+
+def test_monitoring_alerts_have_writing_space_and_blank_separator(tmp_path):
+    with patch("jarvis_core.monitoring.NOTES_DIR", tmp_path):
+        append_activity(ACTIVITY_CHECK_ENTRY, datetime(2026, 7, 16, 20, 15))
+        path = append_activity(ACTIVITY_CHECK_ENTRY, datetime(2026, 7, 16, 20, 30))
+
+    assert path.read_text(encoding="utf-8") == (
+        "[8:15 PM]\n"
+        "Activity check opened. Add your update below.\n"
+        "{\n\n}\n\n"
+        "[8:30 PM]\n"
+        "Activity check opened. Add your update below.\n"
+        "{\n\n}\n\n"
+    )
 
 
 def test_pause_resume_stop():

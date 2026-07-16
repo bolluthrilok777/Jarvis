@@ -11,6 +11,7 @@ from jarvis_core.config import NOTES_DIR
 
 ALLOWED_INTERVALS = {15, 30, 60}
 ALLOWED_SOUNDS = {"soft", "double", "alert", "gentle"}
+ACTIVITY_CHECK_ENTRY = "Activity check opened. Add your update below.\n{\n\n}"
 
 
 def generate_schedule(start: str, end: str, interval: int) -> list[str]:
@@ -114,7 +115,7 @@ class MonitoringService:
             sound = self._state["sound"]
         play_sound(sound)
         now = datetime.now()
-        path = append_activity("Activity check opened. Add your update below.", now)
+        path = append_activity(ACTIVITY_CHECK_ENTRY, now)
         try:
             subprocess.Popen(["notepad.exe", str(path)])
         except Exception:
