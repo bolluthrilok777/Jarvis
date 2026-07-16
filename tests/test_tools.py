@@ -88,6 +88,40 @@ def test_open_calculator_launches_only_when_no_window_exists():
     launch.assert_called_once()
 
 
+def test_open_named_file_location_searches_only_allowed_roots(tmp_path):
+    from jarvis_core.skill_registry import _exec_file_open_containing
+    resume = tmp_path / "Reddy Charan Resume.pdf"
+    resume.write_bytes(b"pdf")
+    with patch("jarvis_core.config.ALLOWED_ROOTS", [tmp_path]), \
+         patch("subprocess.Popen") as opened:
+        result = _exec_file_open_containing("reddy charan resume")
+    assert result["status"] == "done"
+    assert result["file"] == str(resume.resolve())
+    opened.assert_called_once_with(["explorer.exe", f"/select,{resume.resolve()}"])
+
+
+def test_file_locator_treats_resume_as_optional_descriptor(tmp_path):
+    from jarvis_core.skill_registry import _exec_file_open_containing
+    resume = tmp_path / "Reddy_Charan.pdf"
+    resume.write_bytes(b"pdf")
+    with patch("jarvis_core.config.ALLOWED_ROOTS", [tmp_path]), \
+         patch("subprocess.Popen") as opened:
+        result = _exec_file_open_containing("reddy charan resume")
+    assert result["status"] == "done"
+    assert result["file"] == str(resume.resolve())
+    opened.assert_called_once()
+
+
+def test_open_named_file_location_reports_missing(tmp_path):
+    from jarvis_core.skill_registry import _exec_file_open_containing
+    with patch("jarvis_core.config.ALLOWED_ROOTS", [tmp_path]), \
+         patch("subprocess.Popen") as opened:
+        result = _exec_file_open_containing("reddy charan resume")
+    assert result["status"] == "error"
+    assert "No allowed file matched" in result["message"]
+    opened.assert_not_called()
+
+
 # Test 13: Note creation writes a .txt file with correct content
 def test_note_creation(tmp_path):
     from unittest.mock import patch

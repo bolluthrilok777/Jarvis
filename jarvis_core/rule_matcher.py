@@ -247,6 +247,18 @@ def _build_rules():
     ))
 
     # ── 7. Named app open ─────────────────────────────────────────────────────
+    rules.append((
+        re.compile(
+            r"^(?:open|show|find)\s+(.+?)\s+(?:in|with)\s+"
+            r"(?:the\s+)?(?:file\s+manager|file\s+explorer|explorer)$",
+            re.IGNORECASE,
+        ),
+        lambda m, raw, norm: _plan([
+            _step("file.open_containing", {"query": m.group(1).strip()},
+                  f"Find and open {m.group(1).strip()} in File Explorer"),
+        ], raw, norm),
+    ))
+
     _apps_re = "|".join(re.escape(k) for k in _APP_ALIASES)
     rules.append((
         re.compile(

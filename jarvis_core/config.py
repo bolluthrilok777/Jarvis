@@ -7,6 +7,8 @@ LIGHT_MODEL = "gemma2:2b"
 HEAVY_MODEL = "qwen2.5:7b"
 
 BASE_DIR = pathlib.Path("C:/Jarvis")
+USER_HOME = pathlib.Path.home()
+ONEDRIVE_DIR = USER_HOME / "OneDrive"
 NOTES_DIR = BASE_DIR / "notes"
 SCREENSHOT_DIR = BASE_DIR / "screenshots"
 LOGS_DIR = BASE_DIR / "logs"
@@ -58,9 +60,11 @@ ALLOWED_FOLDERS = {
 
 ALLOWED_ROOTS = [
     BASE_DIR,
-    pathlib.Path.home() / "Desktop",
-    pathlib.Path.home() / "Documents",
-    pathlib.Path.home() / "Downloads",
+    USER_HOME / "Desktop",
+    USER_HOME / "Documents",
+    USER_HOME / "Downloads",
+    ONEDRIVE_DIR / "Desktop",
+    ONEDRIVE_DIR / "Documents",
 ]
 
 ALLOWED_EXTENSIONS = [".txt", ".md", ".py", ".json", ".csv", ".log"]

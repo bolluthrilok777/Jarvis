@@ -156,6 +156,8 @@ def _describe_step(skill_id: str, params: dict) -> str:
         return f"Open {params.get('folder_name', 'folder')} folder"
     if skill_id == "file.search":
         return f"Search {params.get('folder', 'folder')} for {params.get('pattern', '*')}"
+    if skill_id == "file.open_containing":
+        return f"Find and open the location of '{params.get('query', '')}'"
     if skill_id == "note.create":
         content = params.get('content', '')
         preview = content[:40] + "..." if len(content) > 40 else content

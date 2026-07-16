@@ -122,11 +122,16 @@ class ActionEngine:
                 skill = registry.get_skill(step.skill_id)
                 output = skill.executor(**step.parameters)
                 verified = self._verify(step, output)
+                output_dict = output if isinstance(output, dict) else {"value": output}
+                step_success = output_dict.get("status") not in ("error", "failed")
                 results.append(ActionResult(
-                    step=step, success=True,
-                    output=output if isinstance(output, dict) else {"value": output},
+                    step=step, success=step_success,
+                    output=output_dict,
+                    error=None if step_success else output_dict.get("message", "Step failed"),
                     verified=verified,
                 ))
+                if not step_success:
+                    break
             except SkillNotFoundError as exc:
                 results.append(ActionResult(step=step, success=False, error=f"Skill not found: {exc}"))
                 break
@@ -187,6 +192,9 @@ class ActionEngine:
 
         if sid == "file.search":
             return out.get("status") == "done"
+
+        if sid == "file.open_containing":
+            return out.get("status") == "done" and bool(out.get("file"))
 
         if sid == "system.status":
             return "cpu_percent" in out

@@ -298,6 +298,39 @@ def _exec_file_search(folder: str, pattern: str) -> dict:
         return {"status": "error", "message": str(exc)}
 
 
+def _exec_file_open_containing(query: str) -> dict:
+    """Find a named file inside allowed roots and reveal it in Explorer."""
+    import subprocess
+    from jarvis_core.config import ALLOWED_ROOTS
+
+    raw_tokens = re.findall(r"[a-z0-9]+", query.lower())
+    descriptor_tokens = {"resume", "cv", "file", "document", "copy"}
+    specific_tokens = [token for token in raw_tokens if token not in descriptor_tokens]
+    tokens = specific_tokens or raw_tokens
+    if not tokens:
+        return {"status": "error", "message": "Please provide a file name to find."}
+    matches = []
+    try:
+        for root in ALLOWED_ROOTS:
+            root = Path(root).resolve()
+            if not root.exists():
+                continue
+            for candidate in root.rglob("*"):
+                if not candidate.is_file():
+                    continue
+                searchable = set(re.findall(r"[a-z0-9]+", candidate.stem.lower()))
+                if all(token in searchable for token in tokens):
+                    matches.append(candidate.resolve())
+        if not matches:
+            return {"status": "error", "message": f"No allowed file matched: {query}"}
+        match = sorted(matches, key=lambda path: (len(path.name), str(path).lower()))[0]
+        subprocess.Popen(["explorer.exe", f"/select,{match}"])
+        return {"status": "done", "message": f"Opened file location: {match.name}",
+                "file": str(match), "folder": str(match.parent)}
+    except Exception as exc:
+        return {"status": "error", "message": f"Could not open file location: {exc}"}
+
+
 def _exec_note_create(content: str) -> dict:
     from jarvis_core.app_tools import create_note
     return create_note(content)
@@ -467,6 +500,15 @@ registry.register(SkillDefinition(
     optional_params=[],
     requires_confirmation=False,
     executor=_exec_file_search,
+))
+
+registry.register(SkillDefinition(
+    skill_id="file.open_containing",
+    description="Find a named file in allowed roots and reveal it in Explorer",
+    required_params=["query"],
+    optional_params=[],
+    requires_confirmation=False,
+    executor=_exec_file_open_containing,
 ))
 
 registry.register(SkillDefinition(

@@ -247,6 +247,27 @@ def test_open_folder_find_file():
     assert plan.steps[1].skill_id == "file.search"
 
 
+def test_open_named_file_in_file_manager_uses_safe_locator():
+    command = "open reddy charan resume in file manager"
+    plan = matcher.match(normalize(command), command)
+    assert plan is not None
+    assert len(plan.steps) == 1
+    assert plan.steps[0].skill_id == "file.open_containing"
+    assert plan.steps[0].parameters == {"query": "reddy charan resume"}
+
+
+def test_executor_error_makes_action_report_fail():
+    from jarvis_core.action_models import ActionPlan, ActionStep
+    plan = ActionPlan(raw_command="open missing", normalized_command="open missing", confidence=1.0,
+                      steps=[ActionStep(skill_id="folder.open", parameters={"folder_name": "missing"})])
+    with patch("jarvis_core.skill_registry.registry.get_skill") as get_skill:
+        get_skill.return_value.executor.return_value = {"status": "error", "message": "Folder not in allowlist"}
+        report = ActionEngine().execute(plan)
+    assert report.all_succeeded is False
+    assert report.results[0].success is False
+    assert report.results[0].error == "Folder not in allowlist"
+
+
 # ── Group C: Engine behaviour tests ──────────────────────────────────────────
 
 def test_execution_order():
