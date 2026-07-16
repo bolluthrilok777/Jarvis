@@ -197,16 +197,13 @@
     .command-header { display:flex; align-items:center; justify-content:space-between; gap:14px; }
     .jarvis-title { display:flex; align-items:center; gap:11px; }
     .ollama-wrap { position:relative; display:inline-flex; flex:0 0 auto; }
-    .ollama-core { --robot:#d4af37; --robot-bright:#fff0a3; --robot-glow:rgba(212,175,55,.72); position:relative; width:54px; height:54px; padding:0; border:0; background:transparent; color:var(--robot); cursor:pointer; isolation:isolate; }
+    .ollama-core { --robot:#d4af37; --robot-bright:#fff0a3; --robot-glow:rgba(212,175,55,.72); position:relative; width:64px; height:64px; padding:0; border:0; background:transparent; color:var(--robot); cursor:pointer; isolation:isolate; }
     .ollama-core.mode-light { --robot:#20d7ff; --robot-bright:#c8f7ff; --robot-glow:rgba(32,215,255,.72); }
     .ollama-core.mode-heavy { --robot:#9b6cff; --robot-bright:#eadfff; --robot-glow:rgba(155,108,255,.75); }
-    .ollama-robot { position:absolute; inset:5px; z-index:2; width:44px; height:44px; overflow:visible; filter:drop-shadow(0 0 5px var(--robot-glow)); transition:filter .2s ease; }
-    .robot-shell { fill:#cbd5e1; stroke:var(--robot); stroke-width:1.6; }
-    .robot-face { fill:#080b14; stroke:var(--robot); stroke-width:1.3; }
-    .robot-panel { fill:#1e293b; stroke:var(--robot); stroke-width:1.1; }
-    .robot-eye { fill:var(--robot-bright); filter:drop-shadow(0 0 3px var(--robot)); }
-    .robot-reactor { fill:#05070d; stroke:var(--robot-bright); stroke-width:1.5; filter:drop-shadow(0 0 3px var(--robot)); }
-    .signal-wave { position:absolute; z-index:1; inset:4px; border:1.5px solid var(--robot); border-radius:50%; opacity:0; box-shadow:0 0 8px var(--robot-glow),inset 0 0 6px var(--robot-glow); animation:robotWave 2.4s ease-out infinite; pointer-events:none; }
+    .ollama-robot { position:absolute; inset:4px; z-index:2; width:56px; height:56px; border-radius:15px; object-fit:cover; filter:drop-shadow(0 0 7px var(--robot-glow)); transition:filter .2s ease,opacity .2s ease; }
+    .ollama-core.mode-light .ollama-robot { filter:hue-rotate(-12deg) saturate(1.12) drop-shadow(0 0 8px var(--robot-glow)); }
+    .ollama-core.mode-heavy .ollama-robot { filter:hue-rotate(34deg) saturate(1.2) drop-shadow(0 0 9px var(--robot-glow)); }
+    .signal-wave { position:absolute; z-index:1; inset:-3px; border:2px solid var(--robot); border-radius:50%; opacity:0; box-shadow:0 0 12px var(--robot-glow),inset 0 0 8px var(--robot-glow); animation:robotWave 2.4s ease-out infinite; pointer-events:none; }
     .signal-wave.wave-two { animation-delay:1.2s; }
     .ollama-core.mode-light .signal-wave { animation-duration:3s; }
     .ollama-core.mode-heavy .signal-wave { animation-duration:1.45s; }
@@ -216,11 +213,12 @@
     .ollama-core.working .ollama-robot { animation:robotWorking .65s ease-in-out infinite alternate; }
     .ollama-core.offline { --robot:#6b7280; --robot-bright:#9ca3af; --robot-glow:rgba(107,114,128,.2); }
     .ollama-core.offline .signal-wave,.ollama-core.offline .ollama-robot { animation:none; }
+    .ollama-core.offline .ollama-robot { filter:grayscale(1) opacity(.58); }
     .ollama-core.offline .signal-wave { opacity:.14; transform:scale(.82); }
-    @keyframes robotWave { 0%{opacity:.8;transform:scale(.58)} 72%,100%{opacity:0;transform:scale(1.28)} }
+    @keyframes robotWave { 0%{opacity:.85;transform:scale(.62)} 72%,100%{opacity:0;transform:scale(1.48)} }
     @keyframes robotWorking { to{transform:scale(1.06);filter:drop-shadow(0 0 11px var(--robot-glow))} }
     @media (prefers-reduced-motion:reduce) { .signal-wave,.ollama-robot,.monitor-orbit::after,.loading-dots span { animation:none!important; } }
-    .ollama-menu { position:absolute; top:58px; left:0; z-index:60; width:245px; padding:8px; border:1px solid #4a3d16; border-radius:14px; background:#101010; box-shadow:0 18px 50px rgba(0,0,0,.55); }
+    .ollama-menu { position:absolute; top:68px; left:0; z-index:60; width:245px; padding:8px; border:1px solid #4a3d16; border-radius:14px; background:#101010; box-shadow:0 18px 50px rgba(0,0,0,.55); }
     .ollama-menu button { width:100%; display:flex; justify-content:space-between; gap:12px; padding:10px; border:0; border-radius:9px; background:transparent; color:#f5f5f5; text-align:left; cursor:pointer; }
     .ollama-menu button:hover,.ollama-menu button.selected { background:#24200f; color:#f4cf63; }
     .ollama-menu small { color:#8c8c8c; }
@@ -286,14 +284,7 @@
     <h1 class="jarvis-title"><span class="ollama-wrap">
       <button id="ollama-core" class="ollama-core mode-auto offline" type="button" aria-label="Ollama model and connection status" aria-expanded="false" onclick="toggleOllamaMenu(event)">
         <span class="signal-wave wave-one" aria-hidden="true"></span><span class="signal-wave wave-two" aria-hidden="true"></span>
-        <svg class="ollama-robot" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-          <path class="robot-shell" d="M17 12 25 6h14l8 6 4 15-5 16-9 7H27l-9-7-5-16z"/>
-          <path class="robot-face" d="m21 16 7-5h8l7 5 3 11-5 11-7 5h-4l-7-5-5-11z"/>
-          <path class="robot-eye" d="m22 25 8 2-2 4-7-2zm20 0-8 2 2 4 7-2z"/>
-          <path class="robot-panel" d="m13 34 6 2 7 12-5 8-10-7zm38 0-6 2-7 12 5 8 10-7z"/>
-          <path class="robot-panel" d="M25 47h14l5 9H20z"/>
-          <circle class="robot-reactor" cx="32" cy="51" r="4"/>
-        </svg>
+        <img class="ollama-robot" src="/assets/ollama-robot.png" alt="" aria-hidden="true">
       </button>
       <span id="ollama-menu" class="ollama-menu hidden">
         <span id="ollama-connection">Checking Ollama…</span>

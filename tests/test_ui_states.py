@@ -44,12 +44,14 @@ def test_ollama_icon_is_animated_status_and_click_menu():
     assert 'data-mode="auto"' in html
     assert 'data-mode="light"' in html
     assert 'data-mode="heavy"' in html
-    assert 'class="ollama-robot"' in html
+    assert 'class="ollama-robot" src="/assets/ollama-robot.png"' in html
     assert 'class="signal-wave wave-one"' in html
     assert 'class="signal-wave wave-two"' in html
     assert "@keyframes robotWave" in html
     assert ".ollama-core.mode-light { --robot:#20d7ff" in html
     assert ".ollama-core.mode-heavy { --robot:#9b6cff" in html
+    assert "width:64px; height:64px" in html
+    assert "transform:scale(1.48)" in html
     assert "refreshOllamaStatus" in html
 
 

@@ -13,6 +13,7 @@ NOTES_DIR = BASE_DIR / "notes"
 SCREENSHOT_DIR = BASE_DIR / "screenshots"
 LOGS_DIR = BASE_DIR / "logs"
 UI_FILE = BASE_DIR / "ui.html"
+OLLAMA_ROBOT_IMAGE = BASE_DIR / "assets" / "ollama-robot.png"
 
 NOTES_DIR.mkdir(exist_ok=True)
 SCREENSHOT_DIR.mkdir(exist_ok=True)

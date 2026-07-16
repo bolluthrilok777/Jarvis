@@ -31,7 +31,7 @@ def test_app_is_fastapi_instance():
         return paths
 
     paths = _collect_paths(app.routes)
-    for expected in ["/", "/health", "/ui", "/chat", "/agent", "/command", "/confirm-action"]:
+    for expected in ["/", "/health", "/ui", "/assets/ollama-robot.png", "/chat", "/agent", "/command", "/confirm-action"]:
         assert expected in paths, f"Route {expected} not found in {paths}"
 
 
@@ -75,6 +75,12 @@ def test_ui_returns_html():
     response = client.get("/ui")
     assert response.status_code == 200
     assert "text/html" in response.headers.get("content-type", "")
+
+
+def test_ollama_robot_image_is_served():
+    response = client.get("/assets/ollama-robot.png")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
 
 
 # Test 7: POST /agent with mocked Ollama returns reply

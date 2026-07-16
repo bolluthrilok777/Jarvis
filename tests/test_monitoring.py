@@ -68,10 +68,10 @@ def test_monitoring_alerts_have_writing_space_and_blank_separator(tmp_path):
     assert path.read_text(encoding="utf-8") == (
         "[8:15 PM]\n"
         "Activity check opened. Add your update below.\n"
-        "{\n\n}\n\n"
+        "{}\n\n"
         "[8:30 PM]\n"
         "Activity check opened. Add your update below.\n"
-        "{\n\n}\n\n"
+        "{}\n\n"
     )
 
 

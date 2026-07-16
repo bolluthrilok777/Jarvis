@@ -5,7 +5,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from jarvis_core.config import (
-    APP_NAME, OLLAMA_URL, LIGHT_MODEL, HEAVY_MODEL, UI_FILE,
+    APP_NAME, OLLAMA_URL, LIGHT_MODEL, HEAVY_MODEL, OLLAMA_ROBOT_IMAGE,
+    UI_FILE,
 )
 from jarvis_core.models import (
     ActivityEntryRequest, ChatRequest, CommandRequest, ConfirmRequest,
@@ -60,6 +61,13 @@ def jarvis_ui():
         logger.error("ui.html not found at %s", UI_FILE)
         raise HTTPException(status_code=500, detail="UI file not found.")
     return FileResponse(str(UI_FILE), media_type="text/html")
+
+
+@router.get("/assets/ollama-robot.png")
+def ollama_robot_image():
+    if not OLLAMA_ROBOT_IMAGE.exists():
+        raise HTTPException(status_code=404, detail="Ollama robot image not found.")
+    return FileResponse(str(OLLAMA_ROBOT_IMAGE), media_type="image/png")
 
 
 @router.post("/chat")

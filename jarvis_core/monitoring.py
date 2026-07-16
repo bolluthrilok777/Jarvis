@@ -11,7 +11,7 @@ from jarvis_core.config import NOTES_DIR
 
 ALLOWED_INTERVALS = {15, 30, 60}
 ALLOWED_SOUNDS = {"soft", "double", "alert", "gentle"}
-ACTIVITY_CHECK_ENTRY = "Activity check opened. Add your update below.\n{\n\n}"
+ACTIVITY_CHECK_ENTRY = "Activity check opened. Add your update below.\n{}"
 
 
 def generate_schedule(start: str, end: str, interval: int) -> list[str]:
