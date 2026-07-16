@@ -45,6 +45,8 @@ def test_ollama_icon_is_animated_status_and_click_menu():
     assert 'data-mode="light"' in html
     assert 'data-mode="heavy"' in html
     assert 'class="ollama-robot" src="/assets/ollama-robot.png"' in html
+    assert 'class="ollama-robot-fallback"' in html
+    assert "this.nextElementSibling.removeAttribute('hidden')" in html
     assert 'class="signal-wave wave-one"' in html
     assert 'class="signal-wave wave-two"' in html
     assert "@keyframes robotWave" in html

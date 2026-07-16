@@ -201,6 +201,11 @@
     .ollama-core.mode-light { --robot:#20d7ff; --robot-bright:#c8f7ff; --robot-glow:rgba(32,215,255,.72); }
     .ollama-core.mode-heavy { --robot:#9b6cff; --robot-bright:#eadfff; --robot-glow:rgba(155,108,255,.75); }
     .ollama-robot { position:absolute; inset:4px; z-index:2; width:56px; height:56px; border-radius:15px; object-fit:cover; filter:drop-shadow(0 0 7px var(--robot-glow)); transition:filter .2s ease,opacity .2s ease; }
+    .ollama-robot-fallback { position:absolute; inset:7px; z-index:2; width:50px; height:50px; overflow:visible; filter:drop-shadow(0 0 7px var(--robot-glow)); }
+    .ollama-robot-fallback[hidden] { display:none; }
+    .ollama-robot-fallback .robot-shell { fill:#cbd5e1; stroke:var(--robot); stroke-width:1.6; }
+    .ollama-robot-fallback .robot-face { fill:#080b14; stroke:var(--robot); stroke-width:1.3; }
+    .ollama-robot-fallback .robot-eye { fill:var(--robot-bright); filter:drop-shadow(0 0 3px var(--robot)); }
     .ollama-core.mode-light .ollama-robot { filter:hue-rotate(-12deg) saturate(1.12) drop-shadow(0 0 8px var(--robot-glow)); }
     .ollama-core.mode-heavy .ollama-robot { filter:hue-rotate(34deg) saturate(1.2) drop-shadow(0 0 9px var(--robot-glow)); }
     .signal-wave { position:absolute; z-index:1; inset:-3px; border:2px solid var(--robot); border-radius:50%; opacity:0; box-shadow:0 0 12px var(--robot-glow),inset 0 0 8px var(--robot-glow); animation:robotWave 2.4s ease-out infinite; pointer-events:none; }
@@ -284,7 +289,12 @@
     <h1 class="jarvis-title"><span class="ollama-wrap">
       <button id="ollama-core" class="ollama-core mode-auto offline" type="button" aria-label="Ollama model and connection status" aria-expanded="false" onclick="toggleOllamaMenu(event)">
         <span class="signal-wave wave-one" aria-hidden="true"></span><span class="signal-wave wave-two" aria-hidden="true"></span>
-        <img class="ollama-robot" src="/assets/ollama-robot.png" alt="" aria-hidden="true">
+        <img class="ollama-robot" src="/assets/ollama-robot.png" alt="" aria-hidden="true" onerror="this.hidden=true;this.nextElementSibling.removeAttribute('hidden')">
+        <svg class="ollama-robot-fallback" viewBox="0 0 64 64" aria-hidden="true" focusable="false" hidden>
+          <path class="robot-shell" d="M17 12 25 6h14l8 6 4 15-5 16-9 7H27l-9-7-5-16z"/>
+          <path class="robot-face" d="m21 16 7-5h8l7 5 3 11-5 11-7 5h-4l-7-5-5-11z"/>
+          <path class="robot-eye" d="m22 25 8 2-2 4-7-2zm20 0-8 2 2 4 7-2z"/>
+        </svg>
       </button>
       <span id="ollama-menu" class="ollama-menu hidden">
         <span id="ollama-connection">Checking Ollama…</span>

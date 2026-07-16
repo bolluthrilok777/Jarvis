@@ -146,6 +146,13 @@ def drive_calculator_gui(expression: str) -> Dict[str, Any]:
     if not visible_wins:
         return failed("no visible Calculator window was found")
 
+    # Consolidate launch-race duplicates before focusing and typing.
+    for duplicate in visible_wins[1:]:
+        try:
+            duplicate.close()
+        except Exception:
+            pass
+
     # ── 2. Focus the window ─────────────────────────────────────────────────
     win = visible_wins[0]
     # Restore if minimized
@@ -225,12 +232,21 @@ def drive_calculator_gui(expression: str) -> Dict[str, Any]:
         return failed(f"typing error ({exc})")
 
     # ── 5. Press Enter ──────────────────────────────────────────────────────
+    numbers = []
     try:
         pyautogui.press("enter")
-        _time.sleep(0.5)
-        pyautogui.hotkey("ctrl", "c")
-        _time.sleep(0.2)
-        displayed = str(pyperclip.paste()).strip()
+        deadline = _time.monotonic() + 2.5
+        while _time.monotonic() < deadline:
+            _time.sleep(0.25)
+            pyautogui.hotkey("ctrl", "c")
+            _time.sleep(0.1)
+            displayed = str(pyperclip.paste()).strip()
+            normalized_display = displayed.replace("\u2212", "-").replace(",", "")
+            numbers = re.findall(r"[-+]?(?:\d+(?:\.\d+)?|\.\d+)", normalized_display)
+            if numbers and math.isclose(
+                float(numbers[-1]), float(expected), rel_tol=1e-9, abs_tol=1e-9
+            ):
+                break
     except Exception as exc:
         return failed(f"enter key or result verification error ({exc})")
     finally:
@@ -240,8 +256,6 @@ def drive_calculator_gui(expression: str) -> Dict[str, Any]:
             except Exception:
                 pass
 
-    normalized_display = displayed.replace("\u2212", "-").replace(",", "")
-    numbers = re.findall(r"[-+]?(?:\d+(?:\.\d+)?|\.\d+)", normalized_display)
     if not numbers:
         return failed("Calculator did not expose a numeric result after Enter")
     actual = float(numbers[-1])

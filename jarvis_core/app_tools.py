@@ -2,6 +2,7 @@ import datetime
 import logging
 import re
 import subprocess
+import time
 import webbrowser
 from urllib.parse import quote_plus
 
@@ -15,9 +16,21 @@ def open_known_app(app_name: str) -> tuple[bool, str]:
 
     if app_name in ALLOWED_APPS:
         logger.info("Tool selected: open_known_app(%s)", app_name)
-        if app_name == "calculator" and _focus_existing_calculator():
-            logger.info("Reused existing Calculator window")
-            return True, "Reused existing calculator window."
+        if app_name == "calculator":
+            if _focus_existing_calculator():
+                logger.info("Reused existing Calculator window")
+                return True, "Reused existing calculator window."
+            subprocess.Popen(ALLOWED_APPS[app_name])
+            if _wait_for_calculator_window():
+                return True, "Opened calculator."
+            return False, "Calculator was launched but no window appeared."
+        if app_name == "task manager":
+            if _focus_existing_window("Task Manager"):
+                return True, "Reused existing Task Manager window."
+            subprocess.Popen(ALLOWED_APPS[app_name])
+            if _wait_for_window("Task Manager"):
+                return True, "Opened task manager."
+            return False, "Task Manager was launched but no window appeared."
         subprocess.Popen(ALLOWED_APPS[app_name])
         logger.info("Tool completed: open_known_app(%s)", app_name)
         return True, f"Opened {app_name}."
@@ -56,6 +69,48 @@ def _focus_existing_calculator() -> bool:
     except Exception as exc:
         logger.warning("Could not inspect existing Calculator windows: %s", exc)
         return False
+
+
+def _focus_existing_window(title: str) -> bool:
+    """Restore and focus a visible window with the requested title."""
+    try:
+        import pygetwindow as gw
+        windows = [
+            window for window in gw.getWindowsWithTitle(title)
+            if getattr(window, "width", 0) > 0 and getattr(window, "height", 0) > 0
+        ]
+        if not windows:
+            return False
+        window = windows[0]
+        if getattr(window, "isMinimized", False):
+            window.restore()
+        window.activate()
+        return True
+    except Exception as exc:
+        logger.warning("Could not focus %s window: %s", title, exc)
+        return False
+
+
+def _wait_for_window(title: str, timeout: float = 6.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _focus_existing_window(title):
+            return True
+        time.sleep(0.25)
+    return False
+
+
+def _wait_for_calculator_window(timeout: float = 6.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _focus_existing_calculator():
+            # The packaged Windows app exposes its top-level frame before the
+            # calculator controls are ready to receive keys. Let it settle,
+            # then focus/consolidate once more before returning to the GUI step.
+            time.sleep(0.8)
+            return _focus_existing_calculator()
+        time.sleep(0.25)
+    return False
 
 
 def open_known_folder(folder_name: str) -> tuple[bool, str]:

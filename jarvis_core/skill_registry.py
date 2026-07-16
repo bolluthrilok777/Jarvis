@@ -298,8 +298,9 @@ def _exec_file_search(folder: str, pattern: str) -> dict:
         return {"status": "error", "message": str(exc)}
 
 
-def _exec_file_open_containing(query: str) -> dict:
-    """Find a named file inside allowed roots and reveal it in Explorer."""
+def _exec_file_open_containing(query: str, open_file: bool = False) -> dict:
+    """Find a named file inside allowed roots, then open it or reveal it."""
+    import os
     import subprocess
     from jarvis_core.config import ALLOWED_ROOTS
 
@@ -324,8 +325,13 @@ def _exec_file_open_containing(query: str) -> dict:
         if not matches:
             return {"status": "error", "message": f"No allowed file matched: {query}"}
         match = sorted(matches, key=lambda path: (len(path.name), str(path).lower()))[0]
-        subprocess.Popen(["explorer.exe", f"/select,{match}"])
-        return {"status": "done", "message": f"Opened file location: {match.name}",
+        if open_file:
+            os.startfile(str(match))
+            message = f"Opened file: {match.name}"
+        else:
+            subprocess.Popen(["explorer.exe", f"/select,{match}"])
+            message = f"Opened file location: {match.name}"
+        return {"status": "done", "message": message,
                 "file": str(match), "folder": str(match.parent)}
     except Exception as exc:
         return {"status": "error", "message": f"Could not open file location: {exc}"}
@@ -504,9 +510,9 @@ registry.register(SkillDefinition(
 
 registry.register(SkillDefinition(
     skill_id="file.open_containing",
-    description="Find a named file in allowed roots and reveal it in Explorer",
+    description="Find a named file in allowed roots and open it or reveal it in Explorer",
     required_params=["query"],
-    optional_params=[],
+    optional_params=["open_file"],
     requires_confirmation=False,
     executor=_exec_file_open_containing,
 ))

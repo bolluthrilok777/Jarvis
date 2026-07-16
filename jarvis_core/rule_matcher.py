@@ -259,6 +259,16 @@ def _build_rules():
         ], raw, norm),
     ))
 
+    # Open a specifically named resume/CV with its associated desktop app.
+    rules.append((
+        re.compile(r"^(?:open|show)\s+(.+?\b(?:resume|cv)(?:\.(?:pdf|docx?))?)$", re.IGNORECASE),
+        lambda m, raw, norm: _plan([
+            _step("file.open_containing", {
+                "query": m.group(1).strip(), "open_file": True,
+            }, f"Open {m.group(1).strip()}"),
+        ], raw, norm),
+    ))
+
     _apps_re = "|".join(re.escape(k) for k in _APP_ALIASES)
     rules.append((
         re.compile(

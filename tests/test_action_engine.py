@@ -256,6 +256,17 @@ def test_open_named_file_in_file_manager_uses_safe_locator():
     assert plan.steps[0].parameters == {"query": "reddy charan resume"}
 
 
+def test_open_named_resume_opens_document_directly():
+    command = "open reddy charan resume"
+    plan = matcher.match(normalize(command), command)
+    assert plan is not None
+    assert len(plan.steps) == 1
+    assert plan.steps[0].skill_id == "file.open_containing"
+    assert plan.steps[0].parameters == {
+        "query": "reddy charan resume", "open_file": True,
+    }
+
+
 def test_executor_error_makes_action_report_fail():
     from jarvis_core.action_models import ActionPlan, ActionStep
     plan = ActionPlan(raw_command="open missing", normalized_command="open missing", confidence=1.0,

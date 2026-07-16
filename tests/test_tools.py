@@ -81,11 +81,43 @@ def test_open_calculator_closes_existing_duplicates():
 def test_open_calculator_launches_only_when_no_window_exists():
     from jarvis_core.app_tools import open_known_app
     with patch("pygetwindow.getWindowsWithTitle", return_value=[]), \
+         patch("jarvis_core.app_tools._wait_for_calculator_window", return_value=True), \
          patch("jarvis_core.app_tools.subprocess.Popen") as launch:
         success, message = open_known_app("calculator")
     assert success is True
     assert message == "Opened calculator."
     launch.assert_called_once()
+
+
+def test_new_calculator_waits_for_ready_window_before_success():
+    from jarvis_core.app_tools import _wait_for_calculator_window
+    with patch("jarvis_core.app_tools._focus_existing_calculator", side_effect=[False, True, True]) as focus, \
+         patch("jarvis_core.app_tools.time.sleep") as sleep:
+        assert _wait_for_calculator_window(timeout=1) is True
+    assert focus.call_count == 3
+    sleep.assert_any_call(0.8)
+
+
+def test_task_manager_is_completed_only_after_window_appears():
+    from jarvis_core.app_tools import open_known_app
+    with patch("jarvis_core.app_tools._focus_existing_window", return_value=False), \
+         patch("jarvis_core.app_tools._wait_for_window", return_value=True) as wait, \
+         patch("jarvis_core.app_tools.subprocess.Popen") as launch:
+        success, message = open_known_app("task manager")
+    assert success is True
+    assert message == "Opened task manager."
+    launch.assert_called_once_with("taskmgr.exe")
+    wait.assert_called_once_with("Task Manager")
+
+
+def test_task_manager_reports_failure_when_window_does_not_appear():
+    from jarvis_core.app_tools import open_known_app
+    with patch("jarvis_core.app_tools._focus_existing_window", return_value=False), \
+         patch("jarvis_core.app_tools._wait_for_window", return_value=False), \
+         patch("jarvis_core.app_tools.subprocess.Popen"):
+        success, message = open_known_app("task manager")
+    assert success is False
+    assert "no window appeared" in message
 
 
 def test_open_named_file_location_searches_only_allowed_roots(tmp_path):
@@ -110,6 +142,18 @@ def test_file_locator_treats_resume_as_optional_descriptor(tmp_path):
     assert result["status"] == "done"
     assert result["file"] == str(resume.resolve())
     opened.assert_called_once()
+
+
+def test_named_resume_is_opened_with_associated_app(tmp_path):
+    from jarvis_core.skill_registry import _exec_file_open_containing
+    resume = tmp_path / "Reddy_Charan.pdf"
+    resume.write_bytes(b"pdf")
+    with patch("jarvis_core.config.ALLOWED_ROOTS", [tmp_path]), \
+         patch("os.startfile") as opened:
+        result = _exec_file_open_containing("reddy charan resume", open_file=True)
+    assert result["status"] == "done"
+    assert result["file"] == str(resume.resolve())
+    opened.assert_called_once_with(str(resume.resolve()))
 
 
 def test_open_named_file_location_reports_missing(tmp_path):
@@ -192,6 +236,27 @@ def test_calculator_gui_continues_after_packaged_app_activate_error():
     click.assert_called_once_with(210, 30)
     hotkey.assert_any_call("ctrl", "v")
     press.assert_called_with("enter")
+
+
+def test_calculator_gui_retries_an_early_partial_clipboard_result():
+    from calculator_tools import drive_calculator_gui
+
+    window = MagicMock()
+    window.isMinimized = False
+    window.left, window.top, window.width, window.height = 10, 20, 400, 600
+    active = MagicMock(title="Calculator")
+    with patch("pygetwindow.getWindowsWithTitle", return_value=[window]), \
+         patch("pygetwindow.getActiveWindow", return_value=active), \
+         patch("pyautogui.click"), patch("pyautogui.press"), \
+         patch("pyautogui.hotkey") as hotkey, \
+         patch("pyperclip.paste", side_effect=["old", "5", "200"]), \
+         patch("pyperclip.copy"), patch("calculator_tools._time.sleep"), \
+         patch("calculator_tools._time.monotonic", side_effect=[0, 0.1, 0.2]):
+        result = drive_calculator_gui("125 + 75")
+
+    assert result["gui_ok"] is True
+    assert result["displayed_result"] == "200"
+    assert sum(call.args == ("ctrl", "c") for call in hotkey.call_args_list) == 2
 
 
 def test_youtube_research_saves_only_verified_metadata(tmp_path):
