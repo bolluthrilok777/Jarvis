@@ -15,12 +15,47 @@ def open_known_app(app_name: str) -> tuple[bool, str]:
 
     if app_name in ALLOWED_APPS:
         logger.info("Tool selected: open_known_app(%s)", app_name)
+        if app_name == "calculator" and _focus_existing_calculator():
+            logger.info("Reused existing Calculator window")
+            return True, "Reused existing calculator window."
         subprocess.Popen(ALLOWED_APPS[app_name])
         logger.info("Tool completed: open_known_app(%s)", app_name)
         return True, f"Opened {app_name}."
 
     logger.info("open_known_app rejected unknown app: %s", app_name)
     return False, f"App not found in allowed list: {app_name}"
+
+
+def _focus_existing_calculator() -> bool:
+    """Focus one existing Calculator window and avoid launching a duplicate."""
+    try:
+        import pygetwindow as gw
+        windows = [
+            window for window in gw.getWindowsWithTitle("Calculator")
+            if getattr(window, "width", 0) > 0 and getattr(window, "height", 0) > 0
+        ]
+        if not windows:
+            return False
+        window = windows[0]
+        # Calculator has no unsaved document state. Consolidate duplicates left
+        # by earlier commands so future calculations visibly use one window.
+        for duplicate in windows[1:]:
+            try:
+                duplicate.close()
+            except Exception:
+                logger.warning("Could not close a duplicate Calculator window")
+        try:
+            if getattr(window, "isMinimized", False):
+                window.restore()
+            window.activate()
+        except Exception:
+            # The GUI calculation helper performs stronger verified focusing.
+            # The existing window must still be reused rather than duplicated.
+            pass
+        return True
+    except Exception as exc:
+        logger.warning("Could not inspect existing Calculator windows: %s", exc)
+        return False
 
 
 def open_known_folder(folder_name: str) -> tuple[bool, str]:

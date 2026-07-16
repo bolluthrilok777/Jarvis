@@ -53,6 +53,41 @@ def test_safe_calculate_rejects_dangerous():
         safe_calculate("__import__('os').system('calc')")
 
 
+def test_open_calculator_reuses_existing_window():
+    from jarvis_core.app_tools import open_known_app
+    window = MagicMock(width=400, height=600, isMinimized=False)
+    with patch("pygetwindow.getWindowsWithTitle", return_value=[window]), \
+         patch("jarvis_core.app_tools.subprocess.Popen") as launch:
+        success, message = open_known_app("calculator")
+    assert success is True
+    assert "Reused existing" in message
+    window.activate.assert_called_once()
+    launch.assert_not_called()
+
+
+def test_open_calculator_closes_existing_duplicates():
+    from jarvis_core.app_tools import open_known_app
+    primary = MagicMock(width=400, height=600, isMinimized=False)
+    duplicate = MagicMock(width=400, height=600, isMinimized=False)
+    with patch("pygetwindow.getWindowsWithTitle", return_value=[primary, duplicate]), \
+         patch("jarvis_core.app_tools.subprocess.Popen") as launch:
+        success, _ = open_known_app("calculator")
+    assert success is True
+    primary.activate.assert_called_once()
+    duplicate.close.assert_called_once()
+    launch.assert_not_called()
+
+
+def test_open_calculator_launches_only_when_no_window_exists():
+    from jarvis_core.app_tools import open_known_app
+    with patch("pygetwindow.getWindowsWithTitle", return_value=[]), \
+         patch("jarvis_core.app_tools.subprocess.Popen") as launch:
+        success, message = open_known_app("calculator")
+    assert success is True
+    assert message == "Opened calculator."
+    launch.assert_called_once()
+
+
 # Test 13: Note creation writes a .txt file with correct content
 def test_note_creation(tmp_path):
     from unittest.mock import patch
