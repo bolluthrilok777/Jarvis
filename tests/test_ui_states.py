@@ -18,3 +18,10 @@ def test_terminal_tasks_show_completed_reframe():
     html = client.get("/ui").text
     assert 'Jarvis reframed:</span>' in html
     assert '"partially_completed", "failed", "cancelled"' in html
+
+
+def test_monitoring_modal_has_top_close_control():
+    html = client.get("/ui").text
+    assert 'aria-label="Close activity monitoring"' in html
+    assert 'class="modal-close"' in html
+    assert 'event.key==="Escape"' in html
