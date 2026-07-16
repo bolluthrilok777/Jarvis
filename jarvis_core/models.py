@@ -28,3 +28,14 @@ class TaskSubmitRequest(BaseModel):
 class TaskConfirmRequest(BaseModel):
     """Request to confirm or cancel a task."""
     confirm: bool
+
+
+class MonitoringRequest(BaseModel):
+    start: str = "09:00"
+    end: str = "18:30"
+    interval: int = 15
+    sound: str = "soft"
+
+
+class ActivityEntryRequest(BaseModel):
+    entry: str

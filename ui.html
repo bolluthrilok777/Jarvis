@@ -189,9 +189,52 @@
     .flex { display: flex; }
     .gap-8 { gap: 8px; }
     .items-center { align-items: center; }
+    body { background:#050505; color:#f4f4f5; padding:0; min-height:100vh; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+    .sidebar { position:fixed; inset:0 auto 0 0; width:220px; background:#0b0b0b; border-right:1px solid #262626; padding:22px 14px; z-index:30; }
+    .brand { color:#d4af37; font-weight:800; font-size:18px; padding:8px 10px 20px; }
+    .nav-btn { display:block; width:100%; text-align:left; padding:11px 12px; margin:3px 0; border:0; border-radius:10px; background:transparent; color:#d4d4d4; cursor:pointer; }
+    .nav-btn:hover,.nav-btn.active { background:#1b1b1b; color:#f4cf63; }
+    .container { max-width:980px; margin-left:220px; padding:32px 28px 150px; }
+    .card { background:transparent; border:0; border-radius:0; padding:0; margin-bottom:28px; }
+    .card:first-child { position:sticky; bottom:18px; z-index:20; background:#18181b; border:1px solid #3f3f46; border-radius:24px; padding:18px; box-shadow:0 18px 60px rgba(0,0,0,.45); }
+    h1 { color:#fafafa; font-size:20px; letter-spacing:-.02em; }
+    h2 { color:#a1a1aa; font-size:13px; }
+    h3 { color:#a1a1aa; font-size:12px; }
+    textarea { min-height:72px; height:auto; background:transparent; border:0; color:#fafafa; padding:10px 4px; line-height:1.55; }
+    textarea:focus { border:0; box-shadow:none; }
+    .btn { border-radius:999px; }
+    .btn-primary { background:#d4af37; color:#090909; }
+    .btn-primary:hover { background:#d4d4d8; }
+    .quick-btns button,.mode-select,.btn-ghost { background:#27272a; border:1px solid #3f3f46; color:#d4d4d8; border-radius:999px; }
+    #response-area { background:transparent; max-height:none; padding:0; font-size:15px; }
+    #response-area .entry { max-width:82%; background:#18181b; border:1px solid #27272a; border-radius:18px; padding:14px 16px; margin:0 0 12px auto; }
+    #response-area .entry .reply { color:#f4f4f5; }
+    #response-area .entry .understood { color:#a7f3d0; }
+    .task-list { gap:12px; }
+    .task-item { align-items:flex-start; background:#18181b; border:1px solid #27272a; border-left-width:3px; border-radius:16px; padding:15px 16px; }
+    .task-input .original { color:#f4f4f5; font-size:15px; }
+    .task-input .interpreted { color:#a7f3d0; margin-top:7px; }
+    .task-id { min-width:62px; }
+    .monitor-dialog { background:#111; border:1px solid #4a3d16; border-radius:18px; padding:24px; width:min(620px,92vw); }
+    .monitor-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+    .monitor-grid label { color:#a3a3a3; font-size:12px; }
+    .monitor-grid input,.monitor-grid select { width:100%; box-sizing:border-box; margin-top:5px; padding:10px; background:#191919; color:#fff; border:1px solid #383838; border-radius:9px; }
+    #schedule-preview { max-height:130px; overflow:auto; color:#d4af37; margin:14px 0; font-size:13px; }
+    @media (max-width:700px) { .sidebar{display:none}.container{margin-left:0;padding:18px 12px 130px}.task-item{flex-wrap:wrap}.task-id{display:none}.task-status{margin-left:auto}#response-area .entry{max-width:94%} }
   </style>
 </head>
 <body>
+<aside class="sidebar">
+  <div class="brand">JARVIS</div>
+  <button class="nav-btn active" onclick="clearAll()">＋ New Chat</button>
+  <button class="nav-btn" onclick="document.getElementById('task-list').scrollIntoView()">Tasks</button>
+  <button class="nav-btn" onclick="setCmd('list notes')">Notes</button>
+  <button class="nav-btn" onclick="setCmd('open website google.com')">Browser</button>
+  <button class="nav-btn" onclick="setCmd('open calculator')">Apps</button>
+  <button class="nav-btn" onclick="openMonitoring()">Monitoring</button>
+  <button class="nav-btn">Settings</button>
+  <button class="nav-btn">History</button>
+</aside>
 <div class="container">
   <div class="card">
     <h1>🤖 Jarvis AI Command Center</h1>
@@ -208,6 +251,7 @@
       <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
       <button class="btn" id="voice-btn" onclick="toggleRecording()">🎙 Start Listening</button>
       <button class="btn btn-ghost btn-sm" onclick="clearCompleted()">Clear Completed</button>
+      <button class="btn btn-ghost btn-sm" onclick="openMonitoring()">Start Monitoring</button>
     </div>
     <div id="voice-status"></div>
   </div>
@@ -240,6 +284,28 @@
     <div id="task-list" class="task-list">
       <div style="color:#64748b; font-size:13px; text-align:center; padding:20px;">No tasks yet.</div>
     </div>
+  </div>
+</div>
+
+<div id="monitor-overlay" class="confirm-overlay hidden">
+  <div class="monitor-dialog">
+    <h1>Activity Monitoring</h1>
+    <div class="monitor-grid">
+      <label>Start time<input id="monitor-start" type="time" value="09:00"></label>
+      <label>End time<input id="monitor-end" type="time" value="18:30"></label>
+      <label>Interval<select id="monitor-interval"><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">60 minutes</option></select></label>
+      <label>Sound<select id="monitor-sound"><option value="soft">Soft beep</option><option value="double">Double beep</option><option value="alert">Alert chime</option><option value="gentle">Gentle bell</option></select></label>
+    </div>
+    <div id="schedule-preview"></div>
+    <div class="controls">
+      <button class="btn" onclick="previewSound()">Preview sound</button>
+      <button class="btn btn-primary" onclick="startMonitoring()">Start</button>
+      <button class="btn" onclick="monitorControl('pause')">Pause</button>
+      <button class="btn" onclick="monitorControl('resume')">Resume</button>
+      <button class="btn" onclick="monitorControl('stop')">Stop</button>
+      <button class="btn" onclick="closeMonitoring()">Close</button>
+    </div>
+    <div id="monitor-status"></div>
   </div>
 </div>
 
@@ -301,9 +367,9 @@ async function submitCommand() {
         if (r.action === "chat") {
           // Route to AI chat
           html += `<div class="entry">
-            <div class="label">Original request:</div>
+            <div class="label">You said:</div>
             <div class="original">${escapeHtml(lineText)}</div>
-            <div class="label">Jarvis understood:</div>
+            <div class="label">Jarvis reframed:</div>
             <div class="understood">Conversational question — routing to AI chat</div>
           </div>`;
           // Fire AI chat
@@ -320,17 +386,17 @@ async function submitCommand() {
           </div>`;
         } else if (r.action === "blocked") {
           html += `<div class="entry">
-            <div class="label">Original request:</div>
+            <div class="label">You said:</div>
             <div class="original">${escapeHtml(lineText)}</div>
-            <div class="label">Jarvis understood:</div>
+            <div class="label">Jarvis reframed:</div>
             <div class="understood">${escapeHtml(r.message)}</div>
             <div class="error">⛔ This action is blocked for safety.</div>
           </div>`;
         } else if (r.action === "created") {
           html += `<div class="entry">
-            <div class="label">Original request:</div>
+            <div class="label">You said:</div>
             <div class="original">${escapeHtml(lineText)}</div>
-            <div class="label">Jarvis understood:</div>
+            <div class="label">Jarvis reframed:</div>
             <div class="understood">${escapeHtml(r.message)}</div>
           </div>`;
           if (r.status === "waiting_for_confirmation") {
@@ -339,9 +405,9 @@ async function submitCommand() {
           }
         } else {
           html += `<div class="entry">
-            <div class="label">Original request:</div>
+            <div class="label">You said:</div>
             <div class="original">${escapeHtml(lineText)}</div>
-            <div class="label">Jarvis understood:</div>
+            <div class="label">Jarvis reframed:</div>
             <div class="understood">${escapeHtml(r.message)}</div>
           </div>`;
         }
@@ -391,8 +457,8 @@ function renderTasks(tasks) {
     html += `<div class="task-item ${statusClass}">
       <div class="task-id">${escapeHtml(t.task_id.slice(0, 8))}</div>
       <div class="task-input">
-        <div class="original">${escapeHtml(t.original_input)}</div>
-        ${t.interpreted_command ? `<div class="interpreted">→ ${escapeHtml(t.interpreted_command)}</div>` : ""}
+        <div class="original"><span class="label">You said:</span> ${escapeHtml(t.original_input)}</div>
+        ${t.interpreted_command ? `<div class="interpreted"><span class="label">Jarvis reframed:</span> ${escapeHtml(t.interpreted_command)}</div>` : ""}
         ${t.error ? `<div class="task-result" style="color:#f87171;">Error: ${escapeHtml(t.error)}</div>` : ""}
         ${t.result_summary ? `<div class="task-result" style="color:#22c55e;">${escapeHtml(t.result_summary)}</div>` : ""}
         ${t.step_results && t.step_results.length > 0 ? `<div class="task-result">${t.step_results.map(sr => {
@@ -645,6 +711,23 @@ function clearAll() {
 }
 
 // ── Polling ──────────────────────────────────────────────────────────────────
+function monitoringValues() {
+  return {start:document.getElementById("monitor-start").value, end:document.getElementById("monitor-end").value, interval:Number(document.getElementById("monitor-interval").value), sound:document.getElementById("monitor-sound").value};
+}
+function updateSchedulePreview() {
+  const v=monitoringValues(); let current=new Date(`2000-01-01T${v.start}:00`); const end=new Date(`2000-01-01T${v.end}:00`), times=[];
+  while ((current=new Date(current.getTime()+v.interval*60000))<=end) times.push(current.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}));
+  document.getElementById("schedule-preview").textContent=times.length?`Reminders: ${times.join("  ·  ")}`:"Choose a valid time range.";
+}
+function openMonitoring(){document.getElementById("monitor-overlay").classList.remove("hidden");updateSchedulePreview();}
+function closeMonitoring(){document.getElementById("monitor-overlay").classList.add("hidden");}
+async function startMonitoring(){const res=await fetch("/monitoring/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(monitoringValues())});const data=await res.json();document.getElementById("monitor-status").textContent=res.ok?`Monitoring running. Next alert: ${data.monitoring.next_alert||"next scheduled workday"}`:(data.detail||"Could not start monitoring");}
+async function monitorControl(action){const res=await fetch(`/monitoring/control/${action}`,{method:"POST"});const data=await res.json();document.getElementById("monitor-status").textContent=data.monitoring?`Monitoring: ${data.monitoring.status}`:(data.message||data.status);}
+function previewSound(){const context=new (window.AudioContext||window.webkitAudioContext)(), sound=document.getElementById("monitor-sound").value;const patterns={soft:[[700,0,.9]],double:[[850,0,.35],[850,.5,.35]],alert:[[1050,0,.5],[800,.55,.5],[1050,1.1,.5]],gentle:[[550,0,.65],[700,.72,.65]]};for(const [frequency,offset,duration] of patterns[sound]){const oscillator=context.createOscillator(),gain=context.createGain();oscillator.frequency.value=frequency;gain.gain.value=.08;oscillator.connect(gain);gain.connect(context.destination);oscillator.start(context.currentTime+offset);oscillator.stop(context.currentTime+offset+duration);}}
+document.getElementById("monitor-start").addEventListener("change",updateSchedulePreview);
+document.getElementById("monitor-end").addEventListener("change",updateSchedulePreview);
+document.getElementById("monitor-interval").addEventListener("change",updateSchedulePreview);
+
 function startPolling() {
   refreshTasks();
   pollInterval = setInterval(refreshTasks, 2000);

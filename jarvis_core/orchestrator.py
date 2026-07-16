@@ -126,6 +126,8 @@ class Orchestrator:
         self._worker_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._wake_event = threading.Event()
+        self._active_lock = threading.Lock()
+        self._active_tasks: set[str] = set()
 
     def submit(self, original_input: str) -> dict:
         """
@@ -140,8 +142,13 @@ class Orchestrator:
         if not original_input or not original_input.strip():
             return {"task_id": None, "status": "error", "message": "Empty input", "action": "error"}
 
-        # 1. Classify intent
-        intent = classify(original_input)
+        # 1. Normalize first so classification, display, and execution all use
+        # the same conservatively reframed command while preserving the original.
+        from jarvis_core.normalizer import normalize
+        normalized = normalize(original_input)
+        interpreted = normalized if isinstance(normalized, str) and normalized else original_input.strip()
+        interpreted = build_interpreted_command(interpreted)
+        intent = classify(interpreted)
         logger.info("Intent for '%s': %s", original_input[:60], intent)
 
         # 2. If conversational, route to AI chat
@@ -170,7 +177,6 @@ class Orchestrator:
             }
 
         # 5. Build interpreted command
-        interpreted = build_interpreted_command(original_input)
         task_manager.set_interpreted_command(task.task_id, interpreted)
 
         # 6. Classify risk
@@ -268,6 +274,14 @@ class Orchestrator:
             result = action_engine.run(cmd_req)
 
             if result.get("status") in ("done", "partial"):
+                plan_data = result.get("plan")
+                if isinstance(plan_data, dict):
+                    try:
+                        from jarvis_core.action_models import ActionPlan
+                        reframed = build_interpreted_command(ActionPlan.model_validate(plan_data))
+                        task_manager.set_interpreted_command(task_id, reframed)
+                    except Exception:
+                        logger.warning("Could not build display reframe for task %s", task_id)
                 # Verify calculator results actually contain numeric value before marking completed
                 if self._has_calculator_step(result) and not self._has_calculator_result(result):
                     task_manager.set_status(task_id, TaskStatus.failed.value)
@@ -275,9 +289,14 @@ class Orchestrator:
                     task_manager.set_error(task_id, error_msg)
                     task_manager.set_result(task_id, result)
                     return {"status": "failed", "error": error_msg}
-                task_manager.set_status(task_id, TaskStatus.completed.value)
+                final_status = (
+                    TaskStatus.partially_completed.value
+                    if result.get("status") == "partial"
+                    else TaskStatus.completed.value
+                )
+                task_manager.set_status(task_id, final_status)
                 task_manager.set_result(task_id, result)
-                return {"status": "completed", "result": result}
+                return {"status": final_status, "result": result}
             else:
                 task_manager.set_status(task_id, TaskStatus.failed.value)
                 task_manager.set_error(task_id, result.get("message", "Execution failed"))
@@ -358,6 +377,14 @@ class Orchestrator:
                 logger.info("Task worker thread stopped")
         self._worker_thread = None
 
+    def _execute_in_worker(self, task_id: str) -> None:
+        try:
+            self.execute_task(task_id)
+        finally:
+            with self._active_lock:
+                self._active_tasks.discard(task_id)
+            self._wake_event.set()
+
     def wake_worker(self) -> None:
         """Wake the worker thread to check for new tasks."""
         self._wake_event.set()
@@ -378,8 +405,19 @@ class Orchestrator:
                     current = task_manager.get_task(task.task_id)
                     if current is None or current.status != TaskStatus.queued.value:
                         continue
-                    logger.info("Worker processing task %s: %s", task.task_id, task.original_input[:60])
-                    self.execute_task(task.task_id)
+                    with self._active_lock:
+                        if task.task_id in self._active_tasks:
+                            continue
+                        if not task_manager.can_run(task.concurrency_group or "background"):
+                            continue
+                        self._active_tasks.add(task.task_id)
+                    logger.info("Worker dispatching task %s: %s", task.task_id, task.original_input[:60])
+                    threading.Thread(
+                        target=self._execute_in_worker,
+                        args=(task.task_id,),
+                        name=f"task-{task.task_id[:8]}",
+                        daemon=True,
+                    ).start()
                     processed_any = True
 
                 if not processed_any:

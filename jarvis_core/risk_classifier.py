@@ -39,6 +39,8 @@ BROWSER_SKILLS: frozenset[str] = frozenset({
     "browser.open",
     "browser.google_search",
     "browser.youtube_search",
+    "browser.youtube_play_latest",
+    "browser.youtube_research",
     "browser.website_search",
     "browser.read_page",
     "browser.website_screenshot",
@@ -53,6 +55,15 @@ def classify_risk(plan: ActionPlan | str) -> RiskLevel:
     If a raw string is passed (no ActionPlan available), return SAFE.
     """
     if isinstance(plan, str):
+        text = plan.lower()
+        critical = ("format drive", "format disk", "wipe", "disable antivirus",
+                    "disable firewall", "registry", "factory reset", "payment", "pay ")
+        protected = ("send email", "send mail", "whatsapp", "submit form",
+                     "book slot", "save over", "close unsaved", "delete file")
+        if any(item in text for item in critical):
+            return RiskLevel.CRITICAL
+        if any(item in text for item in protected):
+            return RiskLevel.PROTECTED
         return RiskLevel.SAFE
 
     skill_ids = {step.skill_id for step in plan.steps}
@@ -72,6 +83,11 @@ def classify_concurrency(plan: ActionPlan | str) -> ConcurrencyGroup:
     If a raw string is passed (no ActionPlan available), return background.
     """
     if isinstance(plan, str):
+        text = plan.lower()
+        if any(item in text for item in ("notepad", "note pad", "calculator", "paint", "type ", "write ")):
+            return ConcurrencyGroup.desktop_focus
+        if any(item in text for item in ("youtube", "google", "browser", "website", "http://", "https://")):
+            return ConcurrencyGroup.browser
         return ConcurrencyGroup.background
 
     skill_ids = {step.skill_id for step in plan.steps}
@@ -118,6 +134,10 @@ def _describe_step(skill_id: str, params: dict) -> str:
         return f"Search Google for '{params.get('query', '')}'"
     if skill_id == "browser.youtube_search":
         return f"Search YouTube for '{params.get('query', '')}'"
+    if skill_id == "browser.youtube_play_latest":
+        return f"Play latest YouTube result for '{params.get('query', '')}'"
+    if skill_id == "browser.youtube_research":
+        return f"Research YouTube for '{params.get('query', '')}' and save notes"
     if skill_id == "browser.website_search":
         return f"Search {params.get('site', 'website')} for '{params.get('query', '')}'"
     if skill_id == "browser.read_page":

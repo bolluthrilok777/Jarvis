@@ -80,7 +80,7 @@ def classify(normalized: str) -> str:
     # even if they start with "what is" or other conversational prefixes.
     _MATH_WORDS = frozenset({
         "plus", "minus", "times", "multiplied", "divided", "into",
-        "+", "-", "*", "/", "x",
+        "+", "-", "*", "/", "x", "percent", "percentage", "%",
     })
     words = text.split()
     if any(w in _MATH_WORDS for w in words):

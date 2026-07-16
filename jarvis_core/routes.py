@@ -7,7 +7,10 @@ from fastapi.responses import FileResponse
 from jarvis_core.config import (
     APP_NAME, OLLAMA_URL, LIGHT_MODEL, HEAVY_MODEL, UI_FILE,
 )
-from jarvis_core.models import ChatRequest, CommandRequest, ConfirmRequest, TaskSubmitRequest, TaskConfirmRequest
+from jarvis_core.models import (
+    ActivityEntryRequest, ChatRequest, CommandRequest, ConfirmRequest,
+    MonitoringRequest, TaskSubmitRequest, TaskConfirmRequest,
+)
 from jarvis_core.ollama_service import ask_ollama
 from jarvis_core.system_tools import get_system_status
 from jarvis_core.command_dispatcher import run_agent_command, confirm_action
@@ -152,3 +155,50 @@ def tasks_clear_completed():
 
     count = task_manager.clear_completed()
     return {"status": "ok", "hidden": count}
+
+
+@router.get("/monitoring")
+def monitoring_status():
+    from jarvis_core.monitoring import monitoring
+    return {"status": "ok", "monitoring": monitoring.snapshot()}
+
+
+@router.post("/monitoring/start")
+def monitoring_start(req: MonitoringRequest):
+    from jarvis_core.monitoring import monitoring
+    try:
+        return {"status": "ok", "monitoring": monitoring.start(
+            req.start, req.end, req.interval, req.sound
+        )}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/monitoring/control/{action}")
+def monitoring_control(action: str):
+    from jarvis_core.monitoring import monitoring
+    if action == "pause":
+        state = monitoring.pause()
+    elif action == "resume":
+        state = monitoring.resume()
+    elif action == "stop":
+        state = monitoring.stop()
+    elif action == "test":
+        return monitoring.trigger()
+    else:
+        raise HTTPException(status_code=404, detail="Unknown monitoring action")
+    return {"status": "ok", "monitoring": state}
+
+
+@router.post("/monitoring/activity")
+def monitoring_activity(req: ActivityEntryRequest):
+    from jarvis_core.monitoring import append_activity
+    if not req.entry.strip():
+        raise HTTPException(status_code=400, detail="Activity entry cannot be blank")
+    return {"status": "done", "file": str(append_activity(req.entry))}
+
+
+@router.get("/apps")
+def apps_list():
+    from jarvis_core.app_adapters import public_adapters
+    return {"status": "ok", "apps": public_adapters()}

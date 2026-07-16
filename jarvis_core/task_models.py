@@ -111,7 +111,12 @@ def _summarize_output(output: dict) -> str:
     if not output:
         return ""
     if "result" in output:
-        return str(output["result"])
+        result = str(output["result"])
+        if output.get("gui_ok") is True:
+            return f"{result} — Calculator GUI updated"
+        if output.get("warning"):
+            return f"{result} — {output['warning']}"
+        return result
     if "value" in output:
         return str(output["value"])
     if "message" in output:

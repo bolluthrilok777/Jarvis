@@ -75,6 +75,57 @@ def _normalize_folder_name(raw: str) -> str:
     return _FOLDER_ALIASES.get(raw.lower().strip(), raw.lower().strip())
 
 
+def _number_text(value: float) -> str:
+    return str(int(value)) if value.is_integer() else str(value)
+
+
+def _percentage_breakdown_plan(match, raw: str, norm: str) -> ActionPlan:
+    primary_percent, base, first_share, second_share = map(float, match.groups())
+    primary_value = base * primary_percent / 100
+    primary_expr = f"{_number_text(base)}*{_number_text(primary_percent)}/100"
+    first_expr = f"{_number_text(primary_value)}*{_number_text(first_share)}/100"
+    second_expr = f"{_number_text(primary_value)}*{_number_text(second_share)}/100"
+    return _plan([
+        _step("app.open", {"app_name": "calculator"}, "Open Windows Calculator"),
+        _step("calculator.calculate", {"expression": primary_expr, "use_gui": False},
+              f"{_number_text(primary_percent)}% of {_number_text(base)}"),
+        _step("calculator.calculate", {"expression": first_expr, "use_gui": False},
+              f"{_number_text(first_share)}% of {_number_text(primary_value)}"),
+        _step("calculator.calculate", {"expression": second_expr, "use_gui": True},
+              f"{_number_text(second_share)}% of {_number_text(primary_value)}"),
+    ], raw, norm)
+
+
+def _extract_math_expression(text: str) -> Optional[str]:
+    """Extract a safe-looking numeric expression from conversational filler."""
+    number = r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)"
+    pattern = rf"({number}(?:\s*(?:\*\*|[+\-*/%])\s*{number})+)"
+    matches = re.findall(pattern, text)
+    if not matches:
+        return None
+    return matches[-1].strip()
+
+
+def _combined_calculator_plan(match, raw: str, norm: str) -> Optional[ActionPlan]:
+    expression = _extract_math_expression(match.group(1))
+    if not expression:
+        return None
+    return _plan([
+        _step("app.open", {"app_name": "calculator"}, "Open calculator"),
+        _step("calculator.calculate", {"expression": expression, "use_gui": True},
+              f"Calculate {expression} in Windows Calculator"),
+    ], raw, norm)
+
+
+def _internal_calculator_plan(match, raw: str, norm: str) -> Optional[ActionPlan]:
+    expression = _extract_math_expression(match.group(1))
+    if not expression:
+        return None
+    return _plan([
+        _step("calculator.calculate", {"expression": expression}, f"Calculate {expression}"),
+    ], raw, norm)
+
+
 # ── Rule table ────────────────────────────────────────────────────────────────
 # Each rule is (compiled_pattern, match_handler).
 # match_handler(m, raw, norm) -> ActionPlan
@@ -83,24 +134,53 @@ def _normalize_folder_name(raw: str) -> str:
 def _build_rules():
     rules = []
 
-    # ── 1. Open calculator AND calculate (must come before bare "open calc") ──
     rules.append((
         re.compile(
-            r"^open\s+(?:the\s+)?calc(?:ulator)?\s+and\s+(?:calculate|compute|evaluate|do)\s+(.+)$",
+            r"^open\s+youtube,?\s*(?:and\s+)?search\s+(.+?),?\s*(?:and\s+)?play\s+(?:the\s+)?best\s+video,?\s*(?:and\s+)?note\s+important\s+points$",
             re.IGNORECASE,
         ),
         lambda m, raw, norm: _plan([
-            _step("app.open", {"app_name": "calculator"}, "Open calculator"),
-            _step("calculator.calculate", {
-                "expression": m.group(1).strip(), "use_gui": True,
-            }, "Calculate in Windows Calculator"),
+            _step("browser.youtube_research", {"query": m.group(1).strip()},
+                  "Research YouTube and save verified notes"),
         ], raw, norm),
+    ))
+
+    rules.append((
+        re.compile(
+            r"^(?:open\s+youtube\s+)?search\s+(.+?)\s+and\s+play\s+(?:the\s+)?latest\s+(?:one|1|video)$",
+            re.IGNORECASE,
+        ),
+        lambda m, raw, norm: _plan([
+            _step("browser.youtube_play_latest", {"query": m.group(1).strip()},
+                  "Search YouTube and play the latest result"),
+        ], raw, norm),
+    ))
+
+    # Natural-language percentage breakdown.
+    rules.append((
+        re.compile(
+            r"^what\s+(?:is|it)\s+(?:the\s+)?(\d+(?:\.\d+)?)\s*(?:percent|percentage|%)\s+of\s+"
+            r"(\d+(?:\.\d+)?)\s+and\s+from\s+that\s+(?:\d+(?:\.\d+)?\s*(?:percent|percentage|%)\s+)?"
+            r"what\s+is\s+(?:the\s+)?(\d+(?:\.\d+)?)\s*(?:percent|percentage|%)\s+amount\s+and\s+"
+            r"(\d+(?:\.\d+)?)\s*(?:percent|percentage|%)\s+amount\??$",
+            re.IGNORECASE,
+        ),
+        _percentage_breakdown_plan,
+    ))
+
+    # ── 1. Open calculator AND calculate (must come before bare "open calc") ──
+    rules.append((
+        re.compile(
+            r"^open\s+(?:the\s+)?(?:super\s+)?calc(?:ulator)?\s+and\s+(?:calculate|compute|evaluate|execute|do)(?:\s+the\s+(?:adding|subtraction|math)\s+of)?\s+(.+)$",
+            re.IGNORECASE,
+        ),
+        _combined_calculator_plan,
     ))
 
     # ── 2. Open notepad AND type ───────────────────────────────────────────────
     rules.append((
         re.compile(
-            r"^open\s+(?:notepad|note\s+pad)\s+and\s+type\s+(.+)$",
+            r"^open\s+(?:notepad|note\s+pad)\s+and\s+(?:type|write)\s+(.+)$",
             re.IGNORECASE,
         ),
         lambda m, raw, norm: _plan([
@@ -209,9 +289,7 @@ def _build_rules():
             r"^(?:calculate|compute|evaluate|what\s+is|what's)\s+(.+)$",
             re.IGNORECASE,
         ),
-        lambda m, raw, norm: _plan([
-            _step("calculator.calculate", {"expression": m.group(1).strip()}, "Calculate"),
-        ], raw, norm),
+        _internal_calculator_plan,
     ))
 
     # ── 12. Google search (two prefixes) ──────────────────────────────────────
@@ -276,7 +354,7 @@ def _build_rules():
 
     # ── 18. Create note ───────────────────────────────────────────────────────
     rules.append((
-        re.compile(r"^create\s+note\s+(.+)$", re.IGNORECASE),
+        re.compile(r"^(?:create\s+(?:a\s+)?note|note\s+down|remember)\s+(.+)$", re.IGNORECASE),
         lambda m, raw, norm: _plan([
             _step("note.create", {"content": m.group(1).strip()}, "Create note"),
         ], raw, norm),

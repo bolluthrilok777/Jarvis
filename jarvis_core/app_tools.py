@@ -1,5 +1,6 @@
 import datetime
 import logging
+import re
 import subprocess
 import webbrowser
 from urllib.parse import quote_plus
@@ -46,11 +47,56 @@ def google_search(query: str) -> dict:
 
 def create_note(note_text: str) -> dict:
     logger.info("Tool selected: create_note")
-    filename = datetime.datetime.now().strftime("note_%Y%m%d_%H%M%S.txt")
-    file_path = NOTES_DIR / filename
-    file_path.write_text(note_text, encoding="utf-8")
+    NOTES_DIR.mkdir(parents=True, exist_ok=True)
+    keywords = _note_keywords(note_text)
+    file_path = _find_similar_note(keywords)
+    created = file_path is None
+    if created:
+        topic = "_".join(keywords[:3]) if keywords else "general_notes"
+        file_path = NOTES_DIR / f"{topic}.txt"
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    entry = f"[{timestamp}] {note_text.strip()}"
+    with file_path.open("a", encoding="utf-8") as handle:
+        if file_path.stat().st_size:
+            handle.write("\n")
+        handle.write(entry)
     logger.info("Tool completed: create_note, file: %s", file_path)
-    return {"status": "done", "message": "Note created.", "file": str(file_path)}
+    action = "created" if created else "updated"
+    return {
+        "status": "done", "message": f"Topic note {action}.",
+        "file": str(file_path), "topic": file_path.stem, "appended": not created,
+    }
+
+
+_NOTE_STOP_WORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "for", "from", "in",
+    "is", "it", "my", "of", "on", "or", "that", "the", "this", "to",
+    "was", "with", "note", "notes", "down", "remember",
+}
+
+
+def _note_keywords(text: str) -> list[str]:
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    return list(dict.fromkeys(w for w in words if len(w) > 2 and w not in _NOTE_STOP_WORDS))
+
+
+def _find_similar_note(keywords: list[str]):
+    if not keywords:
+        fallback = NOTES_DIR / "general_notes.txt"
+        return fallback if fallback.exists() else None
+    wanted = set(keywords)
+    best_path = None
+    best_score = 0.0
+    for path in NOTES_DIR.glob("*.txt"):
+        try:
+            sample = f"{path.stem} {path.read_text(encoding='utf-8')[-4000:]}"
+        except OSError:
+            continue
+        existing = set(_note_keywords(sample))
+        score = len(wanted & existing) / max(1, min(len(wanted), len(existing)))
+        if score > best_score:
+            best_path, best_score = path, score
+    return best_path if best_score >= 0.5 else None
 
 
 def list_notes() -> dict:

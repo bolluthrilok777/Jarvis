@@ -183,6 +183,46 @@ def test_open_notepad_and_type():
     assert "hello world" in plan.steps[1].parameters["text"]
 
 
+def test_open_notepad_and_write():
+    """'open notepad and write ...' uses the existing Notepad typing skill."""
+    command = "open notepad and write yes, darvis is working"
+    normalized = normalize(command)
+    assert isinstance(normalized, str)
+    plan = matcher.match(normalized, command)
+    assert plan is not None
+    assert len(plan.steps) == 2
+    assert plan.steps[0].skill_id == "notepad.open"
+    assert plan.steps[1].skill_id == "notepad.type"
+    assert plan.steps[1].parameters["text"] == "yes, darvis is working"
+
+
+def test_command_typos_are_reframed_without_changing_payload():
+    normalized = normalize("opne notpad and wirte Keep opne THSI text")
+    assert normalized == "open notepad and write Keep opne THSI text"
+    plan = matcher.match(normalized, "opne notpad and wirte Keep opne THSI text")
+    assert plan is not None
+    assert plan.steps[1].parameters["text"] == "Keep opne THSI text"
+
+
+def test_natural_language_percentage_breakdown():
+    command = (
+        "what it the 12 percent of 180000 and from that 12 percent "
+        "what is the 2 percent amount and 10 percent amount"
+    )
+    normalized = normalize(command)
+    plan = matcher.match(normalized, command)
+    assert plan is not None
+    calculator_steps = [step for step in plan.steps if step.skill_id == "calculator.calculate"]
+    assert [step.parameters["expression"] for step in calculator_steps] == [
+        "180000*12/100", "21600*2/100", "21600*10/100",
+    ]
+    from calculator_tools import safe_calculate
+    assert [safe_calculate(step.parameters["expression"]) for step in calculator_steps] == [
+        21600, 432, 2160,
+    ]
+    assert [step.parameters["use_gui"] for step in calculator_steps] == [False, False, True]
+
+
 def test_screenshot_then_open_folder():
     """Case 19: 'take a screenshot and open screenshots folder' → 2-step plan"""
     normalized = normalize("take a screenshot and open screenshots folder")
@@ -281,6 +321,31 @@ def test_dangerous_action_confirm():
     )
 
 
+def test_valid_ollama_plan_above_threshold_executes():
+    ai_plan = _make_plan(
+        steps=[_make_step("system.status")], confidence=0.85,
+        raw="check how laptop doing", norm="check how laptop doing",
+    )
+    eng = ActionEngine()
+    with patch("jarvis_core.rule_matcher.matcher.match", return_value=None), \
+         patch("jarvis_core.ollama_planner.plan", return_value=ai_plan), \
+         patch("jarvis_core.skill_registry.registry.get_skill") as get_skill:
+        get_skill.return_value.executor.return_value = {
+            "status": "done", "cpu_percent": 10,
+        }
+        result = eng.run(CommandRequest(command="check how laptop doing"))
+    assert result["status"] == "done"
+
+
+def test_youtube_search_and_play_latest_rule():
+    command = "open youtube search podcast and play latest one"
+    normalized = normalize(command)
+    plan = matcher.match(normalized, command)
+    assert plan is not None
+    assert plan.steps[0].skill_id == "browser.youtube_play_latest"
+    assert plan.steps[0].parameters["query"] == "podcast"
+
+
 def test_no_shell_execution():
     """Case 14: skill registry contains no skill that executes arbitrary shell commands"""
     import inspect
@@ -350,6 +415,37 @@ def test_open_calc_and_calculate_84684_minus_634548():
     assert safe_calculate(called_expr) == -549864
 
 
+@pytest.mark.parametrize("command", [
+    "Open the calculator and calculate that I want to do that 674 minus 74.",
+    "open calculator and execute please work out 674 minus 74",
+    "open calculator and calculate for me what is 674 minus 74 please",
+])
+def test_conversational_calculator_input_extracts_math(command):
+    normalized = normalize(command)
+    plan = matcher.match(normalized, command)
+    assert plan is not None
+    assert plan.steps[0].skill_id == "app.open"
+    calculator_step = plan.steps[1]
+    assert calculator_step.parameters == {"expression": "674 - 74", "use_gui": True}
+    with patch("calculator_tools.drive_calculator_gui", return_value={
+        "status": "done", "gui_ok": True,
+    }) as gui:
+        result = registry.get_skill("calculator.calculate").executor(
+            **calculator_step.parameters
+        )
+    assert result["result"] == 600
+    assert result["gui_ok"] is True
+    gui.assert_called_once_with("674 - 74")
+
+
+def test_internal_conversational_calculation_extracts_math_without_gui():
+    command = "calculate whatever I mean here 674 minus 74 please"
+    normalized = normalize(command)
+    plan = matcher.match(normalized, command)
+    assert plan is not None
+    assert plan.steps[0].parameters == {"expression": "674 - 74"}
+
+
 def test_open_the_calculator_and_do_5745_minus_9075():
     """'open the calculator and do 5745 minus 9075' → result -3330, GUI typing called."""
     normalized = normalize("open the calculator and do 5745 minus 9075")
@@ -382,6 +478,14 @@ def test_calculator_gui_failure_still_returns_result():
     assert skill_result["result"] == 76
     assert skill_result["gui_ok"] is False
     assert skill_result["warning"].startswith("Calculator GUI automation failed:")
+
+
+def test_super_calculator_natural_wording():
+    command = "open the super calculator and do the adding of 5745 minus 9075"
+    plan = matcher.match(normalize(command), command)
+    assert plan is not None
+    assert plan.steps[0].parameters == {"app_name": "calculator"}
+    assert plan.steps[1].parameters == {"expression": "5745 - 9075", "use_gui": True}
 
 
 def test_agent_route_backwards_compat():

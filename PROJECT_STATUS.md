@@ -11,6 +11,16 @@
 Jarvis is a local Windows AI assistant built on FastAPI + Ollama. After Phase 2 modularization, the project uses a layered package structure with a thin entry point. Phase 4 adds a voice subsystem as a parallel branch.
 
 ```
+
+---
+
+## AI Command Center Upgrade (2026-07-16)
+
+Complete and verified on Windows: black/white/gold chat UI, command reflection, deterministic-first validated planning, SAFE/PROTECTED/CRITICAL handling, multiline concurrency (background 2, browser 2, desktop focus 1), verified Calculator and Notepad control, eight app adapters, controlled YouTube metadata notes, and server-side 15/30/60-minute activity monitoring with append-only journals.
+
+Calculator success now requires its displayed value to match the AST-safe internal result. Partial execution is reported as `partially_completed`. Raw model text and generated code are never executed.
+
+Limitations: tasks and monitoring configuration reset with the server; transcripts depend on safely available captions; apps without adapters have open-only control; Jarvis remains local and single-user.
 app.py  (entry point — ~14 lines, wiring only)
   └── jarvis_core/routes.py  (route handlers + Phase 5A-1 task API)
         ├── jarvis_core/orchestrator.py  (Phase 5A-1: task lifecycle, risk, concurrency)

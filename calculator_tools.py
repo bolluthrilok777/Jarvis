@@ -6,7 +6,9 @@ Two public functions:
   drive_calculator_gui(expr)  — type expression into Calculator window and press Enter.
 """
 import ast
+import math
 import operator
+import re
 import subprocess
 import time as _time
 from typing import Any, Dict, Union
@@ -123,8 +125,29 @@ def drive_calculator_gui(expression: str) -> Dict[str, Any]:
         if not wins:
             return failed("window not found after 5s")
 
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        screen_left = user32.GetSystemMetrics(76)  # SM_XVIRTUALSCREEN
+        screen_top = user32.GetSystemMetrics(77)   # SM_YVIRTUALSCREEN
+        screen_width = user32.GetSystemMetrics(78)  # SM_CXVIRTUALSCREEN
+        screen_height = user32.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
+    except Exception:
+        screen_left = screen_top = 0
+        screen_width, screen_height = pyautogui.size()
+    screen_right = screen_left + screen_width
+    screen_bottom = screen_top + screen_height
+    visible_wins = [
+        candidate for candidate in wins
+        if candidate.width > 0 and candidate.height > 0
+        and candidate.left < screen_right and candidate.left + candidate.width > screen_left
+        and candidate.top < screen_bottom and candidate.top + candidate.height > screen_top
+    ]
+    if not visible_wins:
+        return failed("no visible Calculator window was found")
+
     # ── 2. Focus the window ─────────────────────────────────────────────────
-    win = wins[0]
+    win = visible_wins[0]
     # Restore if minimized
     try:
         if hasattr(win, "isMinimized") and win.isMinimized:
@@ -134,8 +157,10 @@ def drive_calculator_gui(expression: str) -> Dict[str, Any]:
         pass
     try:
         win.activate()
-    except Exception as exc:
-        return failed(f"cannot activate window ({exc})")
+    except Exception:
+        # Windows 11 packaged Calculator can raise error code 0 here even
+        # though a normal title-bar click can still focus it safely.
+        pass
     _time.sleep(0.3)
     # Click only the title bar, then verify focus before sending keyboard input.
     try:
@@ -149,11 +174,35 @@ def drive_calculator_gui(expression: str) -> Dict[str, Any]:
     active = gw.getActiveWindow()
     active_title = getattr(active, "title", "") if active else ""
     if "calculator" not in active_title.lower():
-        return failed("Calculator window did not receive focus")
+        try:
+            pyautogui.click(win.left + win.width // 2, win.top + win.height // 2)
+            _time.sleep(0.3)
+        except Exception as exc:
+            return failed(f"cannot focus Calculator controls ({exc})")
+        active = gw.getActiveWindow()
+        active_title = getattr(active, "title", "") if active else ""
+        if "calculator" not in active_title.lower():
+            try:
+                import ctypes
+                hwnd = int(getattr(win, "_hWnd", 0))
+                if not hwnd:
+                    return failed("Calculator window did not receive focus")
+                user32 = ctypes.windll.user32
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                user32.keybd_event(0x12, 0, 0, 0)  # ALT grants foreground permission
+                user32.SetForegroundWindow(hwnd)
+                user32.keybd_event(0x12, 0, 0x0002, 0)
+                _time.sleep(0.3)
+            except Exception as exc:
+                return failed(f"cannot request Calculator foreground focus ({exc})")
+            active = gw.getActiveWindow()
+            active_title = getattr(active, "title", "") if active else ""
+            if "calculator" not in active_title.lower():
+                return failed("Calculator window did not receive focus")
 
     # ── 3. Clear any existing input ──────────────────────────────────────────
     try:
-        pyautogui.press("escape")
+        pyautogui.press("escape", presses=2, interval=0.05)
         pyautogui.hotkey("ctrl", "a")
         pyautogui.press("delete")
     except Exception as exc:
@@ -161,21 +210,44 @@ def drive_calculator_gui(expression: str) -> Dict[str, Any]:
 
     # ── 4. Type the expression ──────────────────────────────────────────────
     try:
-        try:
-            import pyperclip
-            previous_clipboard = pyperclip.paste()
-            pyperclip.copy(expr)
-            pyautogui.hotkey("ctrl", "v")
-            pyperclip.copy(previous_clipboard)
-        except Exception:
-            pyautogui.write(expr, interval=0.05)
+        expected = safe_calculate(expr)
+    except Exception as exc:
+        return failed(f"cannot verify expression ({exc})")
+
+    previous_clipboard = None
+    try:
+        import pyperclip
+        previous_clipboard = pyperclip.paste()
+        pyperclip.copy(expr)
+        pyautogui.hotkey("ctrl", "v")
+        _time.sleep(0.4)
     except Exception as exc:
         return failed(f"typing error ({exc})")
 
     # ── 5. Press Enter ──────────────────────────────────────────────────────
     try:
         pyautogui.press("enter")
+        _time.sleep(0.5)
+        pyautogui.hotkey("ctrl", "c")
+        _time.sleep(0.2)
+        displayed = str(pyperclip.paste()).strip()
     except Exception as exc:
-        return failed(f"enter key error ({exc})")
+        return failed(f"enter key or result verification error ({exc})")
+    finally:
+        if previous_clipboard is not None:
+            try:
+                pyperclip.copy(previous_clipboard)
+            except Exception:
+                pass
 
-    return {"status": "done", "gui_ok": True}
+    normalized_display = displayed.replace("\u2212", "-").replace(",", "")
+    numbers = re.findall(r"[-+]?(?:\d+(?:\.\d+)?|\.\d+)", normalized_display)
+    if not numbers:
+        return failed("Calculator did not expose a numeric result after Enter")
+    actual = float(numbers[-1])
+    if not math.isclose(actual, float(expected), rel_tol=1e-9, abs_tol=1e-9):
+        return failed(
+            f"displayed result {numbers[-1]} did not match expected result {expected}"
+        )
+
+    return {"status": "done", "gui_ok": True, "displayed_result": numbers[-1]}

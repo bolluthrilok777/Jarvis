@@ -12,6 +12,22 @@ from jarvis_core.task_manager import TaskManager
 from jarvis_core.task_models import TaskStatus, RiskLevel
 
 
+def test_calculator_output_summary_reports_gui_success():
+    from jarvis_core.task_models import _summarize_output
+    assert _summarize_output({"result": 884, "gui_ok": True}) == (
+        "884 — Calculator GUI updated"
+    )
+
+
+def test_calculator_output_summary_reports_gui_warning():
+    from jarvis_core.task_models import _summarize_output
+    summary = _summarize_output({
+        "result": 884, "gui_ok": False,
+        "warning": "Calculator GUI automation failed: Calculator window did not receive focus",
+    })
+    assert summary.startswith("884 — Calculator GUI automation failed:")
+
+
 @pytest.fixture
 def mgr():
     """Fresh TaskManager for each test."""

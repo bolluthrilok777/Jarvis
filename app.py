@@ -16,6 +16,8 @@ async def lifespan(app: FastAPI):
     from jarvis_core.orchestrator import orchestrator
     orchestrator.start_worker()
     yield
+    from jarvis_core.monitoring import monitoring
+    monitoring.stop()
     orchestrator.stop_worker()
 
 

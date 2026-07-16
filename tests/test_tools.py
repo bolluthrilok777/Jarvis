@@ -65,4 +65,134 @@ def test_note_creation(tmp_path):
     assert result["status"] == "done"
     note_file = pathlib.Path(result["file"])
     assert note_file.exists()
-    assert note_file.read_text(encoding="utf-8") == "Hello from test"
+    assert note_file.read_text(encoding="utf-8").endswith("Hello from test")
+    assert result["topic"] == "hello_test"
+
+
+def test_similar_notes_append_to_same_topic(tmp_path):
+    from jarvis_core.app_tools import create_note
+
+    with patch("jarvis_core.app_tools.NOTES_DIR", tmp_path):
+        first = create_note("Project Jarvis calculator follow up")
+        second = create_note("Jarvis calculator testing notes")
+
+    assert first["file"] == second["file"]
+    assert second["appended"] is True
+    content = pathlib.Path(first["file"]).read_text(encoding="utf-8")
+    assert "Project Jarvis calculator follow up" in content
+    assert "Jarvis calculator testing notes" in content
+
+
+def test_youtube_latest_opens_first_video():
+    from jarvis_core.skill_registry import _exec_browser_youtube_play_latest
+
+    response = MagicMock()
+    response.text = '{"videoId":"abcdefghijk"}'
+    response.raise_for_status.return_value = None
+    with patch("requests.get", return_value=response) as request_get, \
+         patch("jarvis_core.skill_registry.webbrowser.open") as browser_open:
+        result = _exec_browser_youtube_play_latest("podcast")
+
+    assert result["status"] == "done"
+    assert "sp=CAI%253D" in request_get.call_args.args[0]
+    browser_open.assert_called_once_with(
+        "https://www.youtube.com/watch?v=abcdefghijk&autoplay=1"
+    )
+
+
+def test_calculator_gui_continues_after_packaged_app_activate_error():
+    from calculator_tools import drive_calculator_gui
+
+    window = MagicMock()
+    window.isMinimized = False
+    window.left, window.top, window.width, window.height = 10, 20, 400, 600
+    window.activate.side_effect = RuntimeError("Windows error code 0")
+    active = MagicMock()
+    active.title = "Calculator"
+    with patch("pygetwindow.getWindowsWithTitle", return_value=[window]), \
+         patch("pygetwindow.getActiveWindow", return_value=active), \
+         patch("pyautogui.click") as click, \
+         patch("pyautogui.press") as press, \
+         patch("pyautogui.hotkey") as hotkey, \
+         patch("pyperclip.paste", side_effect=["old", "600"]), \
+         patch("pyperclip.copy"), \
+         patch("calculator_tools._time.sleep"):
+        result = drive_calculator_gui("674 - 74")
+
+    assert result["gui_ok"] is True
+    click.assert_called_once_with(210, 30)
+    hotkey.assert_any_call("ctrl", "v")
+    press.assert_called_with("enter")
+
+
+def test_youtube_research_saves_only_verified_metadata(tmp_path):
+    from jarvis_core.skill_registry import _exec_browser_youtube_research
+    payload = '\"videoId\":\"abcdefghijk\",\"title\":{\"runs\":[{\"text\":\"Ollama Tutorial\"}]}'
+    response = MagicMock(text=payload)
+    with patch("requests.get", return_value=response), \
+         patch("webbrowser.open") as opened, \
+         patch("jarvis_core.config.NOTES_DIR", tmp_path):
+        result = _exec_browser_youtube_research("Ollama tutorials")
+    assert result["status"] == "done"
+    assert result["transcript_available"] is False
+    assert "Transcript unavailable" in pathlib.Path(result["file"]).read_text(encoding="utf-8")
+    opened.assert_called_once()
+
+
+def test_calculator_gui_retries_focus_inside_verified_window():
+    from calculator_tools import drive_calculator_gui
+
+    window = MagicMock()
+    window.isMinimized = False
+    window.left, window.top, window.width, window.height = 10, 20, 400, 600
+    unfocused = MagicMock(title="Jarvis")
+    focused = MagicMock(title="Calculator")
+    with patch("pygetwindow.getWindowsWithTitle", return_value=[window]), \
+         patch("pygetwindow.getActiveWindow", side_effect=[unfocused, focused]), \
+         patch("pyautogui.click") as click, \
+         patch("pyautogui.press"), patch("pyautogui.hotkey"), \
+         patch("pyperclip.paste", side_effect=["old", "600"]), patch("pyperclip.copy"), \
+         patch("calculator_tools._time.sleep"):
+        result = drive_calculator_gui("674 - 74")
+
+    assert result["gui_ok"] is True
+    assert click.call_args_list[-1].args == (210, 320)
+
+
+def test_calculator_gui_ignores_stale_offscreen_windows():
+    from calculator_tools import drive_calculator_gui
+
+    stale = MagicMock(left=5000, top=100, width=700, height=900, isMinimized=False)
+    visible = MagicMock(left=20, top=30, width=400, height=600, isMinimized=False)
+    active = MagicMock(title="Calculator")
+    metrics = {76: 0, 77: 0, 78: 1920, 79: 1080}
+    with patch("pygetwindow.getWindowsWithTitle", return_value=[stale, visible]), \
+         patch("pygetwindow.getActiveWindow", return_value=active), \
+         patch("ctypes.windll.user32.GetSystemMetrics", side_effect=lambda key: metrics[key]), \
+         patch("pyautogui.click") as click, patch("pyautogui.press"), \
+         patch("pyautogui.hotkey"), patch("pyperclip.paste", side_effect=["old", "600"]), \
+         patch("pyperclip.copy"), patch("calculator_tools._time.sleep"):
+        result = drive_calculator_gui("674 - 74")
+
+    assert result["gui_ok"] is True
+    click.assert_called_once_with(220, 40)
+    visible.activate.assert_called_once()
+    stale.activate.assert_not_called()
+
+
+def test_calculator_gui_accepts_secondary_monitor_window():
+    from calculator_tools import drive_calculator_gui
+
+    secondary = MagicMock(left=3338, top=111, width=502, height=791, isMinimized=False)
+    active = MagicMock(title="Calculator")
+    metrics = {76: 0, 77: 0, 78: 3840, 79: 2160}
+    with patch("pygetwindow.getWindowsWithTitle", return_value=[secondary]), \
+         patch("pygetwindow.getActiveWindow", return_value=active), \
+         patch("ctypes.windll.user32.GetSystemMetrics", side_effect=lambda key: metrics[key]), \
+         patch("pyautogui.click") as click, patch("pyautogui.press"), \
+         patch("pyautogui.hotkey"), patch("pyperclip.paste", side_effect=["old", "1540"]), \
+         patch("pyperclip.copy"), patch("calculator_tools._time.sleep"):
+        result = drive_calculator_gui("895 + 645")
+
+    assert result["gui_ok"] is True
+    click.assert_called_once_with(3589, 121)

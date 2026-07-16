@@ -51,6 +51,9 @@ class ActionEngine:
         normalized = normalize(raw)
         if isinstance(normalized, dict):
             return normalized
+        from jarvis_core.intent_classifier import classify
+        if classify(normalized) == "conversational_query":
+            return {"status": "no_match", "message": "Conversational request."}
 
         # 3. Rule match
         from jarvis_core.rule_matcher import matcher
@@ -67,17 +70,10 @@ class ActionEngine:
                 # service unavailable). Fall through to the legacy AI chat path.
                 return {"status": "no_match", "message": result.get("message", "No plan found.")}
             plan = result
-            # If the planner found a plan but confidence is too low, use AI chat instead.
-            # We use a strict threshold here (1.0) for planner-generated plans because the
-            # Ollama planner may hallucinate plans for conversational queries. Only rule-matched
-            # plans (always confidence=1.0) should proceed to execution; planner plans route
-            # to the legacy AI chat path for safety.
-            if plan.confidence < 1.0:
-                return {"status": "no_match", "message": "Low confidence — routing to AI chat."}
 
         # 5. Confidence gate
         if plan.clarification_needed or plan.confidence < CONFIDENCE_THRESHOLD:
-            msg = plan.clarification_prompt or "I am not sure what you mean. Could you rephrase your command?"
+            msg = plan.clarification_prompt or "I could not safely determine the intended action. Please rephrase it."
             return {"status": "clarification_needed", "message": msg}
 
         # 6. Step count gate
@@ -164,6 +160,8 @@ class ActionEngine:
 
         if sid in (
             "browser.open", "browser.google_search", "browser.youtube_search",
+            "browser.youtube_play_latest",
+            "browser.youtube_research",
             "browser.website_search", "folder.open", "notepad.type",
             "notepad.save", "app.focus",
         ):

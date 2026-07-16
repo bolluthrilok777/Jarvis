@@ -35,6 +35,30 @@ FILLER_PHRASES: list[str] = [
 # Leading articles to strip after filler removal
 LEADING_ARTICLES: list[str] = ["the", "a", "an"]
 
+COMMAND_WORD_CORRECTIONS = {
+    "opne": "open", "oeen": "open", "wirte": "write", "wrtie": "write",
+    "claculate": "calculate", "calcluate": "calculate", "calcuate": "calculate",
+    "serach": "search", "seach": "search", "craete": "create",
+    "notpad": "notepad", "calculater": "calculator",
+}
+
+
+def correct_command_words(text: str) -> str:
+    """Correct a small allowlist of command-word typos without altering payload text."""
+    original = text.split()
+    words = original.copy()
+    for index in range(min(len(words), 5)):
+        stripped = re.sub(r"[^a-z]", "", original[index].lower())
+        if stripped in COMMAND_WORD_CORRECTIONS:
+            words[index] = COMMAND_WORD_CORRECTIONS[stripped]
+    lowered = [word.lower() for word in words]
+    payload_index = len(words)
+    for marker in ("type", "write", "note", "remember"):
+        if marker in lowered:
+            payload_index = min(payload_index, lowered.index(marker) + 1)
+    words[payload_index:] = original[payload_index:]
+    return " ".join(words)
+
 
 def strip_fillers(text: str) -> str:
     """Remove filler phrases and leading articles, return cleaned text."""
@@ -174,8 +198,9 @@ def normalize(command: str) -> Union[str, dict]:
     """
     if not command:
         return ""
-    step1 = strip_fillers(command)
+    step1 = correct_command_words(strip_fillers(command))
     step2 = normalize_operators(step1)
     step3 = _normalize_brackets(step2)
+    step3 = re.sub(r"(?i)\blatest\s+one\b", "latest video", step3)
     result = normalize_numbers(step3)
     return result

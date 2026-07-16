@@ -411,3 +411,24 @@ def test_worker_releases_concurrency_slot(orch):
 
     counts_after = task_manager.get_running_counts()
     assert counts_after["background"] == 0, f"Slot not released: {counts_after}"
+
+
+def test_partial_engine_result_is_not_marked_completed(orch):
+    from jarvis_core.task_manager import task_manager
+    task_manager.clear_all_tasks()
+    task = task_manager.create_task("system status")
+    task_manager.set_interpreted_command(task.task_id, "system status")
+    task_manager.set_concurrency_group(task.task_id, "background")
+    task_manager.set_status(task.task_id, "queued")
+    with patch("jarvis_core.orchestrator.action_engine.run", return_value={
+        "status": "partial", "results": [], "message": "one step failed"
+    }):
+        result = orch.execute_task(task.task_id)
+    assert result["status"] == "partially_completed"
+    assert task_manager.get_task(task.task_id).status == "partially_completed"
+
+
+def test_raw_command_concurrency_classification():
+    from jarvis_core.risk_classifier import classify_concurrency
+    assert classify_concurrency("open note pad and type hello").value == "desktop_focus"
+    assert classify_concurrency("search Google for laptops").value == "browser"

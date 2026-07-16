@@ -7,6 +7,7 @@ against ALLOWED_APPS / ALLOWED_FOLDERS before calling underlying tools.
 from __future__ import annotations
 
 import logging
+import re
 import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -137,6 +138,67 @@ def _exec_browser_youtube_search(query: str) -> dict:
     return {"status": "done", "query": query, "url": url}
 
 
+def _exec_browser_youtube_play_latest(query: str) -> dict:
+    import requests
+    search_url = (
+        f"https://www.youtube.com/results?search_query={quote_plus(query)}"
+        "&sp=CAI%253D"
+    )
+    try:
+        response = requests.get(search_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        response.raise_for_status()
+        video_ids = re.findall(r'"videoId":"([A-Za-z0-9_-]{11})"', response.text)
+        if not video_ids:
+            return {"status": "error", "message": "No recent YouTube result was found."}
+        watch_url = f"https://www.youtube.com/watch?v={video_ids[0]}&autoplay=1"
+        webbrowser.open(watch_url)
+        return {"status": "done", "query": query, "url": watch_url,
+                "message": f"Playing the latest YouTube result for: {query}"}
+    except Exception as exc:
+        return {"status": "error", "message": f"Could not play the latest YouTube result: {exc}"}
+
+
+def _exec_browser_youtube_research(query: str) -> dict:
+    """Open one relevant result and save only metadata visible in YouTube search."""
+    import html
+    import json
+    import requests
+    from datetime import date, datetime
+    from jarvis_core.config import NOTES_DIR
+
+    search_url = f"https://www.youtube.com/results?search_query={quote_plus(query)}"
+    try:
+        response = requests.get(search_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        response.raise_for_status()
+        video_ids = re.findall(r'"videoId":"([A-Za-z0-9_-]{11})"', response.text)
+        titles = re.findall(r'"title":\{"runs":\[\{"text":"((?:\\.|[^"\\])*)"', response.text)
+        if not video_ids:
+            return {"status": "error", "message": "No YouTube research result was found."}
+        title = query
+        if titles:
+            try:
+                title = json.loads(f'"{titles[0]}"')
+            except Exception:
+                title = html.unescape(titles[0])
+        watch_url = f"https://www.youtube.com/watch?v={video_ids[0]}&autoplay=1"
+        webbrowser.open(watch_url)
+        NOTES_DIR.mkdir(parents=True, exist_ok=True)
+        note_path = NOTES_DIR / f"youtube_notes_{date.today().isoformat()}.txt"
+        note = (
+            f"[{datetime.now().strftime('%I:%M %p').lstrip('0')}] YouTube research\n"
+            f"Query: {query}\nTitle: {title}\nURL: {watch_url}\n"
+            "Important points: Search-result metadata was captured. Open the video to review details.\n"
+            "Transcript unavailable; Jarvis did not infer or hallucinate video contents.\n\n"
+        )
+        with note_path.open("a", encoding="utf-8") as handle:
+            handle.write(note)
+        return {"status": "done", "query": query, "title": title, "url": watch_url,
+                "file": str(note_path), "transcript_available": False,
+                "message": "Opened a relevant YouTube result and saved verified metadata notes."}
+    except Exception as exc:
+        return {"status": "error", "message": f"YouTube research failed: {exc}"}
+
+
 def _exec_browser_website_search(site: str, query: str) -> dict:
     # Build a Google site: search for a specific domain
     site_clean = site.strip().lower()
@@ -160,15 +222,46 @@ def _exec_browser_website_screenshot(url: str) -> dict:
 
 def _exec_notepad_open() -> dict:
     from jarvis_core.app_tools import open_known_app
+    import time
     success, message = open_known_app("notepad")
-    return {"status": "done" if success else "error", "message": message}
+    if not success:
+        return {"status": "error", "message": message}
+    try:
+        import pyautogui
+        import pygetwindow as gw
+        deadline = time.monotonic() + 5.0
+        windows = []
+        while time.monotonic() < deadline:
+            windows = gw.getWindowsWithTitle("Notepad")
+            if windows:
+                break
+            time.sleep(0.2)
+        if not windows:
+            return {"status": "error", "message": "Notepad window was not found."}
+        window = windows[0]
+        if getattr(window, "isMinimized", False):
+            window.restore()
+        window.activate()
+        time.sleep(0.2)
+        pyautogui.click(window.left + window.width // 2, window.top + 10)
+        active = gw.getActiveWindow()
+        if not active or "notepad" not in getattr(active, "title", "").lower():
+            return {"status": "error", "message": "Notepad did not receive focus."}
+        pyautogui.hotkey("ctrl", "n")
+        return {"status": "done", "message": "Opened a new Notepad tab."}
+    except Exception as exc:
+        return {"status": "error", "message": f"Could not open a new Notepad tab: {exc}"}
 
 
 def _exec_notepad_type(text: str) -> dict:
     try:
         import pyautogui
+        import pygetwindow as gw
+        active = gw.getActiveWindow()
+        if not active or "notepad" not in getattr(active, "title", "").lower():
+            return {"status": "error", "message": "Notepad is not the focused window."}
         pyautogui.write(text, interval=0.05)
-        return {"status": "done", "message": "Typed text into active window."}
+        return {"status": "done", "message": "Typed text into the new Notepad tab."}
     except Exception as exc:
         return {"status": "error", "message": str(exc)}
 
@@ -284,6 +377,24 @@ registry.register(SkillDefinition(
     optional_params=[],
     requires_confirmation=False,
     executor=_exec_browser_youtube_search,
+))
+
+registry.register(SkillDefinition(
+    skill_id="browser.youtube_play_latest",
+    description="Search YouTube by upload date and play the latest result",
+    required_params=["query"],
+    optional_params=[],
+    requires_confirmation=False,
+    executor=_exec_browser_youtube_play_latest,
+))
+
+registry.register(SkillDefinition(
+    skill_id="browser.youtube_research",
+    description="Open a relevant YouTube result and save verified metadata notes",
+    required_params=["query"],
+    optional_params=[],
+    requires_confirmation=False,
+    executor=_exec_browser_youtube_research,
 ))
 
 registry.register(SkillDefinition(

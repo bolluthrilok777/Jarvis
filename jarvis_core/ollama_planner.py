@@ -30,8 +30,12 @@ def _build_skill_list() -> str:
 def _build_prompt(normalized: str, raw: str) -> str:
     skill_list = _build_skill_list()
     return (
-        f'You are the Jarvis action planner. The user said: "{normalized}"\n\n'
+        f'You are the Jarvis action planner. Infer spelling mistakes, omitted words, and intent. '
+        f'The user said: "{normalized}"\n\n'
         f"Available skills (with required parameters):\n{skill_list}\n\n"
+        f"Use only those skills. Calculator expressions must contain only numbers and + - * /. "
+        f"For multi-step math, emit steps in dependency order using resolved numeric inputs. "
+        f"Never invent applications or parameters. Ask for clarification only when intent is genuinely ambiguous.\n\n"
         f'Respond ONLY with a valid JSON object — no explanation, no markdown:\n'
         f'{{\n'
         f'  "steps": [\n'
@@ -65,7 +69,7 @@ def plan(normalized: str, raw: str) -> Union[ActionPlan, dict]:
     logger.info("Ollama planner: calling ask_ollama for command: %s", normalized[:80])
 
     try:
-        content, model, error = ask_ollama(prompt, "light")
+        content, model, error = ask_ollama(prompt, "heavy")
     except Exception as exc:
         logger.error("Ollama planner: ask_ollama raised: %s", exc)
         return {"status": "error", "message": "Ollama service unavailable."}
@@ -96,7 +100,12 @@ def plan(normalized: str, raw: str) -> Union[ActionPlan, dict]:
     for step_data in data.get("steps", []):
         sid = step_data.get("skill_id", "")
         if sid in known_skills:
-            valid_steps.append(step_data)
+            skill = registry.get_skill(sid)
+            params = step_data.get("parameters", {})
+            if isinstance(params, dict) and all(name in params for name in skill.required_params):
+                valid_steps.append(step_data)
+            else:
+                logger.warning("Ollama planner: missing required parameters for %s", sid)
         else:
             logger.warning("Ollama planner: unknown skill_id stripped: %s", sid)
     data["steps"] = valid_steps
@@ -121,6 +130,19 @@ def plan(normalized: str, raw: str) -> Union[ActionPlan, dict]:
         }
 
     # ── Low-confidence gate ───────────────────────────────────────────────────
+    calculator_steps = [s for s in action_plan.steps if s.skill_id == "calculator.calculate"]
+    wants_calculator_gui = len(calculator_steps) > 1 or "calculator" in normalized.lower()
+    if calculator_steps and wants_calculator_gui:
+        if not any(s.skill_id == "app.open" and s.parameters.get("app_name") == "calculator"
+                   for s in action_plan.steps):
+            action_plan.steps.insert(0, ActionStep(
+                skill_id="app.open", parameters={"app_name": "calculator"},
+                description="Open Windows Calculator",
+            ))
+        for step in calculator_steps:
+            step.parameters["use_gui"] = False
+        calculator_steps[-1].parameters["use_gui"] = True
+
     if action_plan.confidence < CONFIDENCE_THRESHOLD:
         action_plan.clarification_needed = True
 
