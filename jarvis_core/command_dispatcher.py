@@ -14,7 +14,7 @@ from jarvis_core.file_tools import read_text_file
 from jarvis_core.system_tools import get_system_status, take_screenshot
 from jarvis_core.ollama_service import ask_ollama
 from browser_tools import read_webpage, screenshot_webpage
-from calculator_tools import open_calculator_and_calculate
+from calculator_tools import safe_calculate, drive_calculator_gui
 
 logger = logging.getLogger("jarvis.dispatcher")
 
@@ -63,16 +63,21 @@ def run_agent_command(req: CommandRequest) -> dict:
         if not match:
             return {"status": "error", "message": "Please include a calculation after the word calculate or execute."}
         expression = match.group(1).strip()
-        logger.info("Tool selected: open_calculator_and_calculate")
+        logger.info("Tool selected: calculator (safe_calculate + drive_calculator_gui)")
         try:
-            result = open_calculator_and_calculate(expression)
-            logger.info("Tool completed: open_calculator_and_calculate, result: %s", result)
-            return {
+            result = safe_calculate(expression)
+            gui_result = drive_calculator_gui(expression)
+            out = {
                 "status": "done",
                 "message": "Calculator opened and calculation executed.",
                 "expression": expression,
                 "result": result,
+                "gui_ok": bool(gui_result.get("gui_ok")),
             }
+            if gui_result.get("warning"):
+                out["warning"] = gui_result["warning"]
+            logger.info("Tool completed: calculator, result: %s, gui: %s", result, gui_result.get("gui_ok"))
+            return out
         except ZeroDivisionError:
             return {"status": "error", "message": "Division by zero is not allowed."}
         except Exception as error:

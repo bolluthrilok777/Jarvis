@@ -86,12 +86,14 @@ def _build_rules():
     # ── 1. Open calculator AND calculate (must come before bare "open calc") ──
     rules.append((
         re.compile(
-            r"^open\s+calc(?:ulator)?\s+and\s+(?:calculate|compute|evaluate|do)\s+(.+)$",
+            r"^open\s+(?:the\s+)?calc(?:ulator)?\s+and\s+(?:calculate|compute|evaluate|do)\s+(.+)$",
             re.IGNORECASE,
         ),
         lambda m, raw, norm: _plan([
             _step("app.open", {"app_name": "calculator"}, "Open calculator"),
-            _step("calculator.calculate", {"expression": m.group(1).strip()}, "Calculate"),
+            _step("calculator.calculate", {
+                "expression": m.group(1).strip(), "use_gui": True,
+            }, "Calculate in Windows Calculator"),
         ], raw, norm),
     ))
 

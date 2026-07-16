@@ -103,11 +103,17 @@ def _exec_app_close(app_name: str) -> dict:
         return {"status": "error", "message": str(exc)}
 
 
-def _exec_calculator_calculate(expression: str) -> dict:
-    from calculator_tools import safe_calculate
+def _exec_calculator_calculate(expression: str, use_gui: bool = False) -> dict:
+    from calculator_tools import safe_calculate, drive_calculator_gui
     try:
         result = safe_calculate(expression)
-        return {"status": "done", "result": result, "expression": expression}
+        out = {"status": "done", "result": result, "expression": expression, "gui_ok": False}
+        if use_gui:
+            gui_result = drive_calculator_gui(expression)
+            out["gui_ok"] = bool(gui_result.get("gui_ok"))
+            if gui_result.get("warning"):
+                out["warning"] = gui_result["warning"]
+        return out
     except Exception as exc:
         return {"status": "error", "message": str(exc)}
 
@@ -248,7 +254,7 @@ registry.register(SkillDefinition(
     skill_id="calculator.calculate",
     description="Evaluate a safe mathematical expression",
     required_params=["expression"],
-    optional_params=[],
+    optional_params=["use_gui"],
     requires_confirmation=False,
     executor=_exec_calculator_calculate,
 ))

@@ -291,6 +291,99 @@ def test_no_shell_execution():
         assert "os.system" not in source, f"Skill {skill_id} uses os.system"
 
 
+def test_calculate_45_plus_6_no_gui():
+    """'calculate 45 plus 6' → result 51, no GUI typing attempted (pure calculation)."""
+    from calculator_tools import safe_calculate
+    result = safe_calculate("45 + 6")
+    assert result == 51
+    with patch("calculator_tools.drive_calculator_gui") as mock_gui:
+        from jarvis_core.skill_registry import registry
+        skill_result = registry.get_skill("calculator.calculate").executor(expression="45 + 6")
+    assert skill_result["status"] == "done"
+    assert skill_result["result"] == 51
+    mock_gui.assert_not_called()
+    assert skill_result["gui_ok"] is False
+
+
+def test_open_calc_and_calculate_59_plus_17():
+    """'open calculator and calculate 59 plus 17' → result 76, GUI typing called with 59+17."""
+    normalized = normalize("open calculator and calculate 59 plus 17")
+    assert isinstance(normalized, str)
+    plan = matcher.match(normalized, "open calculator and calculate 59 plus 17")
+    assert plan is not None
+    assert len(plan.steps) == 2
+    assert plan.steps[0].skill_id == "app.open"
+    assert plan.steps[1].skill_id == "calculator.calculate"
+    expr = plan.steps[1].parameters["expression"]
+    from calculator_tools import safe_calculate
+    assert safe_calculate(expr) == 76
+    # Verify GUI typing is called with the correct expression
+    with patch("calculator_tools.drive_calculator_gui") as mock_gui:
+        mock_gui.return_value = {"status": "done", "gui_ok": True}
+        skill_result = registry.get_skill("calculator.calculate").executor(expression=expr, use_gui=True)
+    assert skill_result["status"] == "done"
+    assert skill_result["result"] == 76
+    mock_gui.assert_called_once_with("59 + 17")
+    # The expression passed to GUI should evaluate to 76
+    called_expr = mock_gui.call_args[0][0]
+    assert safe_calculate(called_expr) == 76
+
+
+def test_open_calc_and_calculate_84684_minus_634548():
+    """'open calculator and calculate 84684-634548' → result -549864, GUI typing called."""
+    normalized = normalize("open calculator and calculate 84684-634548")
+    assert isinstance(normalized, str)
+    plan = matcher.match(normalized, "open calculator and calculate 84684-634548")
+    assert plan is not None
+    assert len(plan.steps) == 2
+    assert plan.steps[1].skill_id == "calculator.calculate"
+    expr = plan.steps[1].parameters["expression"]
+    from calculator_tools import safe_calculate
+    assert safe_calculate(expr) == -549864
+    with patch("calculator_tools.drive_calculator_gui") as mock_gui:
+        mock_gui.return_value = {"status": "done", "gui_ok": True}
+        skill_result = registry.get_skill("calculator.calculate").executor(expression=expr, use_gui=True)
+    assert skill_result["status"] == "done"
+    assert skill_result["result"] == -549864
+    mock_gui.assert_called_once_with("84684-634548")
+    called_expr = mock_gui.call_args[0][0]
+    assert safe_calculate(called_expr) == -549864
+
+
+def test_open_the_calculator_and_do_5745_minus_9075():
+    """'open the calculator and do 5745 minus 9075' → result -3330, GUI typing called."""
+    normalized = normalize("open the calculator and do 5745 minus 9075")
+    assert isinstance(normalized, str)
+    plan = matcher.match(normalized, "open the calculator and do 5745 minus 9075")
+    assert plan is not None
+    assert len(plan.steps) == 2
+    assert plan.steps[0].skill_id == "app.open"
+    assert plan.steps[1].skill_id == "calculator.calculate"
+    expr = plan.steps[1].parameters["expression"]
+    from calculator_tools import safe_calculate
+    assert safe_calculate(expr) == -3330
+    with patch("calculator_tools.drive_calculator_gui") as mock_gui:
+        mock_gui.return_value = {"status": "done", "gui_ok": True}
+        skill_result = registry.get_skill("calculator.calculate").executor(expression=expr, use_gui=True)
+    assert skill_result["status"] == "done"
+    assert skill_result["result"] == -3330
+    mock_gui.assert_called_once_with("5745 - 9075")
+    called_expr = mock_gui.call_args[0][0]
+    assert safe_calculate(called_expr) == -3330
+
+
+def test_calculator_gui_failure_still_returns_result():
+    """If GUI typing fails, internal numeric result is still returned with a warning."""
+    from calculator_tools import safe_calculate
+    with patch("calculator_tools.drive_calculator_gui") as mock_gui:
+        mock_gui.return_value = {"status": "done", "gui_ok": False, "warning": "Calculator GUI automation failed: window not found after 5s"}
+        skill_result = registry.get_skill("calculator.calculate").executor(expression="59 + 17", use_gui=True)
+    assert skill_result["status"] == "done"
+    assert skill_result["result"] == 76
+    assert skill_result["gui_ok"] is False
+    assert skill_result["warning"].startswith("Calculator GUI automation failed:")
+
+
 def test_agent_route_backwards_compat():
     """Case 21: POST /agent with AI question still returns 'reply' after engine integration"""
     # The engine returns no_match for unrecognized conversational questions,
