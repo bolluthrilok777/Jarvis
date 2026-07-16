@@ -16,7 +16,20 @@ from jarvis_core.task_models import TaskStatus
 @pytest.fixture
 def orch():
     """Fresh Orchestrator for each test."""
-    return Orchestrator()
+    from jarvis_core.task_manager import task_manager
+    task_manager.clear_all_tasks()
+    # Reset running counts
+    for group in ("background", "browser", "desktop_focus"):
+        while task_manager.acquire_slot(group):
+            pass
+    for group in ("background", "browser", "desktop_focus"):
+        for _ in range(10):
+            task_manager.release_slot(group)
+    yield Orchestrator()
+    # Teardown: stop any lingering worker
+    orch_instance = Orchestrator()
+    if hasattr(orch_instance, '_worker_thread') and orch_instance._worker_thread is not None:
+        pass  # fresh instance has no worker
 
 
 # ── Submit ────────────────────────────────────────────────────────────────────
@@ -231,3 +244,170 @@ def test_duplicate_submission_not_blocked_at_orchestrator(orch):
                     r1 = orch.submit("system status")
                     r2 = orch.submit("system status")
     assert r1["task_id"] != r2["task_id"]
+
+
+# ── Worker Lifecycle ──────────────────────────────────────────────────────────
+
+def test_worker_starts_and_stops(orch):
+    """Worker thread can be started and stopped."""
+    assert orch._worker_thread is None
+    orch.start_worker()
+    assert orch._worker_thread is not None
+    assert orch._worker_thread.is_alive()
+    orch.stop_worker(timeout=3.0)
+    assert orch._worker_thread is None
+
+
+def test_worker_start_twice(orch):
+    """Starting worker twice does not create two threads."""
+    orch.start_worker()
+    thread_id = id(orch._worker_thread)
+    orch.start_worker()  # second start should be no-op
+    assert id(orch._worker_thread) == thread_id
+    orch.stop_worker()
+
+
+def test_worker_processes_queued_task(orch):
+    """Worker processes a queued task and transitions it through states."""
+    from jarvis_core.task_manager import task_manager
+    from jarvis_core.task_models import TaskStatus
+
+    task_manager.clear_all_tasks()
+
+    # Create a task directly in queued state
+    task = task_manager.create_task("system status")
+    task_manager.set_status(task.task_id, TaskStatus.queued.value)
+
+    # Mock action engine so worker doesn't hang
+    with patch("jarvis_core.orchestrator.action_engine") as mock_engine:
+        mock_engine.run.return_value = {"status": "done", "summary": "ok"}
+        # Start worker
+        orch.start_worker()
+        orch.wake_worker()
+
+        import time
+        time.sleep(1.0)  # Give worker time to process
+
+    # Check task left QUEUED
+    updated = task_manager.get_task(task.task_id)
+    assert updated is not None
+    assert updated.status != TaskStatus.queued.value, f"Task stuck in QUEUED: {updated.status}"
+
+    orch.stop_worker()
+
+
+def test_worker_processes_multiple_tasks(orch):
+    """Worker processes multiple queued tasks."""
+    from jarvis_core.task_manager import task_manager
+    from jarvis_core.task_models import TaskStatus
+
+    task_manager.clear_all_tasks()
+
+    # Create two tasks
+    t1 = task_manager.create_task("system status")
+    t2 = task_manager.create_task("system status")
+    task_manager.set_status(t1.task_id, TaskStatus.queued.value)
+    task_manager.set_status(t2.task_id, TaskStatus.queued.value)
+
+    with patch("jarvis_core.orchestrator.action_engine") as mock_engine:
+        mock_engine.run.return_value = {"status": "done", "summary": "ok"}
+        orch.start_worker()
+        orch.wake_worker()
+
+        import time
+        time.sleep(1.5)  # Give worker time to process both
+
+    updated1 = task_manager.get_task(t1.task_id)
+    updated2 = task_manager.get_task(t2.task_id)
+    assert updated1.status != TaskStatus.queued.value, f"Task 1 stuck in QUEUED: {updated1.status}"
+    assert updated2.status != TaskStatus.queued.value, f"Task 2 stuck in QUEUED: {updated2.status}"
+
+    orch.stop_worker()
+
+
+def test_worker_continues_after_failure(orch):
+    """Worker continues processing remaining tasks after one fails."""
+    from jarvis_core.task_manager import task_manager
+    from jarvis_core.task_models import TaskStatus
+
+    task_manager.clear_all_tasks()
+
+    # Create two tasks
+    t1 = task_manager.create_task("system status")
+    t2 = task_manager.create_task("system status")
+    task_manager.set_status(t1.task_id, TaskStatus.queued.value)
+    task_manager.set_status(t2.task_id, TaskStatus.queued.value)
+
+    with patch("jarvis_core.orchestrator.action_engine") as mock_engine:
+        # First call fails, second succeeds
+        mock_engine.run.side_effect = [
+            {"status": "error", "message": "Failed"},
+            {"status": "done", "summary": "ok"},
+        ]
+        orch.start_worker()
+        orch.wake_worker()
+
+        import time
+        time.sleep(1.5)
+
+    updated1 = task_manager.get_task(t1.task_id)
+    updated2 = task_manager.get_task(t2.task_id)
+    # Both should have left QUEUED (either completed or failed)
+    assert updated1.status != TaskStatus.queued.value, f"Task 1 stuck in QUEUED: {updated1.status}"
+    assert updated2.status != TaskStatus.queued.value, f"Task 2 stuck in QUEUED: {updated2.status}"
+
+    orch.stop_worker()
+
+
+def test_submitted_task_leaves_queued(orch):
+    """A task submitted through orchestrator.submit() leaves QUEUED when worker runs."""
+    from jarvis_core.task_manager import task_manager
+    from jarvis_core.task_models import TaskStatus
+
+    task_manager.clear_all_tasks()
+
+    with patch("jarvis_core.orchestrator.action_engine") as mock_engine:
+        mock_engine.run.return_value = {"status": "done", "summary": "ok"}
+        orch.start_worker()
+
+        with patch("jarvis_core.orchestrator.classify", return_value="command"):
+            with patch("jarvis_core.orchestrator.classify_risk", return_value="SAFE"):
+                with patch("jarvis_core.orchestrator.classify_concurrency", return_value="background"):
+                    with patch("jarvis_core.orchestrator.build_interpreted_command", return_value="system status"):
+                        result = orch.submit("system status")
+
+        assert result["action"] == "created"
+        assert result["status"] == "queued"
+
+        import time
+        time.sleep(1.0)
+
+    updated = task_manager.get_task(result["task_id"])
+    assert updated is not None
+    assert updated.status != TaskStatus.queued.value, f"Task stuck in QUEUED: {updated.status}"
+
+    orch.stop_worker()
+
+
+def test_worker_releases_concurrency_slot(orch):
+    """Concurrency slot is released after task execution."""
+    from jarvis_core.task_manager import task_manager
+    from jarvis_core.task_models import TaskStatus
+
+    task_manager.clear_all_tasks()
+
+    counts_before = task_manager.get_running_counts()
+    assert counts_before["background"] == 0
+
+    task = task_manager.create_task("system status")
+    task_manager.set_status(task.task_id, TaskStatus.queued.value)
+    task_manager.set_concurrency_group(task.task_id, "background")
+
+    # Mock the action engine to return immediately
+    with patch("jarvis_core.orchestrator.action_engine") as mock_engine:
+        mock_engine.run.return_value = {"status": "done", "summary": "ok"}
+        # Directly call execute_task to test slot release
+        result = orch.execute_task(task.task_id)
+
+    counts_after = task_manager.get_running_counts()
+    assert counts_after["background"] == 0, f"Slot not released: {counts_after}"

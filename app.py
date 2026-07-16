@@ -1,4 +1,5 @@
 import uvicorn
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from jarvis_core.config import APP_NAME
@@ -8,7 +9,17 @@ from jarvis_core.voice_routes import router as voice_router
 
 setup_logging()
 
-app = FastAPI(title=APP_NAME)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: begin the task worker. Shutdown: stop the task worker."""
+    from jarvis_core.orchestrator import orchestrator
+    orchestrator.start_worker()
+    yield
+    orchestrator.stop_worker()
+
+
+app = FastAPI(title=APP_NAME, lifespan=lifespan)
 app.include_router(router)
 app.include_router(voice_router)
 

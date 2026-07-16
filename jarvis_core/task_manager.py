@@ -210,6 +210,11 @@ class TaskManager:
                 if t.status == TaskStatus.waiting_for_confirmation.value
             ]
 
+    def clear_all_tasks(self) -> None:
+        """Remove all tasks (for testing)."""
+        with self._lock:
+            self._tasks.clear()
+
 
 # Module-level singleton
 task_manager = TaskManager()

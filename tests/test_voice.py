@@ -647,10 +647,16 @@ def test_property_6_speech_text_never_in_logs(speech_text):
     emitted by the voice service during a transcription request.
     Single characters and pure digit strings are excluded as they would trivially
     match numeric metadata (byte counts, elapsed time) in log messages.
+
+    Uses a unique sentinel string as the transcription result so that the
+    assertion cannot false-positive on safe static log labels such as
+    "transcription request", "mime", "audio", or "ogg".
     """
     _reset_voice_service()
     try:
-        mock_model = _make_mock_model(speech_text, "en")
+        # Use a unique sentinel that cannot accidentally match safe log labels
+        sensitive_marker = "__PRIVATE_SPEECH_SENTINEL_DO_NOT_LOG_12345__"
+        mock_model = _make_mock_model(sensitive_marker, "en")
 
         with patch("jarvis_core.voice_service.WhisperModel", return_value=mock_model):
             import jarvis_core.voice_service as vs
@@ -673,10 +679,21 @@ def test_property_6_speech_text_never_in_logs(speech_text):
             finally:
                 vs_logger.removeHandler(cap_handler)
 
-        # The speech text must not appear in any log record
-        for record in captured_records:
-            assert speech_text not in record, (
-                f"Speech text found in log: {record!r}"
-            )
+        # Private speech sentinel must NOT appear in any log record
+        all_logs = "\n".join(str(record) for record in captured_records)
+        assert sensitive_marker not in all_logs, (
+            f"Private speech sentinel found in logs: {all_logs!r}"
+        )
+
+        # Safe metadata MUST still be logged (mime type, size, processing time)
+        assert any("mime=audio/ogg" in str(r) for r in captured_records), (
+            "Expected safe metadata (mime type) in logs, but none found"
+        )
+        assert any("size=" in str(r) for r in captured_records), (
+            "Expected safe metadata (size) in logs, but none found"
+        )
+        assert any("transcription completed" in str(r) for r in captured_records), (
+            "Expected safe metadata (processing time) in logs, but none found"
+        )
     finally:
         _reset_voice_service()

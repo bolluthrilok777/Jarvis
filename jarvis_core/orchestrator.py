@@ -123,6 +123,9 @@ class Orchestrator:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self._worker_thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+        self._wake_event = threading.Event()
 
     def submit(self, original_input: str) -> dict:
         """
@@ -182,6 +185,8 @@ class Orchestrator:
         if risk == RiskLevel.SAFE.value:
             # Auto-execute
             task_manager.set_status(task.task_id, TaskStatus.queued.value)
+            # Wake the worker to process this task
+            self.wake_worker()
             return {
                 "task_id": task.task_id,
                 "status": "queued",
@@ -216,6 +221,8 @@ class Orchestrator:
             return {"status": "error", "message": f"Task is in state '{task.status}', not waiting for confirmation"}
 
         task_manager.set_status(task_id, TaskStatus.queued.value)
+        # Wake the worker to process this confirmed task
+        self.wake_worker()
         return {"status": "queued", "message": "Task confirmed and queued for execution."}
 
     def cancel(self, task_id: str) -> dict:
@@ -287,6 +294,70 @@ class Orchestrator:
             result = self.submit(stripped)
             results.append(result)
         return results
+
+    # ── Background Worker ──────────────────────────────────────────────────────
+
+    def start_worker(self) -> None:
+        """Start the background task-processing worker thread."""
+        if self._worker_thread is not None and self._worker_thread.is_alive():
+            logger.warning("Worker thread is already running")
+            return
+        self._stop_event.clear()
+        self._wake_event.clear()
+        self._worker_thread = threading.Thread(
+            target=self._worker_loop,
+            name="task-worker",
+            daemon=True,
+        )
+        self._worker_thread.start()
+        logger.info("Task worker thread started")
+
+    def stop_worker(self, timeout: float = 5.0) -> None:
+        """Signal the worker to stop and wait for it to finish."""
+        self._stop_event.set()
+        self._wake_event.set()  # Wake up so it can exit
+        if self._worker_thread is not None and self._worker_thread.is_alive():
+            self._worker_thread.join(timeout=timeout)
+            if self._worker_thread.is_alive():
+                logger.warning("Worker thread did not stop within %s seconds", timeout)
+            else:
+                logger.info("Task worker thread stopped")
+        self._worker_thread = None
+
+    def wake_worker(self) -> None:
+        """Wake the worker thread to check for new tasks."""
+        self._wake_event.set()
+
+    def _worker_loop(self) -> None:
+        """Main worker loop: poll for queued tasks and execute them."""
+        logger.info("Task worker loop started")
+        while not self._stop_event.is_set():
+            try:
+                # Get all queued tasks
+                queued = task_manager.get_queued_tasks()
+                processed_any = False
+
+                for task in queued:
+                    if self._stop_event.is_set():
+                        break
+                    # Re-check status under lock to avoid race conditions
+                    current = task_manager.get_task(task.task_id)
+                    if current is None or current.status != TaskStatus.queued.value:
+                        continue
+                    logger.info("Worker processing task %s: %s", task.task_id, task.original_input[:60])
+                    self.execute_task(task.task_id)
+                    processed_any = True
+
+                if not processed_any:
+                    # No tasks to process — wait for wake signal or timeout
+                    self._wake_event.wait(timeout=2.0)
+                    self._wake_event.clear()
+            except Exception:
+                logger.exception("Unhandled error in task worker loop")
+                # Sleep briefly to avoid tight loop on persistent errors
+                self._wake_event.wait(timeout=1.0)
+                self._wake_event.clear()
+        logger.info("Task worker loop exited")
 
 
 # Module-level singleton

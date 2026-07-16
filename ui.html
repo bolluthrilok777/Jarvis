@@ -291,14 +291,18 @@ async function submitCommand() {
     const data = await res.json();
 
     if (data.status === "ok") {
-      // Show results
+      // Show results — one entry per result line
       let html = "";
-      for (const r of data.results) {
+      // Split original text into lines to match each result to its line
+      const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+      for (let i = 0; i < data.results.length; i++) {
+        const r = data.results[i];
+        const lineText = i < lines.length ? lines[i] : text;
         if (r.action === "chat") {
           // Route to AI chat
           html += `<div class="entry">
             <div class="label">Original request:</div>
-            <div class="original">${escapeHtml(r.message || text)}</div>
+            <div class="original">${escapeHtml(lineText)}</div>
             <div class="label">Jarvis understood:</div>
             <div class="understood">Conversational question — routing to AI chat</div>
           </div>`;
@@ -307,7 +311,7 @@ async function submitCommand() {
           const chatRes = await fetch("/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: text, mode: mode })
+            body: JSON.stringify({ message: lineText, mode: mode })
           });
           const chatData = await chatRes.json();
           html += `<div class="entry">
@@ -317,7 +321,7 @@ async function submitCommand() {
         } else if (r.action === "blocked") {
           html += `<div class="entry">
             <div class="label">Original request:</div>
-            <div class="original">${escapeHtml(text)}</div>
+            <div class="original">${escapeHtml(lineText)}</div>
             <div class="label">Jarvis understood:</div>
             <div class="understood">${escapeHtml(r.message)}</div>
             <div class="error">⛔ This action is blocked for safety.</div>
@@ -325,7 +329,7 @@ async function submitCommand() {
         } else if (r.action === "created") {
           html += `<div class="entry">
             <div class="label">Original request:</div>
-            <div class="original">${escapeHtml(text)}</div>
+            <div class="original">${escapeHtml(lineText)}</div>
             <div class="label">Jarvis understood:</div>
             <div class="understood">${escapeHtml(r.message)}</div>
           </div>`;
@@ -336,7 +340,7 @@ async function submitCommand() {
         } else {
           html += `<div class="entry">
             <div class="label">Original request:</div>
-            <div class="original">${escapeHtml(text)}</div>
+            <div class="original">${escapeHtml(lineText)}</div>
             <div class="label">Jarvis understood:</div>
             <div class="understood">${escapeHtml(r.message)}</div>
           </div>`;
