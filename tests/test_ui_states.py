@@ -44,9 +44,19 @@ def test_ollama_icon_is_animated_status_and_click_menu():
     assert 'data-mode="auto"' in html
     assert 'data-mode="light"' in html
     assert 'data-mode="heavy"' in html
-    assert "@keyframes coreSpin" in html
-    assert "@keyframes corePulse" in html
+    assert 'class="ollama-robot"' in html
+    assert 'class="signal-wave wave-one"' in html
+    assert 'class="signal-wave wave-two"' in html
+    assert "@keyframes robotWave" in html
+    assert ".ollama-core.mode-light { --robot:#20d7ff" in html
+    assert ".ollama-core.mode-heavy { --robot:#9b6cff" in html
     assert "refreshOllamaStatus" in html
+
+
+def test_composer_uses_full_available_width():
+    html = client.get("/ui").text
+    assert "textarea { display:block; width:100%; max-width:none; min-height:112px" in html
+    assert ".container { width:calc(100% - 220px); max-width:1240px" in html
 
 
 def test_visible_composer_model_dropdown_removed():

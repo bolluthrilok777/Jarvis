@@ -196,20 +196,31 @@
     .nav-btn:hover,.nav-btn.active { background:#1b1b1b; color:#f4cf63; }
     .command-header { display:flex; align-items:center; justify-content:space-between; gap:14px; }
     .jarvis-title { display:flex; align-items:center; gap:11px; }
-    .ollama-wrap { position:relative; display:inline-flex; }
-    .ollama-core { position:relative; width:34px; height:34px; padding:0; border:0; border-radius:50%; background:#111; color:#d4af37; cursor:pointer; box-shadow:0 0 0 1px #4a3d16,0 0 18px rgba(212,175,55,.18); }
-    .ollama-core .core-center { position:absolute; inset:11px; border-radius:50%; background:currentColor; box-shadow:0 0 10px currentColor; }
-    .ollama-core .core-ring { position:absolute; inset:5px; border:2px solid transparent; border-top-color:currentColor; border-right-color:currentColor; border-radius:50%; }
-    .ollama-core.mode-auto .core-ring { animation:coreSpin 2.2s linear infinite; }
-    .ollama-core.mode-light .core-center { animation:corePulse 1.5s ease-in-out infinite; }
-    .ollama-core.mode-heavy .core-ring { inset:3px; border-width:3px; animation:coreSpin .8s linear infinite reverse; }
-    .ollama-core.working { color:#fff1a8; animation:workingGlow .7s ease-in-out infinite alternate; }
-    .ollama-core.offline { color:#737373; box-shadow:0 0 0 1px #404040; }
-    .ollama-core.offline .core-ring,.ollama-core.offline .core-center { animation:none; box-shadow:none; }
-    @keyframes coreSpin { to{transform:rotate(360deg)} }
-    @keyframes corePulse { 50%{transform:scale(1.45);opacity:.55} }
-    @keyframes workingGlow { to{box-shadow:0 0 0 1px #d4af37,0 0 28px rgba(212,175,55,.75)} }
-    .ollama-menu { position:absolute; top:43px; left:0; z-index:60; width:245px; padding:8px; border:1px solid #4a3d16; border-radius:14px; background:#101010; box-shadow:0 18px 50px rgba(0,0,0,.55); }
+    .ollama-wrap { position:relative; display:inline-flex; flex:0 0 auto; }
+    .ollama-core { --robot:#d4af37; --robot-bright:#fff0a3; --robot-glow:rgba(212,175,55,.72); position:relative; width:54px; height:54px; padding:0; border:0; background:transparent; color:var(--robot); cursor:pointer; isolation:isolate; }
+    .ollama-core.mode-light { --robot:#20d7ff; --robot-bright:#c8f7ff; --robot-glow:rgba(32,215,255,.72); }
+    .ollama-core.mode-heavy { --robot:#9b6cff; --robot-bright:#eadfff; --robot-glow:rgba(155,108,255,.75); }
+    .ollama-robot { position:absolute; inset:5px; z-index:2; width:44px; height:44px; overflow:visible; filter:drop-shadow(0 0 5px var(--robot-glow)); transition:filter .2s ease; }
+    .robot-shell { fill:#cbd5e1; stroke:var(--robot); stroke-width:1.6; }
+    .robot-face { fill:#080b14; stroke:var(--robot); stroke-width:1.3; }
+    .robot-panel { fill:#1e293b; stroke:var(--robot); stroke-width:1.1; }
+    .robot-eye { fill:var(--robot-bright); filter:drop-shadow(0 0 3px var(--robot)); }
+    .robot-reactor { fill:#05070d; stroke:var(--robot-bright); stroke-width:1.5; filter:drop-shadow(0 0 3px var(--robot)); }
+    .signal-wave { position:absolute; z-index:1; inset:4px; border:1.5px solid var(--robot); border-radius:50%; opacity:0; box-shadow:0 0 8px var(--robot-glow),inset 0 0 6px var(--robot-glow); animation:robotWave 2.4s ease-out infinite; pointer-events:none; }
+    .signal-wave.wave-two { animation-delay:1.2s; }
+    .ollama-core.mode-light .signal-wave { animation-duration:3s; }
+    .ollama-core.mode-heavy .signal-wave { animation-duration:1.45s; }
+    .ollama-core.mode-heavy .signal-wave.wave-two { animation-delay:.72s; }
+    .ollama-core.working .signal-wave { animation-duration:.8s; }
+    .ollama-core.working .signal-wave.wave-two { animation-delay:.4s; }
+    .ollama-core.working .ollama-robot { animation:robotWorking .65s ease-in-out infinite alternate; }
+    .ollama-core.offline { --robot:#6b7280; --robot-bright:#9ca3af; --robot-glow:rgba(107,114,128,.2); }
+    .ollama-core.offline .signal-wave,.ollama-core.offline .ollama-robot { animation:none; }
+    .ollama-core.offline .signal-wave { opacity:.14; transform:scale(.82); }
+    @keyframes robotWave { 0%{opacity:.8;transform:scale(.58)} 72%,100%{opacity:0;transform:scale(1.28)} }
+    @keyframes robotWorking { to{transform:scale(1.06);filter:drop-shadow(0 0 11px var(--robot-glow))} }
+    @media (prefers-reduced-motion:reduce) { .signal-wave,.ollama-robot,.monitor-orbit::after,.loading-dots span { animation:none!important; } }
+    .ollama-menu { position:absolute; top:58px; left:0; z-index:60; width:245px; padding:8px; border:1px solid #4a3d16; border-radius:14px; background:#101010; box-shadow:0 18px 50px rgba(0,0,0,.55); }
     .ollama-menu button { width:100%; display:flex; justify-content:space-between; gap:12px; padding:10px; border:0; border-radius:9px; background:transparent; color:#f5f5f5; text-align:left; cursor:pointer; }
     .ollama-menu button:hover,.ollama-menu button.selected { background:#24200f; color:#f4cf63; }
     .ollama-menu small { color:#8c8c8c; }
@@ -222,13 +233,13 @@
     .monitor-orbit::after { content:""; position:absolute; width:5px; height:5px; top:-2px; left:6px; border-radius:50%; background:currentColor; box-shadow:0 0 8px currentColor; transform-origin:2px 10px; animation:monitorSpin 1.4s linear infinite; }
     .monitor-live.paused .monitor-orbit::after { animation-play-state:paused; }
     @keyframes monitorSpin { to { transform:rotate(360deg); } }
-    .container { max-width:980px; margin-left:220px; padding:32px 28px 150px; }
+    .container { width:calc(100% - 220px); max-width:1240px; margin-left:220px; padding:32px 28px 150px; }
     .card { background:transparent; border:0; border-radius:0; padding:0; margin-bottom:28px; }
     .card:first-child { position:sticky; bottom:18px; z-index:20; background:#18181b; border:1px solid #3f3f46; border-radius:24px; padding:18px; box-shadow:0 18px 60px rgba(0,0,0,.45); }
     h1 { color:#fafafa; font-size:20px; letter-spacing:-.02em; }
     h2 { color:#a1a1aa; font-size:13px; }
     h3 { color:#a1a1aa; font-size:12px; }
-    textarea { min-height:72px; height:auto; background:transparent; border:0; color:#fafafa; padding:10px 4px; line-height:1.55; }
+    textarea { display:block; width:100%; max-width:none; min-height:112px; height:auto; background:transparent; border:0; color:#fafafa; padding:14px 4px; line-height:1.55; }
     textarea:focus { border:0; box-shadow:none; }
     .btn { border-radius:999px; }
     .btn-primary { background:#d4af37; color:#090909; }
@@ -255,7 +266,7 @@
     .monitor-grid label { color:#a3a3a3; font-size:12px; }
     .monitor-grid input,.monitor-grid select { width:100%; box-sizing:border-box; margin-top:5px; padding:10px; background:#191919; color:#fff; border:1px solid #383838; border-radius:9px; }
     #schedule-preview { max-height:130px; overflow:auto; color:#d4af37; margin:14px 0; font-size:13px; }
-    @media (max-width:700px) { .sidebar{display:none}.container{margin-left:0;padding:18px 12px 130px}.task-item{flex-wrap:wrap}.task-id{display:none}.task-status{margin-left:auto}#response-area .entry{max-width:94%} }
+    @media (max-width:700px) { .sidebar{display:none}.container{width:100%;margin-left:0;padding:18px 12px 130px}.command-header{align-items:flex-start}.task-item{flex-wrap:wrap}.task-id{display:none}.task-status{margin-left:auto}#response-area .entry{max-width:94%} }
   </style>
 </head>
 <body>
@@ -274,7 +285,15 @@
   <div class="card">
     <h1 class="jarvis-title"><span class="ollama-wrap">
       <button id="ollama-core" class="ollama-core mode-auto offline" type="button" aria-label="Ollama model and connection status" aria-expanded="false" onclick="toggleOllamaMenu(event)">
-        <span class="core-ring" aria-hidden="true"></span><span class="core-center" aria-hidden="true"></span>
+        <span class="signal-wave wave-one" aria-hidden="true"></span><span class="signal-wave wave-two" aria-hidden="true"></span>
+        <svg class="ollama-robot" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+          <path class="robot-shell" d="M17 12 25 6h14l8 6 4 15-5 16-9 7H27l-9-7-5-16z"/>
+          <path class="robot-face" d="m21 16 7-5h8l7 5 3 11-5 11-7 5h-4l-7-5-5-11z"/>
+          <path class="robot-eye" d="m22 25 8 2-2 4-7-2zm20 0-8 2 2 4 7-2z"/>
+          <path class="robot-panel" d="m13 34 6 2 7 12-5 8-10-7zm38 0-6 2-7 12 5 8 10-7z"/>
+          <path class="robot-panel" d="M25 47h14l5 9H20z"/>
+          <circle class="robot-reactor" cx="32" cy="51" r="4"/>
+        </svg>
       </button>
       <span id="ollama-menu" class="ollama-menu hidden">
         <span id="ollama-connection">Checking Ollama…</span>
