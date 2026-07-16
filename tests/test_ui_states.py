@@ -25,3 +25,12 @@ def test_monitoring_modal_has_top_close_control():
     assert 'aria-label="Close activity monitoring"' in html
     assert 'class="modal-close"' in html
     assert 'event.key==="Escape"' in html
+
+
+def test_homepage_has_animated_monitoring_status():
+    html = client.get("/ui").text
+    assert 'id="monitor-live"' in html
+    assert 'class="monitor-orbit"' in html
+    assert "@keyframes monitorSpin" in html
+    assert "refreshMonitoringStatus" in html
+    assert "Monitoring active · Next" in html
