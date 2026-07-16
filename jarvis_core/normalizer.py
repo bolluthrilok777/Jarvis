@@ -201,6 +201,11 @@ def normalize(command: str) -> Union[str, dict]:
     step1 = correct_command_words(strip_fillers(command))
     step2 = normalize_operators(step1)
     step3 = _normalize_brackets(step2)
-    step3 = re.sub(r"(?i)\blatest\s+one\b", "latest video", step3)
+    # Preserve YouTube result words before spoken-number conversion sees "one".
+    step3 = re.sub(
+        r"(?i)\b(latest|newest|most\s+recent)(\s+uploaded)?\s+one\b",
+        r"\1\2 video",
+        step3,
+    )
     result = normalize_numbers(step3)
     return result

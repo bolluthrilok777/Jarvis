@@ -147,7 +147,10 @@ def _build_rules():
 
     rules.append((
         re.compile(
-            r"^(?:open\s+youtube\s+)?search\s+(.+?)\s+and\s+play\s+(?:the\s+)?latest\s+(?:one|1|video)$",
+            r"^(?:open\s+youtube,?\s*(?:and\s+)?)?"
+            r"(?:search(?:\s+for)?|find)\s+(.+?),?\s+(?:and|then)\s+play\s+"
+            r"(?:the\s+)?(?:latest|newest|most\s+recent)(?:\s+uploaded)?\s+"
+            r"(?:one|1|video|result)$",
             re.IGNORECASE,
         ),
         lambda m, raw, norm: _plan([

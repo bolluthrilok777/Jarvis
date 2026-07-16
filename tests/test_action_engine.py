@@ -346,6 +346,21 @@ def test_youtube_search_and_play_latest_rule():
     assert plan.steps[0].parameters["query"] == "podcast"
 
 
+@pytest.mark.parametrize("command", [
+    "open youtube and search raw talks with vk and play the latest video",
+    "open YouTube, search for raw talks with vk, then play the newest result",
+    "find raw talks with vk and play the most recent video",
+    "search raw talks with vk and play the latest uploaded one",
+])
+def test_youtube_latest_variants_keep_only_topic_as_query(command):
+    normalized = normalize(command)
+    plan = matcher.match(normalized, command)
+    assert plan is not None
+    assert len(plan.steps) == 1
+    assert plan.steps[0].skill_id == "browser.youtube_play_latest"
+    assert plan.steps[0].parameters == {"query": "raw talks with vk"}
+
+
 def test_no_shell_execution():
     """Case 14: skill registry contains no skill that executes arbitrary shell commands"""
     import inspect
