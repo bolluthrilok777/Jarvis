@@ -42,8 +42,27 @@ def append_activity(entry: str, when: datetime | None = None) -> Path:
     return path
 
 
-def refresh_open_activity_tab(path: Path) -> tuple[bool, str | None]:
-    """Save and close only the matching activity tab so Notepad reloads it."""
+def _request_foreground(window) -> bool:
+    """Safely request foreground focus for an already verified window handle."""
+    try:
+        import ctypes
+        hwnd = int(getattr(window, "_hWnd", 0))
+        if not hwnd:
+            return False
+        user32 = ctypes.windll.user32
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+        user32.keybd_event(0x12, 0, 0, 0)  # ALT grants foreground permission
+        user32.SetForegroundWindow(hwnd)
+        user32.keybd_event(0x12, 0, 0x0002, 0)
+        return True
+    except Exception:
+        return False
+
+
+def append_alert_to_activity_tab(
+    path: Path, moment: datetime
+) -> tuple[bool, str | None]:
+    """Append an alert through the verified Notepad tab, avoiding disk conflicts."""
     try:
         import pyautogui
         import pygetwindow as gw
@@ -58,11 +77,15 @@ def refresh_open_activity_tab(path: Path) -> tuple[bool, str | None]:
 
         windows = matching_windows()
         if not windows:
-            # The file may be an inactive tab. Asking Notepad to open the same
-            # path activates that tab without creating a different document.
+            # The activity file may be closed or an inactive tab. Opening the
+            # same path activates it without modifying the file behind Notepad.
             subprocess.Popen(["notepad.exe", str(path)])
-            time.sleep(0.6)
-            windows = matching_windows()
+            deadline = time.monotonic() + 4.0
+            while time.monotonic() < deadline:
+                windows = matching_windows()
+                if windows:
+                    break
+                time.sleep(0.25)
         if not windows:
             return False, "The existing activity tab could not be identified safely."
 
@@ -72,22 +95,47 @@ def refresh_open_activity_tab(path: Path) -> tuple[bool, str | None]:
                 window.restore()
             window.activate()
         except Exception:
-            return False, "The activity tab could not be focused safely."
+            # Packaged Windows 11 Notepad can report error code 0 from
+            # activate(). Request foreground access only for the verified HWND.
+            if not _request_foreground(window):
+                return False, "The activity tab could not be focused safely."
         time.sleep(0.3)
 
         active = gw.getActiveWindow()
         active_title = (getattr(active, "title", "") or "").lower() if active else ""
-        if path.name.lower() not in active_title or "notepad" not in active_title:
+        target_handle = getattr(window, "_hWnd", None)
+        same_handle = bool(
+            target_handle and active and getattr(active, "_hWnd", None) == target_handle
+        )
+        correct_title = path.name.lower() in active_title and "notepad" in active_title
+        if not same_handle and not correct_title:
             return False, "The focused window was not the expected activity tab."
 
-        if (getattr(window, "title", "") or "").lstrip().startswith("*"):
+        # Put the caret in the editor area of the already verified window.
+        pyautogui.click(
+            window.left + window.width // 2,
+            window.top + window.height // 2,
+        )
+        time.sleep(0.2)
+
+        import pyperclip
+        previous_clipboard = pyperclip.paste()
+        block = (
+            f"[{moment.strftime('%I:%M %p').lstrip('0')}]\n"
+            f"{ACTIVITY_CHECK_ENTRY}"
+        )
+        try:
+            pyautogui.hotkey("ctrl", "end")
+            pyautogui.press("enter", presses=2, interval=0.05)
+            pyperclip.copy(block)
+            pyautogui.hotkey("ctrl", "v")
             pyautogui.hotkey("ctrl", "s")
             time.sleep(0.5)
-        pyautogui.hotkey("ctrl", "w")
-        time.sleep(0.5)
+        finally:
+            pyperclip.copy(previous_clipboard)
         return True, None
     except Exception as exc:
-        return False, f"Could not refresh the activity tab: {exc}"
+        return False, f"Could not append the monitoring alert in Notepad: {exc}"
 
 
 def play_sound(sound: str) -> None:
@@ -164,19 +212,20 @@ class MonitoringService:
         play_sound(sound)
         now = datetime.now()
         path = activity_file(now.date())
-        refresh_warning = None
+        warning = None
         if path.exists():
-            _, refresh_warning = refresh_open_activity_tab(path)
-        path = append_activity(ACTIVITY_CHECK_ENTRY, now)
-        try:
-            subprocess.Popen(["notepad.exe", str(path)])
-        except Exception:
-            pass
+            _, warning = append_alert_to_activity_tab(path, now)
+        else:
+            path = append_activity(ACTIVITY_CHECK_ENTRY, now)
+            try:
+                subprocess.Popen(["notepad.exe", str(path)])
+            except Exception as exc:
+                warning = f"Could not open the activity file: {exc}"
         with self._lock:
             self._state["last_alert"] = now.isoformat()
         result = {"status": "done", "activity_file": str(path), "timestamp": now.isoformat()}
-        if refresh_warning:
-            result["warning"] = refresh_warning
+        if warning:
+            result["warning"] = warning
         return result
 
     def _next(self, schedule: list[str]) -> str | None:

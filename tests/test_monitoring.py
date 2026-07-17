@@ -4,8 +4,8 @@ from unittest.mock import patch
 import pytest
 
 from jarvis_core.monitoring import (
-    ACTIVITY_CHECK_ENTRY, MonitoringService, activity_file, append_activity,
-    generate_schedule, refresh_open_activity_tab,
+    ACTIVITY_CHECK_ENTRY, MonitoringService, activity_file,
+    append_activity, append_alert_to_activity_tab, generate_schedule,
 )
 
 
@@ -75,59 +75,120 @@ def test_monitoring_alerts_have_writing_space_and_blank_separator(tmp_path):
     )
 
 
-def test_refresh_activity_tab_saves_closes_only_verified_notepad_file(tmp_path):
+def test_existing_activity_alert_is_appended_and_saved_inside_verified_notepad(tmp_path):
     path = tmp_path / "activity_2026-07-17.txt"
     path.write_text("existing", encoding="utf-8")
     window = type("Window", (), {
         "title": "*activity_2026-07-17.txt - Notepad",
         "isMinimized": False,
+        "left": 10, "top": 20, "width": 800, "height": 600,
         "activate": lambda self: None,
     })()
     with patch("pygetwindow.getAllWindows", return_value=[window]), \
          patch("pygetwindow.getActiveWindow", return_value=window), \
+         patch("pyautogui.click"), \
          patch("pyautogui.hotkey") as hotkey, \
+         patch("pyautogui.press") as press, \
+         patch("pyperclip.paste", return_value="original clipboard"), \
+         patch("pyperclip.copy") as copy, \
          patch("jarvis_core.monitoring.time.sleep"):
-        refreshed, warning = refresh_open_activity_tab(path)
+        appended, warning = append_alert_to_activity_tab(
+            path, datetime(2026, 7, 17, 13, 15)
+        )
 
-    assert refreshed is True
+    assert appended is True
     assert warning is None
-    assert [call.args for call in hotkey.call_args_list] == [("ctrl", "s"), ("ctrl", "w")]
+    assert [call.args for call in hotkey.call_args_list] == [
+        ("ctrl", "end"), ("ctrl", "v"), ("ctrl", "s"),
+    ]
+    press.assert_called_once_with("enter", presses=2, interval=0.05)
+    assert copy.call_args_list[0].args == (
+        "[1:15 PM]\nActivity check opened. Add your update below.\n{}",
+    )
+    assert copy.call_args_list[-1].args == ("original clipboard",)
 
 
-def test_refresh_clean_activity_tab_closes_without_overwriting_disk(tmp_path):
+def test_activity_alert_never_types_when_wrong_window_is_active(tmp_path):
     path = tmp_path / "activity_2026-07-17.txt"
-    path.write_text("latest disk content", encoding="utf-8")
+    path.write_text("existing", encoding="utf-8")
     window = type("Window", (), {
         "title": "activity_2026-07-17.txt - Notepad",
         "isMinimized": False,
         "activate": lambda self: None,
     })()
+    wrong_window = type("Window", (), {"title": "Email - Browser"})()
+    with patch("pygetwindow.getAllWindows", return_value=[window]), \
+         patch("pygetwindow.getActiveWindow", return_value=wrong_window), \
+         patch("pyautogui.click"), patch("pyautogui.hotkey") as hotkey, \
+         patch("jarvis_core.monitoring.time.sleep"):
+        appended, warning = append_alert_to_activity_tab(path, datetime.now())
+
+    assert appended is False
+    assert "not the expected activity tab" in warning
+    hotkey.assert_not_called()
+
+
+def test_packaged_notepad_activate_error_uses_verified_window_handle(tmp_path):
+    path = tmp_path / "activity_2026-07-17.txt"
+    path.write_text("existing", encoding="utf-8")
+    window = type("Window", (), {
+        "title": "activity_2026-07-17.txt - Notepad",
+        "isMinimized": False,
+        "_hWnd": 1234,
+        "left": 100, "top": 200, "width": 800, "height": 600,
+        "activate": lambda self: (_ for _ in ()).throw(RuntimeError("error code 0")),
+    })()
     with patch("pygetwindow.getAllWindows", return_value=[window]), \
          patch("pygetwindow.getActiveWindow", return_value=window), \
-         patch("pyautogui.hotkey") as hotkey, \
-         patch("jarvis_core.monitoring.time.sleep"):
-        refreshed, warning = refresh_open_activity_tab(path)
+         patch("jarvis_core.monitoring._request_foreground", return_value=True) as foreground, \
+         patch("pyautogui.click"), patch("pyautogui.hotkey"), \
+         patch("pyautogui.press"), patch("pyperclip.paste", return_value="old"), \
+         patch("pyperclip.copy"), patch("jarvis_core.monitoring.time.sleep"):
+        appended, warning = append_alert_to_activity_tab(path, datetime.now())
 
-    assert refreshed is True
+    assert appended is True
     assert warning is None
-    hotkey.assert_called_once_with("ctrl", "w")
-    assert path.read_text(encoding="utf-8") == "latest disk content"
+    foreground.assert_called_once_with(window)
 
 
-def test_existing_activity_is_refreshed_before_new_alert_is_appended(tmp_path):
+def test_closed_activity_file_waits_for_notepad_tab_before_appending(tmp_path):
+    path = tmp_path / "activity_2026-07-17.txt"
+    path.write_text("existing", encoding="utf-8")
+    window = type("Window", (), {
+        "title": "activity_2026-07-17.txt - Notepad",
+        "isMinimized": False,
+        "left": 10, "top": 20, "width": 800, "height": 600,
+        "activate": lambda self: None,
+    })()
+    with patch("pygetwindow.getAllWindows", side_effect=[[], [], [window]]), \
+         patch("pygetwindow.getActiveWindow", return_value=window), \
+         patch("pyautogui.click"), patch("pyautogui.hotkey"), patch("pyautogui.press"), \
+         patch("pyperclip.paste", return_value="old"), patch("pyperclip.copy"), \
+         patch("jarvis_core.monitoring.subprocess.Popen") as opened, \
+         patch("jarvis_core.monitoring.time.sleep"), \
+         patch("jarvis_core.monitoring.time.monotonic", side_effect=[0, 0.1, 0.2]):
+        appended, warning = append_alert_to_activity_tab(path, datetime.now())
+
+    assert appended is True
+    assert warning is None
+    opened.assert_called_once_with(["notepad.exe", str(path)])
+
+
+def test_existing_activity_uses_notepad_instead_of_external_disk_append(tmp_path):
     service = MonitoringService()
     path = tmp_path / datetime.now().strftime("activity_%Y-%m-%d.txt")
     path.write_text("saved update\n", encoding="utf-8")
     with patch("jarvis_core.monitoring.NOTES_DIR", tmp_path), \
          patch("jarvis_core.monitoring.play_sound"), \
-         patch("jarvis_core.monitoring.refresh_open_activity_tab", return_value=(True, None)) as refresh, \
+         patch("jarvis_core.monitoring.append_alert_to_activity_tab", return_value=(True, None)) as append_tab, \
          patch("jarvis_core.monitoring.subprocess.Popen") as opened:
         result = service.trigger()
 
-    refresh.assert_called_once_with(path)
-    opened.assert_called_once_with(["notepad.exe", str(path)])
+    append_tab.assert_called_once()
+    assert append_tab.call_args.args[0] == path
+    opened.assert_not_called()
     assert result["status"] == "done"
-    assert path.read_text(encoding="utf-8").startswith("saved update\n[")
+    assert path.read_text(encoding="utf-8") == "saved update\n"
 
 
 def test_pause_resume_stop():
