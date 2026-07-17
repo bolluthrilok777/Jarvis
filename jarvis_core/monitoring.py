@@ -42,6 +42,54 @@ def append_activity(entry: str, when: datetime | None = None) -> Path:
     return path
 
 
+def refresh_open_activity_tab(path: Path) -> tuple[bool, str | None]:
+    """Save and close only the matching activity tab so Notepad reloads it."""
+    try:
+        import pyautogui
+        import pygetwindow as gw
+
+        def matching_windows():
+            expected = path.name.lower()
+            return [
+                window for window in gw.getAllWindows()
+                if expected in (getattr(window, "title", "") or "").lower()
+                and "notepad" in (getattr(window, "title", "") or "").lower()
+            ]
+
+        windows = matching_windows()
+        if not windows:
+            # The file may be an inactive tab. Asking Notepad to open the same
+            # path activates that tab without creating a different document.
+            subprocess.Popen(["notepad.exe", str(path)])
+            time.sleep(0.6)
+            windows = matching_windows()
+        if not windows:
+            return False, "The existing activity tab could not be identified safely."
+
+        window = windows[0]
+        try:
+            if getattr(window, "isMinimized", False):
+                window.restore()
+            window.activate()
+        except Exception:
+            return False, "The activity tab could not be focused safely."
+        time.sleep(0.3)
+
+        active = gw.getActiveWindow()
+        active_title = (getattr(active, "title", "") or "").lower() if active else ""
+        if path.name.lower() not in active_title or "notepad" not in active_title:
+            return False, "The focused window was not the expected activity tab."
+
+        if (getattr(window, "title", "") or "").lstrip().startswith("*"):
+            pyautogui.hotkey("ctrl", "s")
+            time.sleep(0.5)
+        pyautogui.hotkey("ctrl", "w")
+        time.sleep(0.5)
+        return True, None
+    except Exception as exc:
+        return False, f"Could not refresh the activity tab: {exc}"
+
+
 def play_sound(sound: str) -> None:
     if sound not in ALLOWED_SOUNDS:
         raise ValueError("Unknown monitoring sound.")
@@ -115,6 +163,10 @@ class MonitoringService:
             sound = self._state["sound"]
         play_sound(sound)
         now = datetime.now()
+        path = activity_file(now.date())
+        refresh_warning = None
+        if path.exists():
+            _, refresh_warning = refresh_open_activity_tab(path)
         path = append_activity(ACTIVITY_CHECK_ENTRY, now)
         try:
             subprocess.Popen(["notepad.exe", str(path)])
@@ -122,7 +174,10 @@ class MonitoringService:
             pass
         with self._lock:
             self._state["last_alert"] = now.isoformat()
-        return {"status": "done", "activity_file": str(path), "timestamp": now.isoformat()}
+        result = {"status": "done", "activity_file": str(path), "timestamp": now.isoformat()}
+        if refresh_warning:
+            result["warning"] = refresh_warning
+        return result
 
     def _next(self, schedule: list[str]) -> str | None:
         now = datetime.now().strftime("%H:%M")
