@@ -281,6 +281,7 @@
   <button class="nav-btn" onclick="setCmd('open website google.com')">Browser</button>
   <button class="nav-btn" onclick="setCmd('open calculator')">Apps</button>
   <button class="nav-btn" onclick="openMonitoring()">Monitoring</button>
+  <button class="nav-btn" onclick="openGmailMonitor()">Gmail</button>
   <button class="nav-btn">Settings</button>
   <button class="nav-btn">History</button>
 </aside>
@@ -372,6 +373,50 @@
       <button class="btn" onclick="closeMonitoring()">Close</button>
     </div>
     <div id="monitor-status"></div>
+  </div>
+</div>
+
+<!-- Gmail Monitor Panel -->
+<div id="gmail-overlay" class="confirm-overlay hidden">
+  <div class="monitor-dialog" style="width:min(900px,95vw);max-height:90vh;overflow-y:auto;">
+    <button class="modal-close" type="button" aria-label="Close Gmail monitor" onclick="closeGmailMonitor()">&times;</button>
+    <h1>Gmail Monitor</h1>
+    <div id="gmail-status-bar" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:12px;background:#191919;border-radius:10px;">
+      <span id="gmail-connection-status" style="color:#ef4444;">Not connected</span>
+      <span id="gmail-last-checked">Last checked: —</span>
+      <span id="gmail-important-count">Important today: 0</span>
+      <span id="gmail-jd-count">JD files: 0</span>
+      <span id="gmail-draft-count">Drafts: 0</span>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+      <button class="btn btn-primary" id="gmail-start-btn" onclick="gmailStart()">Start Monitoring</button>
+      <button class="btn" id="gmail-stop-btn" onclick="gmailStop()" disabled>Stop Monitoring</button>
+      <button class="btn btn-ghost" onclick="gmailCheckNow()">Check Now</button>
+      <button class="btn btn-ghost" onclick="gmailRefresh()">Refresh</button>
+      <label style="color:#a3a3a3;font-size:12px;display:flex;align-items:center;gap:6px;">
+        Poll interval:
+        <select id="gmail-poll-interval" onchange="gmailUpdateConfig()" style="background:#191919;color:#fff;border:1px solid #383838;border-radius:6px;padding:6px;">
+          <option value="1">1 min</option>
+          <option value="5" selected>5 min</option>
+          <option value="10">10 min</option>
+          <option value="15">15 min</option>
+          <option value="30">30 min</option>
+        </select>
+      </label>
+      <label style="color:#a3a3a3;font-size:12px;display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" id="gmail-draft-only" checked onchange="gmailUpdateConfig()"> Draft-only mode
+      </label>
+    </div>
+    <div id="gmail-error" style="color:#f87171;margin-bottom:10px;display:none;"></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <button class="btn btn-ghost btn-sm" onclick="window.open('/gmail/jd-files','_blank')">Open JD Folder</button>
+      <button class="btn btn-ghost btn-sm" onclick="window.open('/gmail/drafts','_blank')">Open Draft List</button>
+      <button class="btn btn-ghost btn-sm" onclick="gmailViewLog()">View Log</button>
+    </div>
+    <h3 style="margin-top:16px;">Recent Events</h3>
+    <div id="gmail-events" style="max-height:350px;overflow-y:auto;">
+      <div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">No events yet. Start monitoring to check for important emails.</div>
+    </div>
   </div>
 </div>
 
@@ -859,6 +904,179 @@ function stopPolling() {
 // Start polling when page loads
 document.addEventListener("DOMContentLoaded", startPolling);
 window.addEventListener("beforeunload", stopPolling);
+
+// ── Gmail Monitor ──────────────────────────────────────────────────────────
+let gmailPollInterval = null;
+
+function openGmailMonitor() {
+  document.getElementById('gmail-overlay').classList.remove('hidden');
+  gmailRefresh();
+}
+function closeGmailMonitor() {
+  document.getElementById('gmail-overlay').classList.add('hidden');
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeGmailMonitor();
+});
+document.getElementById('gmail-overlay').addEventListener('click', function(e) {
+  if (e.target.id === 'gmail-overlay') closeGmailMonitor();
+});
+
+async function gmailStart() {
+  try {
+    const res = await fetch('/gmail/start', {method:'POST'});
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('gmail-start-btn').disabled = true;
+      document.getElementById('gmail-stop-btn').disabled = false;
+      document.getElementById('gmail-connection-status').textContent = 'Monitoring...';
+      document.getElementById('gmail-connection-status').style.color = '#22c55e';
+    } else {
+      showGmailError(data.detail || 'Failed to start');
+    }
+  } catch(e) { showGmailError('Connection error'); }
+  gmailRefresh();
+}
+
+async function gmailStop() {
+  try {
+    const res = await fetch('/gmail/stop', {method:'POST'});
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('gmail-start-btn').disabled = false;
+      document.getElementById('gmail-stop-btn').disabled = true;
+      document.getElementById('gmail-connection-status').textContent = 'Stopped';
+      document.getElementById('gmail-connection-status').style.color = '#f59e0b';
+    }
+  } catch(e) { showGmailError('Connection error'); }
+  gmailRefresh();
+}
+
+async function gmailCheckNow() {
+  try {
+    const res = await fetch('/gmail/check-now', {method:'POST'});
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('gmail-last-checked').textContent = 'Last checked: just now';
+    } else {
+      showGmailError(data.detail || 'Check failed');
+    }
+  } catch(e) { showGmailError('Connection error'); }
+  gmailRefresh();
+}
+
+async function gmailRefresh() {
+  try {
+    const [statusRes, eventsRes, configRes] = await Promise.all([
+      fetch('/gmail/status'),
+      fetch('/gmail/events'),
+      fetch('/gmail/config')
+    ]);
+    const status = await statusRes.json();
+    const events = await eventsRes.json();
+    const config = await configRes.json();
+
+    // Update connection status
+    const connEl = document.getElementById('gmail-connection-status');
+    if (status.connected) {
+      connEl.textContent = 'Connected';
+      connEl.style.color = '#22c55e';
+    } else {
+      connEl.textContent = status.error_message || 'Not connected';
+      connEl.style.color = '#ef4444';
+    }
+
+    // Update last checked
+    if (status.last_checked) {
+      document.getElementById('gmail-last-checked').textContent = 'Last checked: ' + status.last_checked;
+    }
+
+    // Update counts
+    document.getElementById('gmail-important-count').textContent = 'Important today: ' + (status.important_count_today || 0);
+    document.getElementById('gmail-jd-count').textContent = 'JD files: ' + (status.jd_files_today || 0);
+    document.getElementById('gmail-draft-count').textContent = 'Drafts: ' + (status.drafts_today || 0);
+
+    // Update poll interval
+    if (config.poll_interval_minutes) {
+      document.getElementById('gmail-poll-interval').value = String(config.poll_interval_minutes);
+    }
+
+    // Update draft-only toggle
+    document.getElementById('gmail-draft-only').checked = config.draft_only !== false;
+
+    // Update start/stop buttons
+    if (status.monitoring_active) {
+      document.getElementById('gmail-start-btn').disabled = true;
+      document.getElementById('gmail-stop-btn').disabled = false;
+    } else {
+      document.getElementById('gmail-start-btn').disabled = false;
+      document.getElementById('gmail-stop-btn').disabled = true;
+    }
+
+    // Update events table
+    const eventsEl = document.getElementById('gmail-events');
+    if (events.events && events.events.length > 0) {
+      let html = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+      html += '<thead><tr style="color:#a3a3a3;border-bottom:1px solid #383838;">';
+      html += '<th style="padding:6px 8px;text-align:left;">Time</th>';
+      html += '<th style="padding:6px 8px;text-align:left;">From</th>';
+      html += '<th style="padding:6px 8px;text-align:left;">Subject</th>';
+      html += '<th style="padding:6px 8px;text-align:left;">Category</th>';
+      html += '<th style="padding:6px 8px;text-align:left;">Importance</th>';
+      html += '<th style="padding:6px 8px;text-align:left;">Summary</th>';
+      html += '<th style="padding:6px 8px;text-align:left;">JD</th>';
+      html += '<th style="padding:6px 8px;text-align:left;">Draft</th>';
+      html += '</tr></thead><tbody>';
+      for (const ev of events.events) {
+        html += '<tr style="border-bottom:1px solid #27272a;">';
+        html += '<td style="padding:6px 8px;">' + (ev.detected_at || ev.email_date || '') + '</td>';
+        html += '<td style="padding:6px 8px;">' + escapeHtml(ev.from || '') + '</td>';
+        html += '<td style="padding:6px 8px;">' + escapeHtml(ev.subject || '') + '</td>';
+        html += '<td style="padding:6px 8px;">' + escapeHtml(ev.category || '') + '</td>';
+        html += '<td style="padding:6px 8px;">' + escapeHtml(ev.importance || '') + '</td>';
+        html += '<td style="padding:6px 8px;">' + escapeHtml(ev.summary || '') + '</td>';
+        html += '<td style="padding:6px 8px;">' + (ev.jd_saved_path ? '✓' : '') + '</td>';
+        html += '<td style="padding:6px 8px;">' + (ev.draft_path ? '✓' : '') + '</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+      eventsEl.innerHTML = html;
+    } else {
+      eventsEl.innerHTML = '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">No events yet.</div>';
+    }
+  } catch(e) { /* poll retries */ }
+}
+
+async function gmailUpdateConfig() {
+  try {
+    const interval = parseInt(document.getElementById('gmail-poll-interval').value);
+    const draftOnly = document.getElementById('gmail-draft-only').checked;
+    const res = await fetch('/gmail/config', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({poll_interval_minutes: interval, draft_only: draftOnly})
+    });
+    if (!res.ok) showGmailError('Failed to update config');
+  } catch(e) { showGmailError('Connection error'); }
+}
+
+function showGmailError(msg) {
+  const el = document.getElementById('gmail-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+
+function gmailViewLog() {
+  const today = new Date().toISOString().split('T')[0];
+  window.open('/notes/gmail_monitor_log_' + today + '.jsonl', '_blank');
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'"');
+}
+
 </script>
 </body>
 </html>

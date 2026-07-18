@@ -18,3 +18,12 @@ temp_audio/
 .hypothesis/
 probe_routes.py
 _test_imports.py
+
+# Gmail Monitor — Secrets and data
+config/gmail_credentials.json
+config/gmail_token.json
+config/*.secret.json
+data/gmail_processed.json
+jobs_jd/
+notes/gmail_monitor_log_*.jsonl
+notes/gmail_drafts/

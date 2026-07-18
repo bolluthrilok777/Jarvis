@@ -1,7 +1,7 @@
 # Jarvis Local Agent — Project Status
 
-**Phase:** 5A-1 — AI Command Center & Multitask Queue  
-**Last updated:** 2026-07-15  
+**Phase:** 5A-2 — Gmail Monitoring v1  
+**Last updated:** 2026-07-17  
 **Status:** Stable, all routes verified
 
 ---
@@ -390,3 +390,102 @@ created → interpreting → queued → running → completed
   66  Phase 5A-1 tests (orchestrator + task_manager + task_routes)
   81  pre-existing tests (imports, routes, tools, security, voice, action_engine)
 ```
+
+---
+
+## Phase 5A-2 — Gmail Monitoring v1
+
+**Added:** 2026-07-17  
+**Status:** Complete — all tests passing
+
+### What Changed
+
+Phase 5A-2 adds a safe, local Gmail monitoring system that runs 24/7 alongside Jarvis. It monitors Gmail for job-related emails, downloads JD attachments, creates draft replies (never auto-sent by default), and logs all important emails to JSONL files.
+
+### New Modules
+
+| File | Purpose |
+|------|---------|
+| `jarvis_core/gmail_models.py` | Pydantic models: GmailConfig, GmailEvent, GmailMessagePreview, ClassificationResult, DraftContent, GmailMonitorState |
+| `jarvis_core/gmail_service.py` | Gmail API wrapper: auth, fetch messages, download attachments, create drafts |
+| `jarvis_core/gmail_classifier.py` | AI + deterministic email classification for job-related emails |
+| `jarvis_core/jd_saver.py` | JD attachment download and link saving to `jobs_jd/` folder |
+| `jarvis_core/draft_writer.py` | Draft reply generation with safety checks |
+| `jarvis_core/gmail_monitor.py` | Background monitor thread with configurable polling |
+| `jarvis_core/gmail_routes.py` | FastAPI endpoints for Gmail monitor control |
+| `config/gmail_monitor.json` | Default config (draft-only, 5-min interval) |
+| `tests/test_gmail_monitor.py` | 30+ tests covering all Gmail monitor features |
+
+### Gmail API Routes
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /gmail/status | Monitor status, connection state, counts |
+| POST | /gmail/start | Start background monitoring |
+| POST | /gmail/stop | Stop background monitoring |
+| POST | /gmail/check-now | Force an immediate check |
+| GET | /gmail/events | Today's important email events |
+| GET | /gmail/config | Current configuration |
+| POST | /gmail/config | Update configuration |
+| GET | /gmail/jd-files | List saved JD files |
+| GET | /gmail/drafts | List created draft replies |
+| POST | /gmail/send-draft | Send a draft (requires confirm_send=true) |
+
+### Key Behaviors
+
+- **Background monitoring** runs in a thread, does not block Jarvis
+- **Configurable poll interval**: 1, 5, 10, 15, or 30 minutes
+- **AI classification** with deterministic keyword pre-filter to reduce cost
+- **JD attachments** saved to `C:\Jarvis\jobs_jd\YYYY-MM-DD\` with safe filenames
+- **Dangerous attachments** (.exe, .bat, .cmd, .ps1, .vbs, .js, .msi) are blocked
+- **Draft-only mode** by default — never auto-sends email
+- **Deduplication** via `data/gmail_processed.json` — same email not processed twice
+- **Error resilience** — one email failure does not crash the monitor
+- **No full email bodies** logged — only sender, subject, snippet, and attachment names
+
+### Safety Controls
+
+- **Draft-only mode** is enabled by default (`draft_only: true`)
+- **Auto-send disabled** by default (`auto_send_enabled: false`)
+- **send-draft endpoint** requires `confirm_send: true` in request body
+- **Never auto-send**: salary negotiation, resignation, offer acceptance/rejection, legal/payment messages, confidential data, or attachments
+- **OAuth scopes** are least-privilege: read, download attachments, create drafts only
+- **No send permission** requested unless auto_send is explicitly enabled
+- **Credentials and tokens** excluded from Git via .gitignore
+- **No secrets logged** — tokens never appear in logs
+
+### Gmail Connection Status
+
+- **Not connected** — Gmail credentials not configured. To connect:
+  1. Enable Gmail API in Google Cloud Console
+  2. Download OAuth credentials as `config/gmail_credentials.json`
+  3. Run Jarvis and complete OAuth flow
+  4. Token saved to `config/gmail_token.json`
+- **Connected** — Gmail API is authenticated and monitoring is available
+
+### JD Save Folder
+
+```
+C:\Jarvis\jobs_jd\YYYY-MM-DD\
+  YYYY-MM-DD_HH-mm_FROM_COMPANY_SUBJECT_originalfilename.pdf
+  YYYY-MM-DD_HH-mm_FROM_COMPANY_SUBJECT_link.txt
+```
+
+### Draft-Only Safety
+
+All generated replies are saved as Gmail drafts only. They appear in the Jarvis UI for review. No email is sent automatically unless:
+1. `auto_send_enabled` is explicitly set to `true` in config
+2. Sender is allowlisted
+3. Category is allowlisted
+4. Generated reply matches an approved template
+5. No payment/offer/legal/salary commitment is made
+
+### Remaining Limitations
+
+- Gmail OAuth setup requires manual Google Cloud Console configuration
+- No multi-account support
+- No email search/filter customization beyond categories
+- JD link download is limited to safely accessible URLs (no login pages)
+- Drafts are created but not tracked for user review completion
+- No email threading or conversation view
+- Monitor resets on server restart (processed IDs persist in data/gmail_processed.json)

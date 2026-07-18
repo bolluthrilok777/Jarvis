@@ -1,6 +1,6 @@
 # Jarvis Local Agent — Roadmap
 
-**Current phase:** Phase 5A-1 — AI Command Center & Multitask Queue (COMPLETED)
+**Current phase:** Phase 5A-2 — Gmail Monitoring v1 (COMPLETED 2026-07-17)
 
 The following phases are planned but NOT yet implemented. They are listed here for planning purposes only.
 
@@ -19,6 +19,24 @@ The following phases are planned but NOT yet implemented. They are listed here f
 Phase 5A-1 adds a structured task queue with risk-based execution, concurrency control, and a full task lifecycle API. Users can submit multiple commands at once, review protected actions before execution, and track task status through the UI.
 
 **Scope:** Task queue, risk classification, concurrency control, duplicate prevention, safety validation.
+
+---
+
+## ✅ Phase 5A-2 — Gmail Monitoring v1 (COMPLETED 2026-07-17)
+
+Phase 5A-2 adds a safe, local Gmail monitoring system that runs 24/7 alongside Jarvis. It monitors Gmail for job-related emails, downloads JD attachments, creates draft replies (never auto-sent by default), and logs all important emails to JSONL files.
+
+**Key features:**
+- Background thread monitoring with configurable poll interval (1/5/10/15/30 min)
+- AI + deterministic classification for job-related emails
+- JD attachment download and safe storage to `jobs_jd/YYYY-MM-DD/`
+- Draft-only safety mode (no auto-sending by default)
+- Deduplication via `data/gmail_processed.json`
+- Full REST API with 10 endpoints
+- Web UI panel with live status and event table
+- 30+ automated tests with mocks
+
+**Scope:** Gmail API (read, download, draft). No auto-send unless explicitly configured. No multi-account. No email threading.
 
 ---
 
@@ -62,9 +80,11 @@ Add time-based task scheduling. Users can set reminders or recurring jobs that J
 
 ---
 
-## Phase 10 — Email and Calendar
+## Phase 10 — Email and Calendar (Partially covered by Phase 5A-2)
 
 Integrate with local or API-based email (IMAP/SMTP) and calendar (CalDAV or Microsoft Graph). Jarvis can read, draft, and send messages with explicit user confirmation.
+
+**Note:** Gmail monitoring (read, classify, draft) was delivered in Phase 5A-2. Remaining for this phase: multi-account support, email sending with confirmation, calendar integration, and non-Gmail providers.
 
 **Scope:** All email and calendar actions require confirmation before execution.
 

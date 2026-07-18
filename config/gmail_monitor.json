@@ -1,0 +1,10 @@
+{
+  "enabled": false,
+  "poll_interval_minutes": 5,
+  "draft_only": true,
+  "auto_send_enabled": false,
+  "allowed_auto_send_categories": [],
+  "allowed_senders": [],
+  "save_jd_folder": "C:\\Jarvis\\jobs_jd",
+  "log_folder": "C:\\Jarvis\\notes"
+}
