@@ -39,6 +39,8 @@ SCOPES_WITH_SEND = [
 _gmail_service = None
 _credentials_available = False
 
+EXPECTED_REDIRECT_URI = "http://127.0.0.1:8000/gmail/oauth/callback"
+
 
 def credentials_exist() -> bool:
     """Check if Gmail credentials file exists."""
@@ -62,8 +64,10 @@ def _get_credentials() -> Any:
             return None
         with open(CREDENTIALS_FILE, "r", encoding="utf-8") as f:
             creds_data = json.load(f)
-        # Return raw dict - we'll use google.oauth2 if available
         return creds_data
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse Gmail credentials JSON: %s", e)
+        return None
     except Exception as e:
         logger.error("Failed to load Gmail credentials: %s", e)
         return None
@@ -145,6 +149,314 @@ def reset_service() -> None:
     global _gmail_service, _credentials_available
     _gmail_service = None
     _credentials_available = False
+
+
+# ── OAuth Flow Methods ────────────────────────────────────────────────────
+
+
+def _is_web_credentials(data: dict) -> bool:
+    """Check if credentials are Web application type."""
+    return "web" in data and isinstance(data["web"], dict)
+
+
+def _is_installed_credentials(data: dict) -> bool:
+    """Check if credentials are Desktop (installed) application type."""
+    return "installed" in data and isinstance(data["installed"], dict)
+
+
+def _get_credentials_type(data: dict) -> str:
+    """Return 'web', 'installed', or 'unknown'."""
+    if _is_web_credentials(data):
+        return "web"
+    if _is_installed_credentials(data):
+        return "installed"
+    return "unknown"
+
+
+def validate_credentials_json(data: dict) -> tuple[bool, str]:
+    """Validate uploaded credentials JSON.
+
+    Returns (is_valid, error_message).
+    """
+    if not isinstance(data, dict):
+        return False, "Invalid JSON: must be an object"
+
+    # Check for installed or web client info
+    installed = data.get("installed")
+    web = data.get("web")
+    if not installed and not web:
+        return False, "Missing 'installed' or 'web' OAuth client info"
+
+    client_info = installed or web
+
+    if not isinstance(client_info, dict):
+        return False, "Client info must be an object"
+
+    if "client_id" not in client_info:
+        return False, "Missing 'client_id' in credentials"
+
+    if "auth_uri" not in client_info:
+        return False, "Missing 'auth_uri' in credentials"
+
+    if "token_uri" not in client_info:
+        return False, "Missing 'token_uri' in credentials"
+
+    client_id = client_info.get("client_id", "")
+    if not client_id or client_id == "":
+        return False, "client_id is empty"
+
+    return True, ""
+
+
+def save_credentials_json(data: dict) -> bool:
+    """Save validated credentials JSON to file.
+
+    Never logs or exposes client_secret.
+    """
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        # Strip any sensitive logging before saving
+        with open(CREDENTIALS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        logger.info("Gmail OAuth credentials saved to %s", CREDENTIALS_FILE)
+        return True
+    except Exception as e:
+        logger.error("Failed to save credentials: %s", e)
+        return False
+
+
+def _validate_web_credentials_for_auth(creds_data: dict) -> Optional[str]:
+    """Validate web credentials have all required fields for OAuth.
+
+    Returns None if valid, or an error message string if invalid.
+    Never exposes client_secret in the returned message.
+    """
+    web = creds_data.get("web")
+    if not web or not isinstance(web, dict):
+        return "Credentials missing 'web' block for Web application OAuth"
+
+    if not web.get("client_id"):
+        return "Missing client_id in OAuth credentials"
+
+    if not web.get("client_secret"):
+        return "Missing client_secret in OAuth credentials"
+
+    if not web.get("auth_uri"):
+        return "Missing auth_uri in OAuth credentials"
+
+    if not web.get("token_uri"):
+        return "Missing token_uri in OAuth credentials"
+
+    redirect_uris = web.get("redirect_uris", [])
+    if EXPECTED_REDIRECT_URI not in redirect_uris:
+        return (
+            f"Redirect URI {EXPECTED_REDIRECT_URI} not found in credentials. "
+            f"Configured URIs: {redirect_uris}"
+        )
+
+    return None
+
+
+def get_authorization_url() -> tuple[Optional[str], Optional[str]]:
+    """Generate Google OAuth authorization URL.
+
+    Returns (url, error_message) tuple.
+    On success: (url_string, None)
+    On failure: (None, error_message_string)
+    Never exposes client_secret in error_message.
+    """
+    # Check dependency first
+    try:
+        from google_auth_oauthlib.flow import Flow, InstalledAppFlow
+    except ImportError:
+        logger.warning("google-auth-oauthlib not installed")
+        return (
+            None,
+            "Missing required library: google-auth-oauthlib. "
+            "Install with: pip install google-auth-oauthlib",
+        )
+
+    creds_data = _get_credentials()
+    if creds_data is None:
+        logger.warning("Cannot start OAuth: credentials not found or invalid JSON")
+        return (None, "Gmail OAuth credentials file not found or contains invalid JSON")
+
+    creds_type = _get_credentials_type(creds_data)
+    if creds_type == "unknown":
+        logger.warning("Invalid credentials format: missing 'installed' or 'web'")
+        return (
+            None,
+            "Invalid credentials format. Must contain 'web' or 'installed' key.",
+        )
+
+    if creds_type == "installed":
+        return (
+            None,
+            "Please upload Web application OAuth credentials with redirect URI "
+            f"{EXPECTED_REDIRECT_URI}",
+        )
+
+    # creds_type == "web" - validate all required fields
+    validation_error = _validate_web_credentials_for_auth(creds_data)
+    if validation_error is not None:
+        logger.warning("Web credentials validation failed: %s", validation_error)
+        return (None, validation_error)
+
+    try:
+        # Pass the FULL credentials object (including the "web" key wrapper)
+        # Google's Flow.from_client_config expects the full shape:
+        #   {"web": {"client_id": "...", "client_secret": "...", ...}}
+        # NOT just the inner {"client_id": "...", ...} dict.
+        flow = Flow.from_client_config(
+            creds_data, scopes=SCOPES_READ_ONLY
+        )
+
+        flow.redirect_uri = EXPECTED_REDIRECT_URI
+
+        auth_url, _ = flow.authorization_url(
+            access_type="offline",
+            include_granted_scopes="true",
+            prompt="consent",
+        )
+
+        logger.info("Generated OAuth authorization URL")
+        return (auth_url, None)
+
+    except Exception as e:
+        error_str = str(e)
+        logger.error("Failed to generate authorization URL: %s", error_str)
+        # Return a safe generic error - don't expose internals
+        return (None, f"Failed to generate authorization URL: {error_str[:200]}")
+
+
+def exchange_code_for_token(code: str) -> tuple[bool, str]:
+    """Exchange OAuth authorization code for token.
+
+    Returns (success, message_or_email).
+    Never logs or exposes token values, refresh tokens, or client secrets.
+    """
+    try:
+        from google_auth_oauthlib.flow import Flow, InstalledAppFlow
+
+        creds_data = _get_credentials()
+        if creds_data is None:
+            logger.warning("OAuth token exchange failed: credentials not found")
+            return False, "Credentials not found"
+
+        creds_type = _get_credentials_type(creds_data)
+        if creds_type == "unknown":
+            logger.warning("OAuth token exchange failed: invalid credentials format")
+            return False, "Invalid credentials format"
+
+        # For web credentials, use Flow directly (not InstalledAppFlow)
+        # For installed credentials, use InstalledAppFlow
+        if creds_type == "web":
+            # Pass the FULL credentials object (including the "web" key wrapper)
+            flow = Flow.from_client_config(
+                creds_data, scopes=SCOPES_READ_ONLY
+            )
+        else:
+            flow = InstalledAppFlow.from_client_config(
+                creds_data, scopes=SCOPES_READ_ONLY
+            )
+
+        flow.redirect_uri = EXPECTED_REDIRECT_URI
+
+        # Exchange the code
+        flow.fetch_token(code=code)
+
+        creds = flow.credentials
+
+        # Save token
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        with open(TOKEN_FILE, "w", encoding="utf-8") as f:
+            f.write(creds.to_json())
+
+        logger.info("Token saved: yes")
+        logger.info("Token file path exists: yes")
+        reset_service()
+
+        # Try to get account email
+        logger.info("Gmail profile fetch: attempting")
+        email = get_account_email()
+        if email:
+            logger.info("Gmail profile fetch: success")
+            return True, email
+        logger.info("Gmail profile fetch: failure (no email returned)")
+        return True, "Token saved (email unknown)"
+
+    except ImportError:
+        logger.warning("Google OAuth libraries not installed")
+        return False, "Google OAuth libraries not installed"
+    except Exception as e:
+        error_str = str(e).lower()
+        if "redirect_uri_mismatch" in error_str:
+            return False, "Redirect URI mismatch. Use http://127.0.0.1:8000/gmail/oauth/callback in Google Cloud Console"
+        elif "access_denied" in error_str:
+            return False, "Access denied by user"
+        elif "invalid_grant" in error_str:
+            return False, "Invalid authorization code. Please try again"
+        else:
+            logger.error("Failed to exchange code for token: %s", e)
+            return False, f"Token exchange failed: {str(e)[:200]}"
+
+
+def get_account_email() -> Optional[str]:
+    """Get the authenticated Gmail account email address.
+
+    Returns email string, or None if not available.
+    """
+    service = _build_service()
+    if service is None:
+        return None
+
+    try:
+        profile = service.users().getProfile(userId="me").execute()
+        return profile.get("emailAddress", None)
+    except Exception as e:
+        logger.warning("Failed to get account email: %s", e)
+        return None
+
+
+def delete_token() -> bool:
+    """Delete the Gmail token file.
+
+    Returns True if deleted or not found, False on error.
+    """
+    global _gmail_service, _credentials_available
+    _gmail_service = None
+    _credentials_available = False
+
+    try:
+        if TOKEN_FILE.exists():
+            TOKEN_FILE.unlink()
+            logger.info("Gmail token deleted")
+        return True
+    except Exception as e:
+        logger.error("Failed to delete token: %s", e)
+        return False
+
+
+def delete_credentials() -> bool:
+    """Delete the Gmail credentials file.
+
+    Returns True if deleted or not found, False on error.
+    """
+    global _gmail_service, _credentials_available
+    _gmail_service = None
+    _credentials_available = False
+
+    try:
+        if CREDENTIALS_FILE.exists():
+            CREDENTIALS_FILE.unlink()
+            logger.info("Gmail credentials deleted")
+        return True
+    except Exception as e:
+        logger.error("Failed to delete credentials: %s", e)
+        return False
+
+
+# ── Existing Gmail API Methods ────────────────────────────────────────────
 
 
 def list_recent_messages(max_results: int = 20) -> list[GmailMessagePreview]:

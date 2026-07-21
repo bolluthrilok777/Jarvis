@@ -114,3 +114,9 @@ class GmailMonitorState(BaseModel):
     error_message: str = ""
     poll_interval_minutes: int = 5
     draft_only: bool = True
+    # New fields for Gmail Connect UI
+    credentials_configured: bool = False
+    token_configured: bool = False
+    account_email: Optional[str] = None
+    monitoring_active: bool = False
+    auto_send_enabled: bool = False

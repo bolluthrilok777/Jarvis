@@ -173,27 +173,25 @@ def save_draft_to_file(draft: DraftContent) -> Optional[Path]:
 
 
 def list_drafts() -> list[dict]:
-    """List all saved draft files.
+    """List saved draft files.
 
-    Returns list of dicts with 'path', 'filename', 'created', 'type'.
+    Returns list of draft file info dicts.
     """
-    if not DRAFTS_DIR.exists():
+    drafts_dir = _ensure_drafts_dir()
+    if not drafts_dir.exists():
         return []
 
-    drafts = []
-    for f in sorted(DRAFTS_DIR.iterdir(), reverse=True):
-        if f.is_file() and f.suffix == ".txt":
-            # Parse type from filename
-            parts = f.stem.split("_")
-            draft_type = parts[-1] if len(parts) > 1 else "unknown"
-            drafts.append({
+    files = []
+    for f in sorted(drafts_dir.iterdir(), reverse=True):
+        if f.is_file() and f.suffix in (".txt", ".md", ".json"):
+            files.append({
                 "path": str(f),
                 "filename": f.name,
-                "type": draft_type,
                 "size": f.stat().st_size,
+                "modified": datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
             })
 
-    return drafts
+    return files
 
 
 def can_auto_send(

@@ -381,38 +381,110 @@
   <div class="monitor-dialog" style="width:min(900px,95vw);max-height:90vh;overflow-y:auto;">
     <button class="modal-close" type="button" aria-label="Close Gmail monitor" onclick="closeGmailMonitor()">&times;</button>
     <h1>Gmail Monitor</h1>
+
+    <!-- Connection Status Bar -->
     <div id="gmail-status-bar" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:12px;background:#191919;border-radius:10px;">
       <span id="gmail-connection-status" style="color:#ef4444;">Not connected</span>
+      <span id="gmail-account-email" style="color:#94a3b8;display:none;"></span>
       <span id="gmail-last-checked">Last checked: —</span>
       <span id="gmail-important-count">Important today: 0</span>
       <span id="gmail-jd-count">JD files: 0</span>
       <span id="gmail-draft-count">Drafts: 0</span>
     </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
-      <button class="btn btn-primary" id="gmail-start-btn" onclick="gmailStart()">Start Monitoring</button>
-      <button class="btn" id="gmail-stop-btn" onclick="gmailStop()" disabled>Stop Monitoring</button>
-      <button class="btn btn-ghost" onclick="gmailCheckNow()">Check Now</button>
-      <button class="btn btn-ghost" onclick="gmailRefresh()">Refresh</button>
-      <label style="color:#a3a3a3;font-size:12px;display:flex;align-items:center;gap:6px;">
-        Poll interval:
-        <select id="gmail-poll-interval" onchange="gmailUpdateConfig()" style="background:#191919;color:#fff;border:1px solid #383838;border-radius:6px;padding:6px;">
-          <option value="1">1 min</option>
-          <option value="5" selected>5 min</option>
-          <option value="10">10 min</option>
-          <option value="15">15 min</option>
-          <option value="30">30 min</option>
-        </select>
-      </label>
-      <label style="color:#a3a3a3;font-size:12px;display:flex;align-items:center;gap:6px;">
-        <input type="checkbox" id="gmail-draft-only" checked onchange="gmailUpdateConfig()"> Draft-only mode
-      </label>
+
+    <!-- Not Connected: Setup Card -->
+    <div id="gmail-setup-card" style="background:#191919;border-radius:10px;padding:16px;margin-bottom:14px;">
+      <h3 style="color:#f4cf63;margin:0 0 8px 0;">Gmail is not connected</h3>
+      <p style="color:#a3a3a3;font-size:13px;margin:0 0 12px 0;">Connect Gmail to enable JD monitoring and draft replies.</p>
+
+      <!-- Step 1: Credentials -->
+      <div style="padding:10px;background:#111;border-radius:8px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="background:#d4af37;color:#090909;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">1</span>
+          <span style="color:#f4f4f5;font-size:14px;font-weight:600;">Upload Google OAuth credentials JSON</span>
+          <span id="gmail-creds-status" style="font-size:12px;color:#ef4444;">Not configured</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <input type="file" id="gmail-creds-file" accept=".json" style="display:none;" onchange="gmailUploadFile()">
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('gmail-creds-file').click()">Upload JSON file</button>
+          <button class="btn btn-ghost btn-sm" onclick="gmailShowPasteJson()">Paste JSON manually</button>
+          <button class="btn btn-ghost btn-sm" onclick="gmailToggleInstructions()">How to get credentials</button>
+        </div>
+        <!-- Paste JSON area -->
+        <div id="gmail-paste-json-area" style="display:none;margin-top:8px;">
+          <textarea id="gmail-paste-json" style="width:100%;height:100px;background:#0f172a;color:#e2e8f0;border:1px solid #383838;border-radius:6px;padding:8px;font-family:monospace;font-size:12px;" placeholder='Paste your credentials JSON here...'></textarea>
+          <button class="btn btn-primary btn-sm" style="margin-top:6px;" onclick="gmailSavePastedJson()">Save Credentials</button>
+        </div>
+        <!-- Setup Instructions -->
+        <div id="gmail-instructions" style="display:none;margin-top:10px;padding:12px;background:#0f172a;border-radius:8px;font-size:12px;color:#cbd5e1;line-height:1.6;">
+          <strong style="color:#f4cf63;">How to get Gmail credentials:</strong>
+          <ol style="margin:8px 0;padding-left:20px;">
+            <li>Open <a href="https://console.cloud.google.com" target="_blank" style="color:#38bdf8;">Google Cloud Console</a>.</li>
+            <li>Create or select a project.</li>
+            <li>Enable <strong>Gmail API</strong>.</li>
+            <li>Configure <strong>OAuth consent screen</strong> (External or Internal).</li>
+            <li>Add your Gmail address as a <strong>test user</strong>.</li>
+            <li>Create <strong>OAuth Client ID</strong> (Application type: Desktop app).</li>
+            <li>Download the JSON file.</li>
+            <li>Upload it here in Jarvis.</li>
+          </ol>
+          <p style="color:#f87171;margin:4px 0;"><strong>⚠️ Security:</strong> Do not share this file. Do not commit it to Git.</p>
+        </div>
+      </div>
+
+      <!-- Step 2: Connect -->
+      <div style="padding:10px;background:#111;border-radius:8px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="background:#d4af37;color:#090909;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">2</span>
+          <span style="color:#f4f4f5;font-size:14px;font-weight:600;">Click Connect Gmail</span>
+          <span id="gmail-token-status" style="font-size:12px;color:#ef4444;">Login required</span>
+        </div>
+        <button class="btn btn-primary" id="gmail-connect-btn" onclick="gmailConnect()">Connect Gmail</button>
+      </div>
+
+      <!-- Step 3: Login -->
+      <div style="padding:10px;background:#111;border-radius:8px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="background:#d4af37;color:#090909;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">3</span>
+          <span style="color:#f4f4f5;font-size:14px;font-weight:600;">Login in browser and allow access</span>
+        </div>
+        <p style="color:#a3a3a3;font-size:12px;margin:0;">After clicking Connect Gmail, a browser tab will open for Google login. Grant access and you'll be redirected back.</p>
+      </div>
     </div>
+
+    <!-- Connected: Controls -->
+    <div id="gmail-connected-controls" style="display:none;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+        <button class="btn btn-primary" id="gmail-start-btn" onclick="gmailStart()">Start Monitoring</button>
+        <button class="btn" id="gmail-stop-btn" onclick="gmailStop()" disabled>Stop Monitoring</button>
+        <button class="btn btn-ghost" onclick="gmailCheckNow()">Check Now</button>
+        <button class="btn btn-ghost" onclick="gmailRefresh()">Refresh Status</button>
+        <button class="btn btn-danger" onclick="gmailDisconnect()">Disconnect Gmail</button>
+        <label style="color:#a3a3a3;font-size:12px;display:flex;align-items:center;gap:6px;">
+          Poll interval:
+          <select id="gmail-poll-interval" onchange="gmailUpdateConfig()" style="background:#191919;color:#fff;border:1px solid #383838;border-radius:6px;padding:6px;">
+            <option value="1">1 min</option>
+            <option value="5" selected>5 min</option>
+            <option value="10">10 min</option>
+            <option value="15">15 min</option>
+            <option value="30">30 min</option>
+          </select>
+        </label>
+        <label style="color:#a3a3a3;font-size:12px;display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="gmail-draft-only" checked onchange="gmailUpdateConfig()"> Draft-only mode
+        </label>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="window.open('/gmail/jd-files','_blank')">Open JD Folder</button>
+        <button class="btn btn-ghost btn-sm" onclick="window.open('/gmail/drafts','_blank')">Open Draft List</button>
+        <button class="btn btn-ghost btn-sm" onclick="gmailViewLog()">View Log</button>
+      </div>
+    </div>
+
+    <!-- Error display -->
     <div id="gmail-error" style="color:#f87171;margin-bottom:10px;display:none;"></div>
-    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-      <button class="btn btn-ghost btn-sm" onclick="window.open('/gmail/jd-files','_blank')">Open JD Folder</button>
-      <button class="btn btn-ghost btn-sm" onclick="window.open('/gmail/drafts','_blank')">Open Draft List</button>
-      <button class="btn btn-ghost btn-sm" onclick="gmailViewLog()">View Log</button>
-    </div>
+
+    <!-- Recent Events -->
     <h3 style="margin-top:16px;">Recent Events</h3>
     <div id="gmail-events" style="max-height:350px;overflow-y:auto;">
       <div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">No events yet. Start monitoring to check for important emails.</div>
@@ -922,6 +994,115 @@ document.getElementById('gmail-overlay').addEventListener('click', function(e) {
   if (e.target.id === 'gmail-overlay') closeGmailMonitor();
 });
 
+// ── Gmail Connect UI ──────────────────────────────────────────────────────
+
+function gmailToggleInstructions() {
+  const el = document.getElementById('gmail-instructions');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function gmailShowPasteJson() {
+  const el = document.getElementById('gmail-paste-json-area');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function gmailUploadFile() {
+  const fileInput = document.getElementById('gmail-creds-file');
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    // Validate JSON
+    JSON.parse(text); // throws if invalid
+    await gmailSaveCredentials(text);
+  } catch (e) {
+    showGmailError('Invalid JSON file: ' + e.message);
+  }
+  fileInput.value = '';
+}
+
+async function gmailSavePastedJson() {
+  const text = document.getElementById('gmail-paste-json').value;
+  if (!text.trim()) {
+    showGmailError('Please paste credentials JSON first');
+    return;
+  }
+  try {
+    JSON.parse(text); // validate
+    await gmailSaveCredentials(text);
+    document.getElementById('gmail-paste-json').value = '';
+    document.getElementById('gmail-paste-json-area').style.display = 'none';
+  } catch (e) {
+    showGmailError('Invalid JSON: ' + e.message);
+  }
+}
+
+async function gmailSaveCredentials(jsonStr) {
+  try {
+    const res = await fetch('/gmail/credentials/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ json_data: jsonStr })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('gmail-creds-status').textContent = 'Configured ✅';
+      document.getElementById('gmail-creds-status').style.color = '#22c55e';
+      showGmailError('Credentials saved successfully!');
+      gmailRefresh();
+    } else {
+      showGmailError(data.detail || 'Failed to save credentials');
+    }
+  } catch (e) {
+    showGmailError('Connection error: ' + e.message);
+  }
+}
+
+async function gmailConnect() {
+  try {
+    const res = await fetch('/gmail/connect');
+    const data = await res.json();
+
+    if (data.status === 'already_connected') {
+      showGmailError('Already connected: ' + (data.account_email || ''));
+      gmailRefresh();
+      return;
+    }
+
+    if (data.status === 'credentials_needed') {
+      showGmailError('Please upload Gmail OAuth credentials JSON first (Step 1)');
+      return;
+    }
+
+    if (data.authorization_url) {
+      // Open OAuth URL in new browser tab
+      window.open(data.authorization_url, '_blank');
+      showGmailError('OAuth window opened. Complete login in the browser tab, then return here.');
+    } else {
+      showGmailError('Failed to get authorization URL');
+    }
+  } catch (e) {
+    showGmailError('Connection error: ' + e.message);
+  }
+}
+
+async function gmailDisconnect() {
+  if (!confirm('Disconnect Gmail? This will delete your login token but keep credentials.')) return;
+  try {
+    const res = await fetch('/gmail/disconnect', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      showGmailError('Disconnected successfully');
+      gmailRefresh();
+    } else {
+      showGmailError(data.detail || 'Failed to disconnect');
+    }
+  } catch (e) {
+    showGmailError('Connection error: ' + e.message);
+  }
+}
+
 async function gmailStart() {
   try {
     const res = await fetch('/gmail/start', {method:'POST'});
@@ -978,12 +1159,49 @@ async function gmailRefresh() {
 
     // Update connection status
     const connEl = document.getElementById('gmail-connection-status');
+    const setupCard = document.getElementById('gmail-setup-card');
+    const connectedControls = document.getElementById('gmail-connected-controls');
+    const emailEl = document.getElementById('gmail-account-email');
+    const credsStatus = document.getElementById('gmail-creds-status');
+    const tokenStatus = document.getElementById('gmail-token-status');
+
     if (status.connected) {
       connEl.textContent = 'Connected';
       connEl.style.color = '#22c55e';
+      setupCard.style.display = 'none';
+      connectedControls.style.display = 'block';
+      if (status.account_email) {
+        emailEl.textContent = '📧 ' + status.account_email;
+        emailEl.style.display = 'inline';
+      }
+      credsStatus.textContent = 'Configured ✅';
+      credsStatus.style.color = '#22c55e';
+      tokenStatus.textContent = 'Login completed ✅';
+      tokenStatus.style.color = '#22c55e';
     } else {
       connEl.textContent = status.error_message || 'Not connected';
       connEl.style.color = '#ef4444';
+      setupCard.style.display = 'block';
+      connectedControls.style.display = 'none';
+      emailEl.style.display = 'none';
+
+      // Update credentials status
+      if (status.credentials_configured) {
+        credsStatus.textContent = 'Configured ✅';
+        credsStatus.style.color = '#22c55e';
+      } else {
+        credsStatus.textContent = 'Not configured';
+        credsStatus.style.color = '#ef4444';
+      }
+
+      // Update token status
+      if (status.token_configured) {
+        tokenStatus.textContent = 'Login completed ✅';
+        tokenStatus.style.color = '#22c55e';
+      } else {
+        tokenStatus.textContent = 'Login required';
+        tokenStatus.style.color = '#ef4444';
+      }
     }
 
     // Update last checked
@@ -992,9 +1210,9 @@ async function gmailRefresh() {
     }
 
     // Update counts
-    document.getElementById('gmail-important-count').textContent = 'Important today: ' + (status.important_count_today || 0);
-    document.getElementById('gmail-jd-count').textContent = 'JD files: ' + (status.jd_files_today || 0);
-    document.getElementById('gmail-draft-count').textContent = 'Drafts: ' + (status.drafts_today || 0);
+    document.getElementById('gmail-important-count').textContent = 'Important today: ' + (status.important_mails_today || 0);
+    document.getElementById('gmail-jd-count').textContent = 'JD files: ' + (status.jd_files_saved_today || 0);
+    document.getElementById('gmail-draft-count').textContent = 'Drafts: ' + (status.drafts_created_today || 0);
 
     // Update poll interval
     if (config.poll_interval_minutes) {
@@ -1005,7 +1223,7 @@ async function gmailRefresh() {
     document.getElementById('gmail-draft-only').checked = config.draft_only !== false;
 
     // Update start/stop buttons
-    if (status.monitoring_active) {
+    if (status.monitoring_active || status.running) {
       document.getElementById('gmail-start-btn').disabled = true;
       document.getElementById('gmail-stop-btn').disabled = false;
     } else {
@@ -1070,11 +1288,6 @@ function showGmailError(msg) {
 function gmailViewLog() {
   const today = new Date().toISOString().split('T')[0];
   window.open('/notes/gmail_monitor_log_' + today + '.jsonl', '_blank');
-}
-
-function escapeHtml(str) {
-  if (!str) return '';
-  return str.replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'"');
 }
 
 </script>

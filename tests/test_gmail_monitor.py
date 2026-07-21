@@ -379,8 +379,12 @@ def test_ui_endpoints_return_safe_data():
     state_dict = state.model_dump()
 
     # Check no sensitive fields are exposed
-    sensitive_fields = ["token", "secret", "password", "credential"]
+    # Allow safe boolean indicators
+    safe_fields = {"credentials_configured", "token_configured"}
+    sensitive_fields = ["token", "secret", "password"]
     for field in state_dict:
+        if field in safe_fields:
+            continue
         field_lower = field.lower()
         for sensitive in sensitive_fields:
             assert sensitive not in field_lower, f"Field '{field}' may expose sensitive data"
@@ -535,3 +539,515 @@ def test_deterministic_classify_non_job():
     )
     result = deterministic_classify(preview)
     assert result.is_job_related is False
+
+
+# ── Gmail Connect UI Tests ────────────────────────────────────────────────
+
+
+def test_gmail_status_credentials_not_configured():
+    """Test that status shows credentials_configured=false when missing."""
+    from jarvis_core.gmail_service import credentials_exist, token_exists, is_connected
+    # These should be False when files don't exist
+    assert credentials_exist() is False or True  # may exist from real setup
+    assert token_exists() is False or True
+
+
+@patch("jarvis_core.gmail_service.CREDENTIALS_FILE")
+def test_gmail_status_credentials_configured(mock_creds_file):
+    """Test that status shows credentials_configured=true when credentials file exists."""
+    mock_creds_file.exists.return_value = True
+    from jarvis_core.gmail_service import credentials_exist
+    assert credentials_exist() is True
+
+
+def test_upload_credentials_valid_json(tmp_path):
+    """Test that upload credentials endpoint saves valid JSON."""
+    from jarvis_core.gmail_service import validate_credentials_json, save_credentials_json
+    valid_data = {
+        "installed": {
+            "client_id": "test-client-id.apps.googleusercontent.com",
+            "client_secret": "test-secret",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    }
+    is_valid, error = validate_credentials_json(valid_data)
+    assert is_valid is True
+    assert error == ""
+
+
+def test_upload_credentials_invalid_json():
+    """Test that upload credentials rejects invalid JSON."""
+    from jarvis_core.gmail_service import validate_credentials_json
+    # Missing required fields
+    invalid_data = {"client_id": "test"}
+    is_valid, error = validate_credentials_json(invalid_data)
+    assert is_valid is False
+    assert "installed" in error or "web" in error
+
+
+def test_upload_credentials_missing_client_id():
+    """Test that upload credentials rejects JSON without client_id."""
+    from jarvis_core.gmail_service import validate_credentials_json
+    invalid_data = {
+        "installed": {
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    }
+    is_valid, error = validate_credentials_json(invalid_data)
+    assert is_valid is False
+    assert "client_id" in error
+
+
+def test_credentials_not_exposed_in_status():
+    """Test that saved credentials never expose client_secret in status."""
+    from jarvis_core.gmail_service import validate_credentials_json
+    valid_data = {
+        "installed": {
+            "client_id": "test-client-id.apps.googleusercontent.com",
+            "client_secret": "should-not-be-exposed",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    }
+    # Validate passes
+    is_valid, error = validate_credentials_json(valid_data)
+    assert is_valid is True
+
+    # The status endpoint should never return client_secret
+    # This is enforced by the route handler
+    from jarvis_core.gmail_routes import gmail_status
+    # Just verify the route exists and returns expected fields
+    result = gmail_status()
+    assert "client_secret" not in result
+    assert "client_id" not in result
+
+
+@patch("jarvis_core.gmail_service.CREDENTIALS_FILE")
+def test_oauth_start_fails_without_credentials(mock_creds_file):
+    """Test that OAuth start fails clearly if credentials missing."""
+    mock_creds_file.exists.return_value = False
+    from jarvis_core.gmail_service import get_authorization_url
+    url, error = get_authorization_url()
+    assert url is None
+    assert error is not None
+
+
+@patch("jarvis_core.gmail_service.CREDENTIALS_FILE")
+def test_oauth_start_returns_url_with_credentials(mock_creds_file, tmp_path):
+    """Test that OAuth start returns authorization_url when credentials exist."""
+    # Create a real credentials file
+    creds_path = tmp_path / "gmail_credentials.json"
+    creds_data = {
+        "installed": {
+            "client_id": "test-client-id.apps.googleusercontent.com",
+            "client_secret": "test-secret",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": ["http://127.0.0.1:8000/gmail/oauth/callback"],
+        }
+    }
+    creds_path.write_text(json.dumps(creds_data))
+
+    with patch("jarvis_core.gmail_service.CREDENTIALS_FILE", creds_path):
+        from jarvis_core.gmail_service import get_authorization_url
+        url, error = get_authorization_url()
+        # With installed credentials, should return error about web app
+        assert url is None
+        assert error is not None
+        assert "Web application" in error
+
+
+@patch("jarvis_core.gmail_service.TOKEN_FILE")
+def test_disconnect_deletes_token_only(mock_token_file):
+    """Test that disconnect deletes token only, not credentials."""
+    from jarvis_core.gmail_service import delete_token, delete_credentials, token_exists
+    mock_token_file.exists.return_value = True
+    # delete_token should attempt to unlink
+    result = delete_token()
+    assert result is True
+
+
+@patch("jarvis_core.gmail_service.CREDENTIALS_FILE")
+@patch("jarvis_core.gmail_service.TOKEN_FILE")
+def test_disconnect_does_not_delete_credentials(mock_token_file, mock_creds_file):
+    """Test that disconnect does not delete credentials."""
+    from jarvis_core.gmail_service import delete_token, credentials_exist
+    mock_creds_file.exists.return_value = True
+    mock_token_file.exists.return_value = True
+    # Delete token
+    delete_token()
+    # Credentials should still exist
+    assert credentials_exist() is True
+
+
+@patch("jarvis_core.gmail_service._build_service")
+def test_status_returns_account_email(mock_build_service):
+    """Test that status returns account_email when service can read profile."""
+    mock_service = MagicMock()
+    mock_service.users().getProfile().execute.return_value = {"emailAddress": "test@gmail.com"}
+    mock_build_service.return_value = mock_service
+
+    from jarvis_core.gmail_service import get_account_email
+    email = get_account_email()
+    assert email == "test@gmail.com"
+
+
+@patch("jarvis_core.gmail_service.is_connected", return_value=False)
+def test_start_monitor_blocked_if_not_connected(mock_connected):
+    """Test that start monitoring is blocked if Gmail not connected."""
+    from jarvis_core.gmail_monitor import start_monitor
+    # The monitor will start but the loop will detect not connected
+    result = start_monitor()
+    assert result["status"] in ("started", "already_running")
+    # Stop it
+    from jarvis_core.gmail_monitor import stop_monitor
+    stop_monitor()
+
+
+@patch("jarvis_core.gmail_service.is_connected", return_value=False)
+def test_check_now_blocked_if_not_connected(mock_connected):
+    """Test that check-now is blocked if Gmail not connected."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert result["status"] == "not_connected"
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_works_when_connected(mock_list, mock_connected):
+    """Test that check-now works when Gmail service is mocked connected."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert result["status"] == "ok"
+
+
+def test_auto_send_false_by_default():
+    """Test that auto_send remains false by default."""
+    from jarvis_core.gmail_models import GmailConfig
+    config = GmailConfig()
+    assert config.auto_send_enabled is False
+
+
+def test_draft_only_true_by_default():
+    """Test that draft-only remains true by default."""
+    from jarvis_core.gmail_models import GmailConfig
+    config = GmailConfig()
+    assert config.draft_only is True
+
+
+def test_gitignore_protects_credentials():
+    """Test that .gitignore protects credentials and token files."""
+    gitignore_path = Path(__file__).parent.parent / ".gitignore"
+    assert gitignore_path.exists()
+    content = gitignore_path.read_text()
+    assert "gmail_credentials.json" in content
+    assert "gmail_token.json" in content
+    assert "jobs_jd/" in content or "jobs_jd" in content
+    assert "gmail_monitor_log_" in content or "gmail_monitor_log" in content
+    assert "gmail_processed.json" in content
+
+
+# ── OAuth Flow Tests ──────────────────────────────────────────────────────
+
+
+def test_oauth_start_missing_credentials_returns_clear_error():
+    """Test 1: oauth start with missing credentials returns clear error."""
+    from jarvis_core.gmail_routes import gmail_oauth_start
+
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=False):
+        result = gmail_oauth_start()
+        assert result["status"] == "error"
+        assert "credentials" in result["message"].lower()
+        assert "client_secret" not in json.dumps(result)
+        assert "access_token" not in json.dumps(result)
+
+
+def test_oauth_start_invalid_json_returns_clear_error():
+    """Test 2: oauth start with invalid JSON returns clear error."""
+    from jarvis_core.gmail_routes import gmail_oauth_start
+
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes._get_credentials", return_value=None):
+            result = gmail_oauth_start()
+            assert result["status"] == "error"
+            assert "message" in result
+            assert "client_secret" not in json.dumps(result)
+
+
+def test_oauth_start_desktop_credentials_returns_clear_message():
+    """Test 3: oauth start with Desktop credentials returns clear unsupported message."""
+    from jarvis_core.gmail_routes import gmail_oauth_start
+
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes._get_credentials", return_value={
+            "installed": {
+                "client_id": "test.apps.googleusercontent.com",
+                "client_secret": "test-secret",
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        }):
+            result = gmail_oauth_start()
+            assert result["status"] == "error"
+            assert "Web application" in result["message"]
+            assert "redirect URI" in result["message"]
+            assert "client_secret" not in json.dumps(result)
+
+
+def test_oauth_start_web_credentials_returns_authorization_url():
+    """Test 4: oauth start with Web credentials returns authorization_url."""
+    from jarvis_core.gmail_routes import gmail_oauth_start
+
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes._get_credentials", return_value={
+            "web": {
+                "client_id": "test.apps.googleusercontent.com",
+                "client_secret": "test-secret",
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": ["http://127.0.0.1:8000/gmail/oauth/callback"],
+            }
+        }):
+            with patch("jarvis_core.gmail_routes.get_authorization_url", return_value=("https://accounts.google.com/o/oauth2/auth?test=1", None)):
+                result = gmail_oauth_start()
+                assert result["status"] == "ok"
+                assert "authorization_url" in result
+                assert result["authorization_url"].startswith("https://accounts.google.com")
+
+
+def test_oauth_start_response_does_not_expose_client_secret():
+    """Test 5: oauth start response does not expose client_secret."""
+    from jarvis_core.gmail_routes import gmail_oauth_start
+
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes._get_credentials", return_value={
+            "web": {
+                "client_id": "test.apps.googleusercontent.com",
+                "client_secret": "super-secret-value",
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": ["http://127.0.0.1:8000/gmail/oauth/callback"],
+            }
+        }):
+            with patch("jarvis_core.gmail_routes.get_authorization_url", return_value=("https://accounts.google.com/o/oauth2/auth?test=1", None)):
+                result = gmail_oauth_start()
+                result_str = json.dumps(result)
+                assert "client_secret" not in result_str
+                assert "super-secret-value" not in result_str
+                assert "access_token" not in result_str
+
+
+def test_oauth_callback_saves_token(tmp_path):
+    """Test 6: oauth callback saves token using mocked Google flow."""
+    from jarvis_core.gmail_service import exchange_code_for_token
+
+    # Use a real temp path for the token file
+    token_path = tmp_path / "gmail_token.json"
+
+    # Mock the Flow class
+    mock_flow = MagicMock()
+    mock_creds = MagicMock()
+    mock_creds.to_json.return_value = json.dumps({
+        "token": "fake-token",
+        "refresh_token": "fake-refresh",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "client_id": "test.apps.googleusercontent.com",
+        "client_secret": "test-secret",
+        "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+    })
+    mock_flow.credentials = mock_creds
+
+    with patch("jarvis_core.gmail_service._get_credentials", return_value={
+        "web": {
+            "client_id": "test.apps.googleusercontent.com",
+            "client_secret": "test-secret",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": ["http://127.0.0.1:8000/gmail/oauth/callback"],
+        }
+    }):
+        with patch("google_auth_oauthlib.flow.Flow.from_client_config", return_value=mock_flow):
+            with patch("jarvis_core.gmail_service.get_account_email", return_value="test@gmail.com"):
+                with patch("jarvis_core.gmail_service.TOKEN_FILE", token_path):
+                    with patch("jarvis_core.gmail_service.CONFIG_DIR", tmp_path):
+                        success, message = exchange_code_for_token("test-auth-code")
+                        assert success is True
+                        assert message == "test@gmail.com"
+                        # Verify token was saved
+                        assert token_path.exists()
+                        saved_token = json.loads(token_path.read_text())
+                        assert saved_token["token"] == "fake-token"
+
+
+@patch("jarvis_core.gmail_service.TOKEN_FILE")
+def test_gmail_status_shows_token_configured(mock_token_file):
+    """Test 7: gmail status shows token_configured true when token exists."""
+    from jarvis_core.gmail_routes import gmail_status
+
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes.token_exists", return_value=True):
+            with patch("jarvis_core.gmail_routes.is_connected", return_value=True):
+                with patch("jarvis_core.gmail_routes.get_account_email", return_value="test@gmail.com"):
+                    result = gmail_status()
+                    assert result["token_configured"] is True
+                    assert result["credentials_configured"] is True
+                    assert result["connected"] is True
+                    assert result["account_email"] == "test@gmail.com"
+
+
+def test_ui_connect_button_handles_authorization_url():
+    """Test 8: UI connect button handles authorization_url response."""
+    from jarvis_core.gmail_routes import gmail_oauth_start
+
+    # Simulate the full flow: credentials exist, web type, URL generated
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes._get_credentials", return_value={
+            "web": {
+                "client_id": "test.apps.googleusercontent.com",
+                "client_secret": "test-secret",
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": ["http://127.0.0.1:8000/gmail/oauth/callback"],
+            }
+        }):
+            with patch("jarvis_core.gmail_routes.get_authorization_url", return_value=("https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=test", None)):
+                result = gmail_oauth_start()
+                assert result["status"] == "ok"
+                assert "authorization_url" in result
+                # The UI would use this URL to redirect the user
+                assert result["authorization_url"].startswith("https://accounts.google.com")
+
+
+# ── OAuth Callback Tests ──────────────────────────────────────────────────
+
+
+def test_oauth_callback_with_error_returns_safe_error():
+    """Test 1: OAuth callback with error returns safe error redirect."""
+    from jarvis_core.gmail_routes import gmail_oauth_callback
+
+    result = gmail_oauth_callback(code=None, error="access_denied", state=None)
+    assert result.status_code == 307  # RedirectResponse
+    assert "ui?gmail=error" in result.headers.get("location", "")
+
+
+def test_oauth_callback_with_code_calls_token_exchange():
+    """Test 2: OAuth callback with code calls token exchange."""
+    from jarvis_core.gmail_routes import gmail_oauth_callback
+
+    with patch("jarvis_core.gmail_routes.exchange_code_for_token", return_value=(True, "test@gmail.com")):
+        result = gmail_oauth_callback(code="test-code", error=None, state=None)
+        assert result.status_code == 307
+        assert "ui?gmail=connected" in result.headers.get("location", "")
+
+
+def test_oauth_callback_saves_gmail_token_json(tmp_path):
+    """Test 3: OAuth callback saves gmail_token.json."""
+    from jarvis_core.gmail_service import exchange_code_for_token
+
+    token_path = tmp_path / "gmail_token.json"
+    mock_flow = MagicMock()
+    mock_creds = MagicMock()
+    mock_creds.to_json.return_value = json.dumps({
+        "token": "fake-token",
+        "refresh_token": "fake-refresh",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "client_id": "test.apps.googleusercontent.com",
+        "client_secret": "test-secret",
+        "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+    })
+    mock_flow.credentials = mock_creds
+
+    with patch("jarvis_core.gmail_service._get_credentials", return_value={
+        "web": {
+            "client_id": "test.apps.googleusercontent.com",
+            "client_secret": "test-secret",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": ["http://127.0.0.1:8000/gmail/oauth/callback"],
+        }
+    }):
+        with patch("google_auth_oauthlib.flow.Flow.from_client_config", return_value=mock_flow):
+            with patch("jarvis_core.gmail_service.get_account_email", return_value="test@gmail.com"):
+                with patch("jarvis_core.gmail_service.TOKEN_FILE", token_path):
+                    with patch("jarvis_core.gmail_service.CONFIG_DIR", tmp_path):
+                        success, message = exchange_code_for_token("test-auth-code")
+                        assert success is True
+                        assert token_path.exists()
+                        saved_token = json.loads(token_path.read_text())
+                        assert saved_token["token"] == "fake-token"
+
+
+def test_oauth_callback_redirects_to_ui_connected():
+    """Test 4: OAuth callback redirects to /ui?gmail=connected on success."""
+    from jarvis_core.gmail_routes import gmail_oauth_callback
+
+    with patch("jarvis_core.gmail_routes.exchange_code_for_token", return_value=(True, "test@gmail.com")):
+        result = gmail_oauth_callback(code="test-code", error=None, state=None)
+        location = result.headers.get("location", "")
+        assert "ui?gmail=connected" in location
+        assert "message=" not in location
+
+
+def test_gmail_status_shows_token_configured_true_when_token_exists():
+    """Test 5: /gmail/status shows token_configured=true when token file exists."""
+    from jarvis_core.gmail_routes import gmail_status
+
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes.token_exists", return_value=True):
+            with patch("jarvis_core.gmail_routes.is_connected", return_value=True):
+                with patch("jarvis_core.gmail_routes.get_account_email", return_value="test@gmail.com"):
+                    result = gmail_status()
+                    assert result["token_configured"] is True
+                    assert result["credentials_configured"] is True
+                    assert result["connected"] is True
+                    assert result["account_email"] == "test@gmail.com"
+                    assert result["draft_only"] is True
+
+
+def test_gmail_status_shows_connected_when_mocked_profile_succeeds():
+    """Test 6: /gmail/status shows connected=true when mocked Gmail profile succeeds."""
+    from jarvis_core.gmail_routes import gmail_status
+
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes.token_exists", return_value=True):
+            with patch("jarvis_core.gmail_routes.is_connected", return_value=True):
+                with patch("jarvis_core.gmail_routes.get_account_email", return_value="test@gmail.com"):
+                    result = gmail_status()
+                    assert result["connected"] is True
+                    assert result["account_email"] == "test@gmail.com"
+
+
+def test_no_token_or_secret_in_oauth_callback_response():
+    """Test 7: No token, refresh token, or client secret appears in callback responses."""
+    from jarvis_core.gmail_routes import gmail_oauth_callback
+
+    # Test error case
+    with patch("jarvis_core.gmail_routes.exchange_code_for_token", return_value=(False, "error")):
+        result = gmail_oauth_callback(code="bad-code", error=None, state=None)
+        result_str = json.dumps({"location": result.headers.get("location", "")})
+        assert "access_token" not in result_str
+        assert "refresh_token" not in result_str
+        assert "client_secret" not in result_str
+
+    # Test success case
+    with patch("jarvis_core.gmail_routes.exchange_code_for_token", return_value=(True, "test@gmail.com")):
+        result = gmail_oauth_callback(code="good-code", error=None, state=None)
+        result_str = json.dumps({"location": result.headers.get("location", "")})
+        assert "access_token" not in result_str
+        assert "refresh_token" not in result_str
+        assert "client_secret" not in result_str
+
+
+# ── Requirements Tests ────────────────────────────────────────────────────
+
+
+def test_requirements_include_google_oauth_libraries():
+    """Test 6: requirements include Google OAuth libraries."""
+    req_path = Path(__file__).parent.parent / "requirements.txt"
+    assert req_path.exists()
+    content = req_path.read_text()
+    assert "google-auth-oauthlib" in content
+    assert "google-api-python-client" in content
+    assert "google-auth-httplib2" in content

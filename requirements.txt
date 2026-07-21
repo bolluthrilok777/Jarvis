@@ -12,6 +12,11 @@ python-multipart==0.0.20
 word2number==1.1
 num2words==0.5.14
 
+# Google OAuth and Gmail API
+google-auth-oauthlib
+google-api-python-client
+google-auth-httplib2
+
 # Dev/test dependencies (install separately if needed):
 # pytest~=9.1.0
 # httpx~=0.28.0
