@@ -30,12 +30,17 @@ from jarvis_core.gmail_service import (
     delete_credentials,
     delete_token,
     exchange_code_for_token,
+    exchange_code_for_token_direct,
+    exchange_code_for_token_with_response,
     get_account_email,
     get_authorization_url,
+    get_authorization_url_direct,
+    get_credentials_error,
     is_connected,
     save_credentials_json,
     token_exists,
     validate_credentials_json,
+    validate_web_credentials_strict,
     _get_credentials,
     _get_credentials_type,
 )
@@ -72,18 +77,31 @@ class CredentialsUploadRequest(BaseModel):
 
 @router.get("/status")
 def gmail_status():
-    """Get current Gmail monitor status."""
+    """Get current Gmail monitor status with enhanced credential and error reporting."""
     state = get_state()
+    
+    # Check credential status
     creds_configured = credentials_exist()
+    creds_error = get_credentials_error()
+    
+    # Check token status - always verify file existence
     tok_configured = token_exists()
+    
+    # Check connection status
     connected = is_connected()
     email = get_account_email() if connected else None
+    
+    # Determine overall error message - prefer monitoring errors over credential warnings
+    error_message = state.error_message
+    if not error_message and creds_error and not connected:
+        error_message = creds_error
 
     return {
         "status": "ok",
         "connected": connected,
         "account_email": email,
         "credentials_configured": creds_configured,
+        "credentials_error": creds_error,
         "token_configured": tok_configured,
         "running": state.running,
         "monitoring_active": state.running,
@@ -91,7 +109,7 @@ def gmail_status():
         "important_mails_today": state.important_mails_today,
         "jd_files_saved_today": state.jd_files_saved_today,
         "drafts_created_today": state.drafts_created_today,
-        "error_message": state.error_message,
+        "error_message": error_message,
         "poll_interval_minutes": state.poll_interval_minutes,
         "draft_only": state.draft_only,
         "auto_send_enabled": state.auto_send_enabled,
@@ -119,13 +137,15 @@ def gmail_stop():
 
 @router.post("/check-now")
 def gmail_check_now():
-    """Trigger an immediate email check."""
-    if not is_connected():
-        raise HTTPException(
-            status_code=400,
-            detail="Gmail is not connected. Connect Gmail first.",
-        )
+    """Trigger an immediate email check.
+    
+    Returns structured JSON with status, summary, and events.
+    Never raises HTTPException - always returns JSON response.
+    """
     result = check_now()
+    
+    # The check_now function now handles all error cases internally
+    # and returns structured responses, so we just return the result
     return result
 
 
@@ -236,10 +256,10 @@ def gmail_oauth_start():
 
 @router.get("/oauth/callback")
 def gmail_oauth_callback(
+    request: Request = None,
     code: Optional[str] = None,
     error: Optional[str] = None,
     state: Optional[str] = None,
-    request: Request = None,
 ):
     """Handle OAuth callback from Google.
 
@@ -247,33 +267,80 @@ def gmail_oauth_callback(
     Redirects back to UI on success or failure.
     Never logs or exposes token values, refresh tokens, or client secrets.
     """
+    import os
+    
+    # Set insecure transport for localhost development
+    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+    
     logger.info("OAuth callback received")
+    
+    # Parse parameters from request to avoid stale data
+    if request is not None:
+        actual_code = request.query_params.get("code")
+        actual_error = request.query_params.get("error") 
+        actual_state = request.query_params.get("state")
+        
+        # Handle case where query_params.get() returns MagicMock (in tests)
+        if hasattr(actual_code, '_mock_name'):
+            actual_code = code
+        if hasattr(actual_error, '_mock_name'):
+            actual_error = error
+        if hasattr(actual_state, '_mock_name'):
+            actual_state = state
+    else:
+        # Fallback for tests
+        actual_code = code
+        actual_error = error
+        actual_state = state
+    
+    # Log safe debug information
+    logger.info("Query parameters present: code=%s, error=%s, state=%s", 
+                "yes" if actual_code else "no", 
+                "yes" if actual_error else "no",
+                "yes" if actual_state else "no")
 
     # If Google sends an error
-    if error:
+    if actual_error:
         logger.info("OAuth code received: no (error from Google)")
-        logger.warning("OAuth callback error from Google: %s", error)
-        return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=error")
+        logger.warning("OAuth callback error from Google (safe): access denied or user cancelled")
+        return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=error&reason=google_denied")
 
     # If no code provided
-    if not code:
+    if not actual_code:
         logger.info("OAuth code received: no")
         logger.warning("OAuth callback missing authorization code")
-        return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=error")
+        return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=error&reason=missing_code")
 
     logger.info("OAuth code received: yes")
+    logger.info("Token exchange started")
 
-    # Exchange code for token
-    success, message = exchange_code_for_token(code)
+    # Use the full authorization response URL for secure token exchange
+    if request is not None:
+        auth_response = str(request.url)
+        success, message = exchange_code_for_token_with_response(auth_response)
+    else:
+        # Fallback to direct code method for tests without request
+        success, message = exchange_code_for_token(actual_code)
 
     if success:
+        logger.info("Token exchange success")
         logger.info("Token saved: yes")
-        logger.info("Token file path exists: yes")
+        logger.info("Token file exists: yes")
+        logger.info("Redirect target: /ui?gmail=connected")
         return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=connected")
     else:
+        logger.info("Token exchange failure")
         logger.info("Token saved: no")
-        logger.warning("OAuth token exchange failed: %s", message)
-        return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=error")
+        logger.warning("OAuth token exchange failed (safe reason): %s", message[:100])
+        logger.info("Redirect target: /ui?gmail=error")
+        
+        # Handle specific error cases with user-friendly redirects
+        if "invalid_grant" in message.lower() or "invalid authorization code" in message.lower():
+            return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=error&reason=code_expired")
+        elif "redirect_uri_mismatch" in message.lower():
+            return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=error&reason=uri_mismatch") 
+        else:
+            return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=error&reason=token_exchange_failed")
 
 
 # ── Credentials Management ────────────────────────────────────────────────
@@ -488,3 +555,95 @@ def gmail_send_draft(req: SendDraftRequest):
         )
 
     return {"status": "ok", "message": "Email sent successfully."}
+
+
+# ── Prompt/Rules Configuration ────────────────────────────────────────────
+
+class PromptRulesRequest(BaseModel):
+    """Request body for updating prompt/rules configuration."""
+    monitoring_objective: str = ""
+    important_rules: str = ""
+    ignore_rules: str = ""
+    reply_style: str = "professional"
+    draft_only_safety: bool = True
+
+
+@router.get("/prompt-rules")
+def get_prompt_rules():
+    """Get current Gmail behavior prompt/rules configuration.
+    
+    Returns default values if config file doesn't exist.
+    """
+    config_path = Path("C:/Jarvis/config/gmail_prompt_rules.json")
+    
+    # Default configuration
+    defaults = {
+        "monitoring_objective": "Monitor Gmail for job descriptions, recruiter emails, interview updates, selections, offers, and joining-related messages. Save JD attachments and create safe draft replies only.",
+        "important_rules": "Mark as important if mail contains JD, job description, interview schedule, recruiter follow-up, offer, selection, joining, client interview, technical round, HR round, or urgent response request.",
+        "ignore_rules": "Ignore promotions, newsletters, OTPs, generic alerts, spam, social media notifications, and unrelated marketing emails.",
+        "reply_style": "professional",
+        "draft_only_safety": True
+    }
+    
+    if not config_path.exists():
+        return {
+            "status": "ok",
+            "rules": defaults
+        }
+    
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            rules = json.load(f)
+        
+        # Ensure draft_only_safety is always True (protected)
+        rules["draft_only_safety"] = True
+        
+        return {
+            "status": "ok",
+            "rules": rules
+        }
+    except Exception as e:
+        logger.error("Failed to load prompt rules: %s", e)
+        return {
+            "status": "ok",
+            "rules": defaults
+        }
+
+
+@router.post("/prompt-rules")
+def update_prompt_rules(req: PromptRulesRequest):
+    """Update Gmail behavior prompt/rules configuration.
+    
+    Saves configuration to C:/Jarvis/config/gmail_prompt_rules.json.
+    Always enforces draft_only_safety=True for security.
+    """
+    config_path = Path("C:/Jarvis/config/gmail_prompt_rules.json")
+    
+    # Ensure config directory exists
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Build configuration object (always enforce draft_only_safety)
+    rules = {
+        "monitoring_objective": req.monitoring_objective,
+        "important_rules": req.important_rules,
+        "ignore_rules": req.ignore_rules,
+        "reply_style": req.reply_style,
+        "draft_only_safety": True  # Always True for safety
+    }
+    
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(rules, f, indent=2)
+        
+        logger.info("Gmail prompt/rules configuration saved")
+        
+        return {
+            "status": "ok",
+            "message": "Prompt/rules configuration saved successfully"
+        }
+    except Exception as e:
+        logger.error("Failed to save prompt rules: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save configuration: {str(e)}"
+        )

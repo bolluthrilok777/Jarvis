@@ -10,19 +10,25 @@ import json
 import logging
 import os
 import re
+import secrets
+import urllib.parse
 from datetime import datetime, timezone
 from email import message_from_bytes
 from pathlib import Path
 from typing import Any, Optional
 
+import requests
+
 from jarvis_core.gmail_models import GmailMessagePreview
 
 logger = logging.getLogger("jarvis.gmail_service")
 
-# Paths for credentials and token
+# Paths for credentials, token, and OAuth state
 CONFIG_DIR = Path("C:/Jarvis/config")
+DATA_DIR = Path("C:/Jarvis/data")
 CREDENTIALS_FILE = CONFIG_DIR / "gmail_credentials.json"
 TOKEN_FILE = CONFIG_DIR / "gmail_token.json"
+OAUTH_STATE_FILE = DATA_DIR / "gmail_oauth_state.json"
 
 SCOPES_READ_ONLY = [
     "https://www.googleapis.com/auth/gmail.readonly",
@@ -151,6 +157,222 @@ def reset_service() -> None:
     _credentials_available = False
 
 
+# ── Direct OAuth2 Web Flow Methods (New Implementation) ─────────────────
+
+def validate_web_credentials_strict(data: dict) -> tuple[bool, str]:
+    """Validate credentials for Web OAuth only (strict validation).
+    
+    Returns (is_valid, error_message).
+    Only accepts Web application OAuth credentials.
+    """
+    if not isinstance(data, dict):
+        return False, "Invalid JSON: must be an object"
+
+    # Only accept Web application credentials
+    if "web" not in data:
+        if "installed" in data:
+            return False, "Wrong OAuth credential type. Upload Web application OAuth JSON."
+        return False, "Missing 'web' OAuth client info"
+
+    web = data["web"]
+    if not isinstance(web, dict):
+        return False, "Web client info must be an object"
+
+    # Validate required fields
+    required_fields = ["client_id", "client_secret", "auth_uri", "token_uri"]
+    for field in required_fields:
+        if field not in web:
+            return False, f"Missing '{field}' in web credentials"
+        if not web[field]:
+            return False, f"'{field}' is empty"
+
+    # Validate redirect URIs
+    redirect_uris = web.get("redirect_uris", [])
+    if not isinstance(redirect_uris, list) or not redirect_uris:
+        return False, "Missing 'redirect_uris' array in web credentials"
+    
+    if EXPECTED_REDIRECT_URI not in redirect_uris:
+        return False, f"Redirect URI {EXPECTED_REDIRECT_URI} not found in web credentials"
+
+    # Validate JavaScript origins
+    javascript_origins = web.get("javascript_origins", [])
+    if not isinstance(javascript_origins, list) or not javascript_origins:
+        return False, "Missing 'javascript_origins' array in web credentials"
+    
+    if "http://127.0.0.1:8000" not in javascript_origins:
+        return False, "JavaScript origin http://127.0.0.1:8000 not found in web credentials"
+
+    return True, ""
+
+
+def get_authorization_url_direct() -> tuple[Optional[str], Optional[str]]:
+    """Generate Google OAuth authorization URL using direct OAuth2 web flow.
+    
+    Returns (url, error_message) tuple.
+    """
+    creds_data = _get_credentials()
+    if creds_data is None:
+        return (None, "Gmail OAuth credentials not found or invalid JSON")
+
+    # Only accept Web credentials
+    if "web" not in creds_data:
+        if "installed" in creds_data:
+            return (None, "Wrong OAuth credential type. Upload Web application OAuth JSON.")
+        return (None, "Invalid credentials format. Must contain 'web' key.")
+
+    web = creds_data["web"]
+    
+    # Validate credentials strictly
+    is_valid, error = validate_web_credentials_strict(creds_data)
+    if not is_valid:
+        return (None, error)
+
+    try:
+        # Generate fresh state token
+        state = secrets.token_urlsafe(32)
+        
+        # Save state temporarily
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with open(OAUTH_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"state": state}, f)
+        
+        # Build authorization URL manually - ensure scope is properly formatted
+        base_url = "https://accounts.google.com/o/oauth2/v2/auth"
+        scope_string = " ".join(SCOPES_READ_ONLY)
+        
+        params = {
+            "client_id": web["client_id"],
+            "redirect_uri": EXPECTED_REDIRECT_URI,
+            "response_type": "code",
+            "scope": scope_string,
+            "access_type": "offline",
+            "prompt": "consent",
+            "include_granted_scopes": "true",
+            "state": state,
+        }
+        
+        # Use urlencode to properly encode all parameters
+        auth_url = f"{base_url}?{urllib.parse.urlencode(params)}"
+        
+        # Safe debug logging
+        logger.info("OAuth authorization URL generated with params: client_id=yes redirect_uri=yes scope_count=%d state=yes", len(SCOPES_READ_ONLY))
+        
+        return (auth_url, None)
+
+    except Exception as e:
+        logger.error("Failed to generate authorization URL: %s", e)
+        return (None, f"Failed to generate authorization URL: {str(e)[:200]}")
+
+
+def exchange_code_for_token_direct(code: str, state: str = None) -> tuple[bool, str]:
+    """Exchange OAuth code for token using direct HTTP requests.
+    
+    Returns (success, message_or_email).
+    """
+    try:
+        creds_data = _get_credentials()
+        if creds_data is None:
+            return False, "Credentials not found"
+
+        if "web" not in creds_data:
+            return False, "Invalid credentials format"
+
+        web = creds_data["web"]
+
+        # Verify state if provided
+        if state is not None:
+            try:
+                if OAUTH_STATE_FILE.exists():
+                    with open(OAUTH_STATE_FILE, "r", encoding="utf-8") as f:
+                        state_data = json.load(f)
+                    expected_state = state_data.get("state")
+                    if state != expected_state:
+                        logger.warning("OAuth state mismatch")
+                        return False, "State mismatch. Please try connecting again."
+                    # Clean up state file after use
+                    OAUTH_STATE_FILE.unlink()
+                else:
+                    logger.warning("OAuth state file missing")
+                    return False, "State verification failed. Please try connecting again."
+            except Exception as e:
+                logger.warning("OAuth state verification failed: %s", e)
+                return False, "State verification failed. Please try connecting again."
+
+        # Exchange code for token using direct HTTP request
+        token_url = web["token_uri"]
+        token_data = {
+            "code": code,
+            "client_id": web["client_id"],
+            "client_secret": web["client_secret"],
+            "redirect_uri": EXPECTED_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        }
+
+        logger.info("Token exchange HTTP request started")
+        response = requests.post(token_url, data=token_data, timeout=30)
+        
+        logger.info("Token exchange HTTP status: %s", response.status_code)
+        
+        if response.status_code != 200:
+            # Read safe error information
+            try:
+                error_data = response.json()
+                error_code = error_data.get("error", "unknown_error")
+                error_description = error_data.get("error_description", "Token exchange failed")
+                logger.warning("Token exchange failed: %s", error_code)
+                
+                if error_code == "invalid_grant":
+                    return False, "Authorization code expired or already used. Please try connecting again."
+                elif error_code == "invalid_client":
+                    return False, "Invalid OAuth credentials. Please check your Web application configuration."
+                else:
+                    return False, f"Token exchange failed: {error_description[:100]}"
+            except:
+                return False, "Token exchange failed with HTTP error"
+
+        # Parse successful token response
+        token_response = response.json()
+        
+        # Build token data compatible with google-auth Credentials
+        token_data = {
+            "token": token_response.get("access_token"),  # Map access_token to token
+            "refresh_token": token_response.get("refresh_token"),
+            "token_uri": web["token_uri"],
+            "client_id": web["client_id"],
+            "client_secret": web["client_secret"],
+            "scopes": SCOPES_READ_ONLY,
+        }
+        
+        # Add expiry if available
+        if "expires_in" in token_response:
+            from datetime import datetime, timedelta
+            expiry = datetime.utcnow() + timedelta(seconds=int(token_response["expires_in"]))
+            token_data["expiry"] = expiry.isoformat() + "Z"
+
+        # Save token
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        with open(TOKEN_FILE, "w", encoding="utf-8") as f:
+            json.dump(token_data, f, indent=2)
+
+        logger.info("Token saved: yes")
+        reset_service()
+
+        # Try to get account email
+        email = get_account_email()
+        if email:
+            logger.info("Gmail profile fetch: success")
+            return True, email
+        logger.info("Gmail profile fetch: failure (no email returned)")
+        return True, "Token saved (email unknown)"
+
+    except requests.RequestException as e:
+        logger.error("HTTP request failed during token exchange: %s", e)
+        return False, "Network error during token exchange. Please try again."
+    except Exception as e:
+        logger.error("Failed to exchange code for token: %s", e)
+        return False, f"Token exchange failed: {str(e)[:200]}"
+
+
 # ── OAuth Flow Methods ────────────────────────────────────────────────────
 
 
@@ -164,6 +386,36 @@ def _is_installed_credentials(data: dict) -> bool:
     return "installed" in data and isinstance(data["installed"], dict)
 
 
+# Remove these old functions as we now use direct OAuth2 flow
+# def _is_web_credentials, _is_installed_credentials, _get_credentials_type, _validate_web_credentials_for_auth
+
+
+def get_credentials_error() -> Optional[str]:
+    """Check if there's a credential configuration error.
+    
+    Returns None if credentials are valid, or error message if invalid.
+    """
+    if not credentials_exist():
+        return None  # No error if no file exists
+        
+    creds_data = _get_credentials()
+    if creds_data is None:
+        return "Invalid credentials JSON format"
+        
+    # Only accept Web credentials
+    if "web" not in creds_data:
+        if "installed" in creds_data:
+            return "Wrong OAuth credential type. Upload Web application OAuth JSON."
+        return "Invalid credentials format. Must contain 'web' key"
+        
+    # Validate Web credentials
+    is_valid, error = validate_credentials_json(creds_data)
+    if not is_valid:
+        return error
+        
+    return None  # No errors
+
+
 def _get_credentials_type(data: dict) -> str:
     """Return 'web', 'installed', or 'unknown'."""
     if _is_web_credentials(data):
@@ -174,36 +426,47 @@ def _get_credentials_type(data: dict) -> str:
 
 
 def validate_credentials_json(data: dict) -> tuple[bool, str]:
-    """Validate uploaded credentials JSON.
+    """Validate uploaded credentials JSON for Gmail Web OAuth.
 
     Returns (is_valid, error_message).
+    Only accepts Web application OAuth credentials.
     """
     if not isinstance(data, dict):
         return False, "Invalid JSON: must be an object"
 
-    # Check for installed or web client info
-    installed = data.get("installed")
-    web = data.get("web")
-    if not installed and not web:
-        return False, "Missing 'installed' or 'web' OAuth client info"
+    # Only accept Web application credentials
+    if "web" not in data:
+        if "installed" in data:
+            return False, "Wrong OAuth credential type. Upload Web application OAuth JSON."
+        return False, "Missing 'web' OAuth client info"
 
-    client_info = installed or web
+    web = data["web"]
+    if not isinstance(web, dict):
+        return False, "Web client info must be an object"
 
-    if not isinstance(client_info, dict):
-        return False, "Client info must be an object"
+    # Validate required fields
+    required_fields = ["client_id", "client_secret", "auth_uri", "token_uri"]
+    for field in required_fields:
+        if field not in web:
+            return False, f"Missing '{field}' in web credentials"
+        if not web[field]:
+            return False, f"'{field}' is empty"
 
-    if "client_id" not in client_info:
-        return False, "Missing 'client_id' in credentials"
+    # Validate redirect URIs
+    redirect_uris = web.get("redirect_uris", [])
+    if not isinstance(redirect_uris, list) or not redirect_uris:
+        return False, "Missing 'redirect_uris' array in web credentials"
+    
+    if EXPECTED_REDIRECT_URI not in redirect_uris:
+        return False, f"Redirect URI {EXPECTED_REDIRECT_URI} not found in web credentials"
 
-    if "auth_uri" not in client_info:
-        return False, "Missing 'auth_uri' in credentials"
-
-    if "token_uri" not in client_info:
-        return False, "Missing 'token_uri' in credentials"
-
-    client_id = client_info.get("client_id", "")
-    if not client_id or client_id == "":
-        return False, "client_id is empty"
+    # Validate JavaScript origins
+    javascript_origins = web.get("javascript_origins", [])
+    if not isinstance(javascript_origins, list) or not javascript_origins:
+        return False, "Missing 'javascript_origins' array in web credentials"
+    
+    if "http://127.0.0.1:8000" not in javascript_origins:
+        return False, "JavaScript origin http://127.0.0.1:8000 not found in web credentials"
 
     return True, ""
 
@@ -258,122 +521,167 @@ def _validate_web_credentials_for_auth(creds_data: dict) -> Optional[str]:
 
 
 def get_authorization_url() -> tuple[Optional[str], Optional[str]]:
-    """Generate Google OAuth authorization URL.
-
+    """Generate Google OAuth authorization URL using direct OAuth2 web flow.
+    
+    Always generates a fresh URL with new state to prevent stale authorization codes.
     Returns (url, error_message) tuple.
     On success: (url_string, None)
     On failure: (None, error_message_string)
     Never exposes client_secret in error_message.
     """
-    # Check dependency first
-    try:
-        from google_auth_oauthlib.flow import Flow, InstalledAppFlow
-    except ImportError:
-        logger.warning("google-auth-oauthlib not installed")
-        return (
-            None,
-            "Missing required library: google-auth-oauthlib. "
-            "Install with: pip install google-auth-oauthlib",
-        )
-
     creds_data = _get_credentials()
     if creds_data is None:
         logger.warning("Cannot start OAuth: credentials not found or invalid JSON")
         return (None, "Gmail OAuth credentials file not found or contains invalid JSON")
 
-    creds_type = _get_credentials_type(creds_data)
-    if creds_type == "unknown":
-        logger.warning("Invalid credentials format: missing 'installed' or 'web'")
-        return (
-            None,
-            "Invalid credentials format. Must contain 'web' or 'installed' key.",
-        )
+    # Only accept Web credentials
+    if "web" not in creds_data:
+        if "installed" in creds_data:
+            return (None, "Wrong OAuth credential type. Upload Web application OAuth JSON.")
+        return (None, "Invalid credentials format. Must contain 'web' key.")
 
-    if creds_type == "installed":
-        return (
-            None,
-            "Please upload Web application OAuth credentials with redirect URI "
-            f"{EXPECTED_REDIRECT_URI}",
-        )
-
-    # creds_type == "web" - validate all required fields
-    validation_error = _validate_web_credentials_for_auth(creds_data)
-    if validation_error is not None:
-        logger.warning("Web credentials validation failed: %s", validation_error)
-        return (None, validation_error)
+    web = creds_data["web"]
+    
+    # Validate credentials
+    is_valid, error = validate_credentials_json(creds_data)
+    if not is_valid:
+        logger.warning("Web credentials validation failed: %s", error)
+        return (None, error)
 
     try:
-        # Pass the FULL credentials object (including the "web" key wrapper)
-        # Google's Flow.from_client_config expects the full shape:
-        #   {"web": {"client_id": "...", "client_secret": "...", ...}}
-        # NOT just the inner {"client_id": "...", ...} dict.
-        flow = Flow.from_client_config(
-            creds_data, scopes=SCOPES_READ_ONLY
-        )
-
-        flow.redirect_uri = EXPECTED_REDIRECT_URI
-
-        auth_url, _ = flow.authorization_url(
-            access_type="offline",
-            include_granted_scopes="true",
-            prompt="consent",
-        )
-
-        logger.info("Generated OAuth authorization URL")
+        # Generate fresh state token
+        state = secrets.token_urlsafe(32)
+        
+        # Save state temporarily
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with open(OAUTH_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"state": state}, f)
+        
+        # Build authorization URL manually - ensure scope is properly formatted
+        base_url = "https://accounts.google.com/o/oauth2/v2/auth"
+        scope_string = " ".join(SCOPES_READ_ONLY)
+        
+        params = {
+            "client_id": web["client_id"],
+            "redirect_uri": EXPECTED_REDIRECT_URI,
+            "response_type": "code",
+            "scope": scope_string,
+            "access_type": "offline",
+            "prompt": "consent",
+            "include_granted_scopes": "true",
+            "state": state,
+        }
+        
+        # Use urlencode to properly encode all parameters
+        auth_url = f"{base_url}?{urllib.parse.urlencode(params)}"
+        
+        # Safe debug logging
+        logger.info("OAuth authorization URL generated with params: client_id=yes redirect_uri=yes scope_count=%d state=yes", len(SCOPES_READ_ONLY))
+        
         return (auth_url, None)
 
     except Exception as e:
         error_str = str(e)
         logger.error("Failed to generate authorization URL: %s", error_str)
-        # Return a safe generic error - don't expose internals
         return (None, f"Failed to generate authorization URL: {error_str[:200]}")
 
 
-def exchange_code_for_token(code: str) -> tuple[bool, str]:
-    """Exchange OAuth authorization code for token.
+def exchange_code_for_token(code: str, state: str = None) -> tuple[bool, str]:
+    """Exchange OAuth authorization code for token using direct OAuth2 web flow.
 
     Returns (success, message_or_email).
     Never logs or exposes token values, refresh tokens, or client secrets.
     """
     try:
-        from google_auth_oauthlib.flow import Flow, InstalledAppFlow
-
         creds_data = _get_credentials()
         if creds_data is None:
             logger.warning("OAuth token exchange failed: credentials not found")
             return False, "Credentials not found"
 
-        creds_type = _get_credentials_type(creds_data)
-        if creds_type == "unknown":
-            logger.warning("OAuth token exchange failed: invalid credentials format")
+        if "web" not in creds_data:
+            logger.warning("OAuth token exchange failed: not web credentials")
             return False, "Invalid credentials format"
 
-        # For web credentials, use Flow directly (not InstalledAppFlow)
-        # For installed credentials, use InstalledAppFlow
-        if creds_type == "web":
-            # Pass the FULL credentials object (including the "web" key wrapper)
-            flow = Flow.from_client_config(
-                creds_data, scopes=SCOPES_READ_ONLY
-            )
-        else:
-            flow = InstalledAppFlow.from_client_config(
-                creds_data, scopes=SCOPES_READ_ONLY
-            )
+        web = creds_data["web"]
 
-        flow.redirect_uri = EXPECTED_REDIRECT_URI
+        # Verify state if provided
+        if state is not None:
+            try:
+                if OAUTH_STATE_FILE.exists():
+                    with open(OAUTH_STATE_FILE, "r", encoding="utf-8") as f:
+                        state_data = json.load(f)
+                    expected_state = state_data.get("state")
+                    if state != expected_state:
+                        logger.warning("OAuth state mismatch")
+                        return False, "State mismatch. Please try connecting again."
+                    # Clean up state file after use
+                    OAUTH_STATE_FILE.unlink()
+                else:
+                    logger.warning("OAuth state file missing")
+                    return False, "State verification failed. Please try connecting again."
+            except Exception as e:
+                logger.warning("OAuth state verification failed: %s", e)
+                return False, "State verification failed. Please try connecting again."
 
-        # Exchange the code
-        flow.fetch_token(code=code)
+        # Exchange code for token using direct HTTP request
+        token_url = web["token_uri"]
+        token_data = {
+            "code": code,
+            "client_id": web["client_id"],
+            "client_secret": web["client_secret"],
+            "redirect_uri": EXPECTED_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        }
 
-        creds = flow.credentials
+        logger.info("Token exchange HTTP request started")
+        response = requests.post(token_url, data=token_data, timeout=30)
+        
+        logger.info("Token exchange HTTP status: %s", response.status_code)
+        
+        if response.status_code != 200:
+            # Read safe error information
+            try:
+                error_data = response.json()
+                error_code = error_data.get("error", "unknown_error")
+                error_description = error_data.get("error_description", "Token exchange failed")
+                logger.warning("Token exchange failed: %s", error_code)
+                
+                if error_code == "invalid_grant":
+                    return False, "Authorization code expired or already used. Please try connecting again."
+                elif error_code == "invalid_client":
+                    return False, "Invalid OAuth credentials. Please check your Web application configuration."
+                else:
+                    return False, f"Token exchange failed: {error_description[:100]}"
+            except:
+                return False, "Token exchange failed with HTTP error"
+
+        # Parse successful token response
+        token_response = response.json()
+        
+        # Build token data compatible with google-auth Credentials
+        token_data = {
+            "token": token_response.get("access_token"),  # Map access_token to token
+            "refresh_token": token_response.get("refresh_token"),
+            "token_uri": web["token_uri"],
+            "client_id": web["client_id"],
+            "client_secret": web["client_secret"],
+            "scopes": SCOPES_READ_ONLY,
+        }
+        
+        # Add expiry if available
+        if "expires_in" in token_response:
+            # Convert expires_in seconds to ISO format timestamp
+            from datetime import datetime, timedelta
+            expiry = datetime.utcnow() + timedelta(seconds=int(token_response["expires_in"]))
+            token_data["expiry"] = expiry.isoformat() + "Z"
 
         # Save token
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         with open(TOKEN_FILE, "w", encoding="utf-8") as f:
-            f.write(creds.to_json())
+            json.dump(token_data, f, indent=2)
 
         logger.info("Token saved: yes")
-        logger.info("Token file path exists: yes")
+        logger.info("Token file exists: yes")
         reset_service()
 
         # Try to get account email
@@ -385,20 +693,47 @@ def exchange_code_for_token(code: str) -> tuple[bool, str]:
         logger.info("Gmail profile fetch: failure (no email returned)")
         return True, "Token saved (email unknown)"
 
-    except ImportError:
-        logger.warning("Google OAuth libraries not installed")
-        return False, "Google OAuth libraries not installed"
+    except requests.RequestException as e:
+        logger.error("HTTP request failed during token exchange: %s", e)
+        return False, "Network error during token exchange. Please try again."
     except Exception as e:
-        error_str = str(e).lower()
-        if "redirect_uri_mismatch" in error_str:
-            return False, "Redirect URI mismatch. Use http://127.0.0.1:8000/gmail/oauth/callback in Google Cloud Console"
-        elif "access_denied" in error_str:
+        error_str = str(e)
+        logger.error("Failed to exchange code for token: %s", e)
+        return False, f"Token exchange failed: {error_str[:200]}"
+
+
+# Keep the old function for backward compatibility but make it use the new implementation  
+def exchange_code_for_token_with_response(authorization_response: str) -> tuple[bool, str]:
+    """Exchange OAuth authorization response for token.
+    
+    Parses the authorization response URL and extracts code/state for token exchange.
+    Returns (success, message_or_email).
+    Never logs or exposes token values, refresh tokens, or client secrets.
+    """
+    try:
+        # Parse the authorization response URL
+        parsed_url = urllib.parse.urlparse(authorization_response)
+        query_params = urllib.parse.parse_qs(parsed_url.query)
+        
+        # Extract code and state
+        code = query_params.get("code", [None])[0]
+        state = query_params.get("state", [None])[0]
+        error = query_params.get("error", [None])[0]
+        
+        if error:
+            logger.warning("Authorization response contains error: %s", error)
             return False, "Access denied by user"
-        elif "invalid_grant" in error_str:
-            return False, "Invalid authorization code. Please try again"
-        else:
-            logger.error("Failed to exchange code for token: %s", e)
-            return False, f"Token exchange failed: {str(e)[:200]}"
+            
+        if not code:
+            logger.warning("Authorization response missing code")
+            return False, "Missing authorization code"
+            
+        # Use the direct code exchange
+        return exchange_code_for_token(code, state)
+        
+    except Exception as e:
+        logger.error("Failed to parse authorization response: %s", e)
+        return False, "Invalid authorization response"
 
 
 def get_account_email() -> Optional[str]:

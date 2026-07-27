@@ -269,6 +269,49 @@
     .monitor-grid label { color:#a3a3a3; font-size:12px; }
     .monitor-grid input,.monitor-grid select { width:100%; box-sizing:border-box; margin-top:5px; padding:10px; background:#191919; color:#fff; border:1px solid #383838; border-radius:9px; }
     #schedule-preview { max-height:130px; overflow:auto; color:#d4af37; margin:14px 0; font-size:13px; }
+    /* ── Toasts ── */
+    @keyframes slideIn  { from{transform:translateX(420px);opacity:0} to{transform:translateX(0);opacity:1} }
+    @keyframes slideOut { from{transform:translateX(0);opacity:1}     to{transform:translateX(420px);opacity:0} }
+    /* ── Spinner ── */
+    @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    .spinner { border-radius:50%; animation:spin 0.75s linear infinite; }
+    /* ── Step fade-in ── */
+    @keyframes stepFadeIn { from{opacity:0;transform:translateX(-10px)} to{opacity:1;transform:translateX(0)} }
+    .gmail-step { animation:stepFadeIn 0.25s ease-out; }
+    /* ── Gold pulse-glow for active step ── */
+    @keyframes pulseGlow {
+      0%,100% { box-shadow:0 0 0px 0px rgba(212,175,55,0); background:rgba(212,175,55,0.06); }
+      50%      { box-shadow:0 0 10px 3px rgba(212,175,55,0.35); background:rgba(212,175,55,0.14); }
+    }
+    .step-active-row { animation:pulseGlow 1.1s ease-in-out infinite; border-radius:6px; }
+    /* ── Moving shimmer progress bar ── */
+    @keyframes shimmerMove {
+      0%   { background-position:-400px 0; }
+      100% { background-position: 400px 0; }
+    }
+    .shimmer-bar {
+      height:3px; border-radius:2px;
+      background:linear-gradient(90deg,#1a1a1a 0%,#d4af37 40%,#f4cf63 50%,#d4af37 60%,#1a1a1a 100%);
+      background-size:400px 100%;
+      animation:shimmerMove 1.4s linear infinite;
+    }
+    /* ── Green pulsing dot for monitoring badge ── */
+    @keyframes pulseDot {
+      0%,100% { transform:scale(1);   opacity:1;   box-shadow:0 0 0   0   rgba(34,197,94,0.6); }
+      50%      { transform:scale(1.5); opacity:0.7; box-shadow:0 0 6px 4px rgba(34,197,94,0.0); }
+    }
+    .pulse-dot {
+      width:9px; height:9px; border-radius:50%; background:#22c55e;
+      display:inline-block; animation:pulseDot 1s ease-in-out infinite;
+      flex-shrink:0;
+    }
+    /* ── Metric number glow on update ── */
+    @keyframes countGlow {
+      0%   { text-shadow:0 0 0px rgba(244,207,99,0);   color:inherit; }
+      30%  { text-shadow:0 0 14px rgba(244,207,99,0.9); color:#fff; }
+      100% { text-shadow:0 0 0px rgba(244,207,99,0);   color:inherit; }
+    }
+    .count-glow { animation:countGlow 0.8s ease-out; }
     @media (max-width:700px) { .sidebar{display:none}.container{width:100%;margin-left:0;padding:18px 12px 130px}.command-header{align-items:flex-start}.task-item{flex-wrap:wrap}.task-id{display:none}.task-status{margin-left:auto}#response-area .entry{max-width:94%} }
   </style>
 </head>
@@ -379,17 +422,36 @@
 <!-- Gmail Monitor Panel -->
 <div id="gmail-overlay" class="confirm-overlay hidden">
   <div class="monitor-dialog" style="width:min(900px,95vw);max-height:90vh;overflow-y:auto;">
-    <button class="modal-close" type="button" aria-label="Close Gmail monitor" onclick="closeGmailMonitor()">&times;</button>
-    <h1>Gmail Monitor</h1>
+    <button class="modal-close" type="button" aria-label="Close Gmail Operations Center" onclick="closeGmailMonitor()">&times;</button>
+    <h1 style="color:#f4cf63;font-size:26px;margin:0 0 4px 0;">Gmail Operations Center</h1>
+    <p style="color:#888;font-size:13px;margin:0 0 16px 0;">24/7 job mail monitoring, JD capture, and safe draft replies</p>
 
     <!-- Connection Status Bar -->
-    <div id="gmail-status-bar" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:12px;background:#191919;border-radius:10px;">
-      <span id="gmail-connection-status" style="color:#ef4444;">Not connected</span>
-      <span id="gmail-account-email" style="color:#94a3b8;display:none;"></span>
-      <span id="gmail-last-checked">Last checked: —</span>
-      <span id="gmail-important-count">Important today: 0</span>
-      <span id="gmail-jd-count">JD files: 0</span>
-      <span id="gmail-draft-count">Drafts: 0</span>
+    <div id="gmail-status-bar" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:14px;background:#0f0f0f;border:1px solid #1a1a1a;border-radius:10px;align-items:center;">
+      <span style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Status:</span>
+      <span id="gmail-connection-status" style="padding:4px 12px;border-radius:12px;font-size:12px;font-weight:600;background:#ef4444;color:#fff;">Not connected</span>
+      <span id="gmail-account-email" style="color:#888;font-size:13px;display:none;"></span>
+      <span style="padding:4px 12px;border-radius:12px;font-size:12px;font-weight:600;background:#22c55e;color:#000;">Draft Only ✓</span>
+      <div style="flex:1;"></div>
+      <span id="gmail-last-checked" style="color:#666;font-size:12px;">Last checked: —</span>
+    </div>
+
+    <!-- Metrics Dashboard (shown when connected) -->
+    <div id="gmail-metrics" style="display:none;margin-bottom:16px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;">
+        <div style="background:#0f0f0f;border:1px solid #1a1a1a;border-radius:10px;padding:16px;">
+          <div style="font-size:12px;color:#888;text-transform:uppercase;margin-bottom:6px;">Important Today</div>
+          <div id="gmail-important-count" style="font-size:32px;font-weight:700;color:#f4cf63;">0</div>
+        </div>
+        <div style="background:#0f0f0f;border:1px solid #1a1a1a;border-radius:10px;padding:16px;">
+          <div style="font-size:12px;color:#888;text-transform:uppercase;margin-bottom:6px;">JD Files</div>
+          <div id="gmail-jd-count" style="font-size:32px;font-weight:700;color:#22c55e;">0</div>
+        </div>
+        <div style="background:#0f0f0f;border:1px solid #1a1a1a;border-radius:10px;padding:16px;">
+          <div style="font-size:12px;color:#888;text-transform:uppercase;margin-bottom:6px;">Drafts</div>
+          <div id="gmail-draft-count" style="font-size:32px;font-weight:700;color:#38bdf8;">0</div>
+        </div>
+      </div>
     </div>
 
     <!-- Not Connected: Setup Card -->
@@ -455,11 +517,23 @@
     <!-- Connected: Controls -->
     <div id="gmail-connected-controls" style="display:none;">
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
-        <button class="btn btn-primary" id="gmail-start-btn" onclick="gmailStart()">Start Monitoring</button>
-        <button class="btn" id="gmail-stop-btn" onclick="gmailStop()" disabled>Stop Monitoring</button>
-        <button class="btn btn-ghost" onclick="gmailCheckNow()">Check Now</button>
-        <button class="btn btn-ghost" onclick="gmailRefresh()">Refresh Status</button>
-        <button class="btn btn-danger" onclick="gmailDisconnect()">Disconnect Gmail</button>
+        <button class="btn btn-primary" id="gmail-start-btn" onclick="gmailStart()" style="background:#22c55e;color:#000;font-weight:600;">▶ Start Monitoring</button>
+        <button class="btn" id="gmail-stop-btn" onclick="gmailStop()" disabled>⏸ Stop Monitoring</button>
+        <button class="btn btn-ghost" onclick="gmailCheckNow()" id="check-now-btn"><span id="check-now-text">🔄 Check Now</span></button>
+        <button class="btn btn-ghost" onclick="gmailRefresh()">🔃 Refresh</button>
+        <button class="btn btn-ghost" onclick="gmailOpenPromptRules()" style="background:#1a1a1a;border:1px solid #f4cf63;color:#f4cf63;">⚙️ Prompt / Rules</button>
+      </div>
+      <!-- Active behavior summary -->
+      <div id="gmail-active-behavior" style="font-size:12px;color:#555;margin-bottom:10px;padding:8px 12px;background:#0a0a0a;border-radius:6px;border:1px solid #1a1a1a;">
+        Active behavior: <span id="gmail-behavior-summary" style="color:#888;">Job monitoring + JD saving + draft-only replies</span>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-ghost btn-sm" onclick="gmailOpenJDFolder()">📁 JD Folder</button>
+        <button class="btn btn-ghost btn-sm" onclick="gmailOpenDrafts()">📄 Drafts</button>
+        <button class="btn btn-ghost btn-sm" onclick="gmailViewLog()">📋 Log</button>
+        <button class="btn btn-danger btn-sm" onclick="gmailDisconnect()">🔌 Disconnect</button>
+        <div style="flex:1;"></div>
         <label style="color:#a3a3a3;font-size:12px;display:flex;align-items:center;gap:6px;">
           Poll interval:
           <select id="gmail-poll-interval" onchange="gmailUpdateConfig()" style="background:#191919;color:#fff;border:1px solid #383838;border-radius:6px;padding:6px;">
@@ -474,20 +548,148 @@
           <input type="checkbox" id="gmail-draft-only" checked onchange="gmailUpdateConfig()"> Draft-only mode
         </label>
       </div>
-      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-        <button class="btn btn-ghost btn-sm" onclick="window.open('/gmail/jd-files','_blank')">Open JD Folder</button>
-        <button class="btn btn-ghost btn-sm" onclick="window.open('/gmail/drafts','_blank')">Open Draft List</button>
-        <button class="btn btn-ghost btn-sm" onclick="gmailViewLog()">View Log</button>
-      </div>
     </div>
 
     <!-- Error display -->
     <div id="gmail-error" style="color:#f87171;margin-bottom:10px;display:none;"></div>
 
+    <!-- Live Gmail Scan Card -->
+    <div id="gmail-live-activity" style="display:none;margin-bottom:16px;border:1px solid #2a2200;border-radius:12px;background:#0a0900;overflow:hidden;">
+      <!-- Shimmer progress bar (visible during Check Now) -->
+      <div id="gmail-shimmer-bar" class="shimmer-bar" style="display:none;"></div>
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #1a1500;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span id="gmail-scan-title" style="font-size:13px;font-weight:700;color:#f4cf63;letter-spacing:0.3px;">Live Gmail Scan</span>
+          <span id="gmail-live-badge" style="display:none;align-items:center;gap:6px;padding:3px 11px;border-radius:10px;font-size:11px;font-weight:600;background:#071007;color:#22c55e;border:1px solid #16a34a;">
+            <span class="pulse-dot"></span>Monitoring active
+          </span>
+        </div>
+        <span id="gmail-next-scan" style="font-size:11px;color:#666;font-style:italic;"></span>
+      </div>
+      <!-- Step rows -->
+      <div id="gmail-activity-steps" style="padding:12px 16px;display:flex;flex-direction:column;gap:4px;">
+        <div style="font-size:12px;color:#444;text-align:center;padding:8px 0;">Click Check Now to start a scan.</div>
+      </div>
+    </div>
+
+    <!-- Last Check Result Card (hidden until first check) -->
+    <div id="gmail-last-check-card" style="display:none;margin-bottom:16px;">
+      <div id="gmail-last-check-inner" style="border-radius:10px;padding:16px;border:1px solid #1a1a1a;background:#0f0f0f;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <span style="font-size:13px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Last Check Result</span>
+          <span id="gmail-last-check-time" style="font-size:12px;color:#555;"></span>
+        </div>
+        <div id="gmail-last-check-message" style="margin-bottom:10px;font-size:14px;font-weight:500;"></div>
+        <div id="gmail-last-check-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;"></div>
+      </div>
+    </div>
+
     <!-- Recent Events -->
-    <h3 style="margin-top:16px;">Recent Events</h3>
-    <div id="gmail-events" style="max-height:350px;overflow-y:auto;">
-      <div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">No events yet. Start monitoring to check for important emails.</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px 0;">
+      <span style="font-size:13px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Recent Events</span>
+      <span id="gmail-events-count" style="font-size:12px;color:#555;"></span>
+    </div>
+    <div id="gmail-events" style="max-height:420px;overflow-y:auto;overflow-x:hidden;">
+      <div style="color:#555;font-size:14px;text-align:center;padding:32px 16px;line-height:1.6;">
+        No Gmail activity yet.<br>
+        <span style="color:#444;font-size:13px;">Click <strong style="color:#f4cf63;">Check Now</strong> to scan recent emails.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Prompt/Rules Configuration Modal -->
+<div id="gmail-prompt-rules-overlay" class="confirm-overlay hidden">
+  <div class="monitor-dialog" style="width:min(720px,95vw);max-height:90vh;overflow-y:auto;background:#090909;border:1px solid #1f1f1f;">
+    <button class="modal-close" type="button" aria-label="Close" onclick="closePromptRulesModal()">&times;</button>
+
+    <h2 style="color:#f4cf63;margin:0 0 4px 0;font-size:22px;font-weight:700;">Gmail Behavior Rules</h2>
+    <p style="color:#666;font-size:13px;margin:0 0 20px 0;">Control how Jarvis monitors, classifies, and responds to your Gmail</p>
+
+    <div style="display:flex;flex-direction:column;gap:20px;">
+
+      <!-- A. Monitoring Objective -->
+      <div>
+        <label style="display:block;color:#e5e5e5;font-size:13px;font-weight:600;margin-bottom:6px;">
+          A. Monitoring Objective
+        </label>
+        <textarea id="prompt-monitoring-objective"
+          style="width:100%;height:72px;background:#0f0f0f;color:#d4d4d4;border:1px solid #2a2a2a;border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.5;resize:vertical;font-family:inherit;"
+          placeholder="What should Jarvis monitor for?"></textarea>
+        <div style="font-size:11px;color:#555;margin-top:4px;">Primary goal — what types of emails to look for</div>
+      </div>
+
+      <!-- B. Important Mail Rules -->
+      <div>
+        <label style="display:block;color:#e5e5e5;font-size:13px;font-weight:600;margin-bottom:6px;">
+          B. Important Mail Rules
+        </label>
+        <textarea id="prompt-important-rules"
+          style="width:100%;height:90px;background:#0f0f0f;color:#d4d4d4;border:1px solid #2a2a2a;border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.5;resize:vertical;font-family:inherit;"
+          placeholder="When should an email be marked important?"></textarea>
+        <div style="font-size:11px;color:#555;margin-top:4px;">Keywords and signals that make an email important</div>
+      </div>
+
+      <!-- C. Ignore Rules -->
+      <div>
+        <label style="display:block;color:#e5e5e5;font-size:13px;font-weight:600;margin-bottom:6px;">
+          C. Ignore Rules
+        </label>
+        <textarea id="prompt-ignore-rules"
+          style="width:100%;height:72px;background:#0f0f0f;color:#d4d4d4;border:1px solid #2a2a2a;border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.5;resize:vertical;font-family:inherit;"
+          placeholder="What types of emails should be skipped?"></textarea>
+        <div style="font-size:11px;color:#555;margin-top:4px;">Types of emails to ignore completely</div>
+      </div>
+
+      <!-- D. Draft Reply Style -->
+      <div>
+        <label style="display:block;color:#e5e5e5;font-size:13px;font-weight:600;margin-bottom:6px;">
+          D. Draft Reply Style
+        </label>
+        <select id="prompt-reply-style"
+          style="width:100%;background:#0f0f0f;color:#d4d4d4;border:1px solid #2a2a2a;border-radius:8px;padding:10px 12px;font-size:13px;cursor:pointer;">
+          <option value="professional">Professional</option>
+          <option value="short">Short</option>
+          <option value="friendly">Friendly</option>
+          <option value="detailed">Detailed</option>
+        </select>
+        <div style="font-size:11px;color:#555;margin-top:4px;">Tone and length of generated draft replies</div>
+      </div>
+
+      <!-- E. Draft-only Safety -->
+      <div style="padding:14px 16px;background:#071007;border:1px solid #16a34a;border-radius:8px;">
+        <label style="display:flex;align-items:flex-start;gap:12px;cursor:default;">
+          <input type="checkbox" id="prompt-draft-only-safety" checked disabled
+            style="width:16px;height:16px;margin-top:2px;cursor:not-allowed;accent-color:#22c55e;opacity:0.7;flex-shrink:0;">
+          <div>
+            <div style="color:#22c55e;font-size:13px;font-weight:600;margin-bottom:3px;">
+              E. Draft-only Safety — Always ON
+            </div>
+            <div style="font-size:12px;color:#666;line-height:1.5;">
+              Create drafts only. Never send automatically. This setting is permanently enabled for safety.
+            </div>
+          </div>
+        </label>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display:flex;gap:10px;padding-top:4px;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-primary" onclick="savePromptRules()"
+          style="background:#f4cf63;color:#000;font-weight:700;padding:10px 22px;">
+          💾 Save Rules
+        </button>
+        <button class="btn btn-ghost" onclick="resetPromptRulesToDefault()"
+          style="padding:10px 18px;">
+          🔄 Reset Defaults
+        </button>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost" onclick="closePromptRulesModal()"
+          style="padding:10px 18px;color:#666;">
+          Close
+        </button>
+      </div>
+
     </div>
   </div>
 </div>
@@ -977,8 +1179,62 @@ function stopPolling() {
 document.addEventListener("DOMContentLoaded", startPolling);
 window.addEventListener("beforeunload", stopPolling);
 
+// ── Gmail Prompt/Rules Defaults ───────────────────────────────────────────
+const PROMPT_DEFAULTS = {
+  monitoring_objective: "Monitor Gmail for job descriptions, recruiter emails, interview updates, selections, offers, and joining-related messages. Save JD attachments and create safe draft replies only.",
+  important_rules: "Mark as important if the email contains JD, job description, recruiter follow-up, interview schedule, technical round, HR round, client interview, selection, offer, joining, onboarding, urgent response, or availability request.",
+  ignore_rules: "Ignore promotions, newsletters, OTPs, generic alerts, social media notifications, spam, ads, and unrelated marketing emails.",
+  reply_style: "professional"
+};
+
+function loadPromptDefaults() {
+  document.getElementById('prompt-monitoring-objective').value = PROMPT_DEFAULTS.monitoring_objective;
+  document.getElementById('prompt-important-rules').value = PROMPT_DEFAULTS.important_rules;
+  document.getElementById('prompt-ignore-rules').value = PROMPT_DEFAULTS.ignore_rules;
+  document.getElementById('prompt-reply-style').value = PROMPT_DEFAULTS.reply_style;
+}
+
+function updateBehaviorSummary(style) {
+  const el = document.getElementById('gmail-behavior-summary');
+  if (!el) return;
+  const styleLabel = {professional:'professional', short:'short', friendly:'friendly', detailed:'detailed'}[style] || style;
+  el.textContent = `Job monitoring + JD saving + draft-only replies (${styleLabel})`;
+}
+
 // ── Gmail Monitor ──────────────────────────────────────────────────────────
 let gmailPollInterval = null;
+
+// Check for Gmail OAuth callback results on page load
+document.addEventListener('DOMContentLoaded', function() {
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('gmail')) {
+    const result = urlParams.get('gmail');
+    const reason = urlParams.get('reason');
+    
+    if (result === 'connected') {
+      setTimeout(() => {
+        showGmailError('Gmail connected successfully! Refreshing status...');
+        gmailRefresh();
+      }, 100);
+    } else if (result === 'error') {
+      let errorMsg = 'Gmail login failed';
+      if (reason === 'google_denied') {
+        errorMsg = 'Gmail login failed: Access was denied by user';
+      } else if (reason === 'missing_code') {
+        errorMsg = 'Gmail login failed: No authorization code received';
+      } else if (reason === 'exchange_failed') {
+        errorMsg = 'Gmail login failed: Token exchange failed';
+      }
+      setTimeout(() => {
+        showGmailError(errorMsg);
+      }, 100);
+    }
+    
+    // Clear the URL parameters after handling them
+    const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+    window.history.replaceState({path: newUrl}, '', newUrl);
+  }
+});
 
 function openGmailMonitor() {
   document.getElementById('gmail-overlay').classList.remove('hidden');
@@ -1112,10 +1368,17 @@ async function gmailStart() {
       document.getElementById('gmail-stop-btn').disabled = false;
       document.getElementById('gmail-connection-status').textContent = 'Monitoring...';
       document.getElementById('gmail-connection-status').style.color = '#22c55e';
+      showGmailLiveBadge(true);
+      updateNextScanLabel();
+      showGmailToast('▶ Monitoring started', 'success');
     } else {
       showGmailError(data.detail || 'Failed to start');
+      showGmailToast('❌ Failed to start monitoring', 'error');
     }
-  } catch(e) { showGmailError('Connection error'); }
+  } catch(e) {
+    showGmailError('Connection error');
+    showGmailToast('❌ Connection error', 'error');
+  }
   gmailRefresh();
 }
 
@@ -1128,22 +1391,331 @@ async function gmailStop() {
       document.getElementById('gmail-stop-btn').disabled = true;
       document.getElementById('gmail-connection-status').textContent = 'Stopped';
       document.getElementById('gmail-connection-status').style.color = '#f59e0b';
+      showGmailLiveBadge(false);
+      clearNextScanLabel();
+      showGmailToast('⏸ Monitoring stopped', 'info');
     }
   } catch(e) { showGmailError('Connection error'); }
   gmailRefresh();
 }
 
-async function gmailCheckNow() {
-  try {
-    const res = await fetch('/gmail/check-now', {method:'POST'});
-    const data = await res.json();
-    if (res.ok) {
-      document.getElementById('gmail-last-checked').textContent = 'Last checked: just now';
+// ── Check Now step definitions ────────────────────────────────────────────
+const CHECK_STEPS = [
+  {id:'step-connect',   label:'Connecting to Gmail'},
+  {id:'step-scan',      label:'Scanning inbox'},
+  {id:'step-classify',  label:'Classifying emails'},
+  {id:'step-jd',        label:'Saving JD files'},
+  {id:'step-draft',     label:'Creating safe draft replies'},
+  {id:'step-done',      label:'Completed'},
+];
+
+function renderActivitySteps(steps) {
+  const el = document.getElementById('gmail-activity-steps');
+  if (!el) return;
+  el.innerHTML = steps.map((s, i) => {
+    let iconHtml, labelColor, rowClass = 'gmail-step', rowExtra = '';
+    if (s.state === 'done') {
+      iconHtml = `<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#0d2b0d;border:1.5px solid #22c55e;font-size:11px;color:#22c55e;font-weight:700;">✓</span>`;
+      labelColor = '#4a7a4a';
+    } else if (s.state === 'active') {
+      iconHtml = `<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#2a1f00;border:1.5px solid #f4cf63;flex-shrink:0;"><span style="display:block;width:10px;height:10px;border:2px solid #f4cf63;border-top-color:transparent;border-radius:50%;animation:spin 0.65s linear infinite;"></span></span>`;
+      labelColor = '#f4cf63';
+      rowClass += ' step-active-row';
+      rowExtra = 'padding:5px 8px;margin:-1px -4px;';
+    } else if (s.state === 'error') {
+      iconHtml = `<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#2b0d0d;border:1.5px solid #ef4444;font-size:11px;color:#ef4444;font-weight:700;">✗</span>`;
+      labelColor = '#ef4444';
     } else {
-      showGmailError(data.detail || 'Check failed');
+      iconHtml = `<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;border:1.5px solid #222;font-size:11px;color:#333;">○</span>`;
+      labelColor = '#333';
     }
-  } catch(e) { showGmailError('Connection error'); }
-  gmailRefresh();
+    return `<div class="${rowClass}" style="display:flex;align-items:center;gap:10px;font-size:13px;${rowExtra}">
+      ${iconHtml}
+      <span style="color:${labelColor};font-weight:${s.state === 'active' ? '600' : '400'};">${s.label}</span>
+    </div>`;
+  }).join('');
+}
+
+function setActivityStep(stepId, state) {
+  // Find existing steps state from DOM isn't practical — use module-level state
+  // Instead re-render all steps from _checkStepsState
+  if (!window._checkStepsState) return;
+  const step = window._checkStepsState.find(s => s.id === stepId);
+  if (step) {
+    // Mark previous active steps as done
+    window._checkStepsState.forEach(s => {
+      if (s.state === 'active') s.state = 'done';
+    });
+    step.state = state;
+  }
+  renderActivitySteps(window._checkStepsState);
+}
+
+function initActivitySteps() {
+  window._checkStepsState = CHECK_STEPS.map(s => ({...s, state: 'pending'}));
+  const card = document.getElementById('gmail-live-activity');
+  if (card) card.style.display = 'block';
+  const shimmer = document.getElementById('gmail-shimmer-bar');
+  if (shimmer) shimmer.style.display = 'block';
+  renderActivitySteps(window._checkStepsState);
+}
+
+function finalizeActivitySteps(hasError) {
+  if (!window._checkStepsState) return;
+  window._checkStepsState.forEach(s => {
+    if (s.state === 'active') s.state = hasError ? 'error' : 'done';
+    else if (s.state === 'pending') s.state = hasError ? 'pending' : 'done';
+  });
+  const doneStep = window._checkStepsState.find(s => s.id === 'step-done');
+  if (doneStep) doneStep.state = hasError ? 'error' : 'done';
+  renderActivitySteps(window._checkStepsState);
+  // Hide shimmer bar
+  const shimmer = document.getElementById('gmail-shimmer-bar');
+  if (shimmer) shimmer.style.display = 'none';
+}
+
+async function gmailCheckNow() {
+  const btn = document.getElementById('check-now-btn');
+  const btnText = document.getElementById('check-now-text');
+  const originalText = btnText ? btnText.innerHTML : '🔄 Check Now';
+
+  // Prevent duplicate clicks
+  if (btn && btn.disabled) return;
+
+  try {
+    // Show loading state + init steps
+    if (btn) btn.disabled = true;
+    if (btnText) btnText.innerHTML = '⏳ Checking Gmail...';
+
+    showGmailToast('🔍 Check Now started — scanning inbox…', 'info');
+    initActivitySteps();
+
+    // Animate steps with realistic timing
+    const stepDelay = ms => new Promise(r => setTimeout(r, ms));
+
+    setActivityStep('step-connect', 'active');
+    await stepDelay(320);
+    setActivityStep('step-scan', 'active');
+    await stepDelay(400);
+    setActivityStep('step-classify', 'active');
+
+    // Fire the actual request while classification step shows as active
+    const fetchPromise = fetch('/gmail/check-now', {method: 'POST'}).then(r => r.json());
+
+    await stepDelay(350);
+    setActivityStep('step-jd', 'active');
+    await stepDelay(250);
+    setActivityStep('step-draft', 'active');
+
+    // Await real result
+    const data = await fetchPromise;
+    const s = data.summary || {};
+
+    finalizeActivitySteps(data.status === 'error');
+
+    // Populate Last Check Result card
+    renderLastCheckResult(data);
+
+    // Show toasts based on outcome
+    if (data.status === 'ok') {
+      if ((s.emails_scanned || 0) === 0) {
+        showGmailToast('✅ Check completed. No new emails found.', 'success');
+      } else if ((s.important_found || 0) === 0) {
+        showGmailToast('✅ Check completed. No new matching emails found.', 'success');
+      } else {
+        showGmailToast(`✅ Found ${s.important_found} important mail(s).`, 'success');
+        if (s.jd_files_saved > 0) showGmailToast(`📁 ${s.jd_files_saved} JD file(s) saved.`, 'info');
+        if (s.drafts_created > 0) showGmailToast(`📝 ${s.drafts_created} draft(s) created.`, 'info');
+      }
+    } else if (data.status === 'partial') {
+      showGmailToast('⚠️ Check completed with warnings.', 'warning');
+    } else if (data.status === 'error') {
+      if (data.error_code === 'token_invalid') {
+        showGmailToast('❌ Gmail session expired. Please reconnect.', 'error');
+      } else if (data.error_code === 'gmail_not_connected') {
+        showGmailToast('❌ Gmail is not connected.', 'error');
+      } else if (data.error_code === 'gmail_api_error') {
+        showGmailToast('❌ ' + (data.message || 'Gmail API error.'), 'error');
+      } else {
+        showGmailToast('❌ ' + (data.message || 'Check failed.'), 'error');
+      }
+    }
+
+  } catch (e) {
+    console.error('Gmail check fetch error:', e);
+    finalizeActivitySteps(true);
+    showGmailToast('❌ Connection error. Is Jarvis running?', 'error');
+    renderLastCheckResult({status: 'error', message: 'Connection error. Is Jarvis running?'});
+  } finally {
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.innerHTML = originalText;
+    setTimeout(() => gmailRefresh(), 500);
+  }
+}
+
+function renderLastCheckResult(data) {
+  const card = document.getElementById('gmail-last-check-card');
+  const inner = document.getElementById('gmail-last-check-inner');
+  const msgEl = document.getElementById('gmail-last-check-message');
+  const timeEl = document.getElementById('gmail-last-check-time');
+  const statsEl = document.getElementById('gmail-last-check-stats');
+  if (!card) return;
+
+  // Show card
+  card.style.display = 'block';
+
+  // Time
+  const now = new Date();
+  if (timeEl) timeEl.textContent = 'at ' + now.toLocaleTimeString();
+
+  if (data.status === 'ok' || data.status === 'partial') {
+    const s = data.summary || {};
+    const hasNew = s.important_found > 0;
+    const hasErrors = (s.errors || 0) > 0;
+
+    // Border colour
+    inner.style.borderColor = hasErrors ? '#ef4444' : hasNew ? '#f4cf63' : '#22c55e';
+
+    // Message
+    if (msgEl) {
+      if (hasErrors) {
+        msgEl.style.color = '#ef4444';
+        msgEl.textContent = '⚠️ Check completed with warnings.';
+      } else if (hasNew) {
+        msgEl.style.color = '#f4cf63';
+        msgEl.textContent = `✅ Found ${s.important_found} important email(s).`;
+      } else {
+        msgEl.style.color = '#22c55e';
+        msgEl.textContent = '✅ Check completed successfully. No new matching emails found.';
+      }
+    }
+
+    // Stats grid
+    if (statsEl) {
+      const statItems = [
+        {label: 'Scanned',   value: s.emails_scanned  ?? 0, color: '#888'},
+        {label: 'Important', value: s.important_found  ?? 0, color: '#f4cf63'},
+        {label: 'JD Saved',  value: s.jd_files_saved  ?? 0, color: '#22c55e'},
+        {label: 'Drafts',    value: s.drafts_created  ?? 0, color: '#38bdf8'},
+        {label: 'Errors',    value: s.errors          ?? 0, color: (s.errors || 0) > 0 ? '#ef4444' : '#555'},
+      ];
+      statsEl.innerHTML = statItems.map(i => `
+        <div style="background:#111;border-radius:8px;padding:10px 12px;text-align:center;">
+          <div style="font-size:20px;font-weight:700;color:${i.color};">${i.value}</div>
+          <div style="font-size:11px;color:#666;margin-top:2px;">${i.label}</div>
+        </div>`).join('');
+    }
+
+  } else {
+    // Error state
+    inner.style.borderColor = '#ef4444';
+    if (msgEl) {
+      msgEl.style.color = '#ef4444';
+      msgEl.textContent = '❌ ' + (data.message || 'Check failed.');
+    }
+    if (statsEl) statsEl.innerHTML = '';
+  }
+}
+
+function showGmailToast(message, type = 'info') {
+  const palettes = {
+    success: { bg:'#071a07', border:'#16a34a', color:'#4ade80', shadow:'rgba(34,197,94,0.25)' },
+    error:   { bg:'#1a0707', border:'#dc2626', color:'#f87171', shadow:'rgba(239,68,68,0.25)' },
+    warning: { bg:'#1a1300', border:'#b45309', color:'#fbbf24', shadow:'rgba(251,191,36,0.2)' },
+    info:    { bg:'#070f1a', border:'#1d4ed8', color:'#60a5fa', shadow:'rgba(96,165,250,0.2)' },
+  };
+  const p = palettes[type] || palettes.info;
+
+  // Stack toasts — push existing ones down
+  const existing = document.querySelectorAll('.jarvis-toast');
+  existing.forEach((t, i) => { t.style.top = (20 + (i + 1) * 62) + 'px'; });
+
+  const toast = document.createElement('div');
+  toast.className = 'jarvis-toast';
+  toast.style.cssText = `
+    position:fixed; top:20px; right:20px; z-index:10001;
+    min-width:260px; max-width:380px;
+    padding:13px 18px;
+    background:${p.bg};
+    border:1px solid ${p.border};
+    border-left:3px solid ${p.border};
+    border-radius:8px;
+    color:${p.color};
+    font-size:13px; font-weight:600; line-height:1.4;
+    box-shadow:0 4px 24px ${p.shadow}, 0 2px 8px rgba(0,0,0,0.5);
+    animation:slideIn 0.28s cubic-bezier(0.16,1,0.3,1);
+    cursor:default;
+  `;
+  toast.textContent = message;
+
+  // Click to dismiss
+  toast.addEventListener('click', () => {
+    toast.style.animation = 'slideOut 0.2s ease-in forwards';
+    setTimeout(() => toast.remove(), 220);
+  });
+
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    if (!toast.isConnected) return;
+    toast.style.animation = 'slideOut 0.25s ease-in forwards';
+    setTimeout(() => toast.remove(), 260);
+  }, 4500);
+}
+
+// ── Metric count-up glow ──────────────────────────────────────────────────
+function animateMetricCount(elId, newVal) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const current = parseInt(el.textContent) || 0;
+  const target  = parseInt(newVal) || 0;
+  if (current === target) return;
+
+  // Instant set + glow effect
+  el.textContent = String(target);
+  el.classList.remove('count-glow');
+  // Force reflow to restart animation
+  void el.offsetWidth;
+  el.classList.add('count-glow');
+  setTimeout(() => el.classList.remove('count-glow'), 850);
+}
+
+// ── Live monitoring badge + next scan label ───────────────────────────────
+let _nextScanTimer = null;
+
+function showGmailLiveBadge(visible) {
+  const badge = document.getElementById('gmail-live-badge');
+  const card  = document.getElementById('gmail-live-activity');
+  if (badge) badge.style.display = visible ? 'flex' : 'none';
+  if (card)  card.style.display  = visible ? 'block' : (card.style.display === 'block' ? 'block' : 'none');
+}
+
+function updateNextScanLabel() {
+  const el = document.getElementById('gmail-next-scan');
+  if (!el) return;
+  const sel = document.getElementById('gmail-poll-interval');
+  const mins = sel ? parseInt(sel.value) || 5 : 5;
+  let remaining = mins * 60; // seconds
+
+  clearInterval(_nextScanTimer);
+  _nextScanTimer = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) { remaining = mins * 60; }
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    el.textContent = m > 0
+      ? `Next scan in ~${m} min`
+      : `Next scan in ${s}s`;
+  }, 1000);
+
+  // Show immediately
+  el.textContent = `Next scan in ~${mins} min`;
+}
+
+function clearNextScanLabel() {
+  clearInterval(_nextScanTimer);
+  const el = document.getElementById('gmail-next-scan');
+  if (el) el.textContent = '';
 }
 
 async function gmailRefresh() {
@@ -1167,9 +1739,11 @@ async function gmailRefresh() {
 
     if (status.connected) {
       connEl.textContent = 'Connected';
-      connEl.style.color = '#22c55e';
+      connEl.style.background = '#22c55e';
+      connEl.style.color = '#000';
       setupCard.style.display = 'none';
       connectedControls.style.display = 'block';
+      document.getElementById('gmail-metrics').style.display = 'block';
       if (status.account_email) {
         emailEl.textContent = '📧 ' + status.account_email;
         emailEl.style.display = 'inline';
@@ -1179,10 +1753,12 @@ async function gmailRefresh() {
       tokenStatus.textContent = 'Login completed ✅';
       tokenStatus.style.color = '#22c55e';
     } else {
-      connEl.textContent = status.error_message || 'Not connected';
-      connEl.style.color = '#ef4444';
+      connEl.textContent = 'Not connected';
+      connEl.style.background = '#ef4444';
+      connEl.style.color = '#fff';
       setupCard.style.display = 'block';
       connectedControls.style.display = 'none';
+      document.getElementById('gmail-metrics').style.display = 'none';
       emailEl.style.display = 'none';
 
       // Update credentials status
@@ -1206,13 +1782,18 @@ async function gmailRefresh() {
 
     // Update last checked
     if (status.last_checked) {
-      document.getElementById('gmail-last-checked').textContent = 'Last checked: ' + status.last_checked;
+      const lastChecked = document.getElementById('gmail-last-checked');
+      if (lastChecked) {
+        const date = new Date(status.last_checked);
+        const timeStr = date.toLocaleTimeString();
+        lastChecked.textContent = 'Last checked: ' + timeStr;
+      }
     }
 
-    // Update counts
-    document.getElementById('gmail-important-count').textContent = 'Important today: ' + (status.important_mails_today || 0);
-    document.getElementById('gmail-jd-count').textContent = 'JD files: ' + (status.jd_files_saved_today || 0);
-    document.getElementById('gmail-draft-count').textContent = 'Drafts: ' + (status.drafts_created_today || 0);
+    // Update metric counts
+    animateMetricCount('gmail-important-count', status.important_mails_today || 0);
+    animateMetricCount('gmail-jd-count', status.jd_files_saved_today || 0);
+    animateMetricCount('gmail-draft-count', status.drafts_created_today || 0);
 
     // Update poll interval
     if (config.poll_interval_minutes) {
@@ -1222,47 +1803,128 @@ async function gmailRefresh() {
     // Update draft-only toggle
     document.getElementById('gmail-draft-only').checked = config.draft_only !== false;
 
-    // Update start/stop buttons
-    if (status.monitoring_active || status.running) {
-      document.getElementById('gmail-start-btn').disabled = true;
-      document.getElementById('gmail-stop-btn').disabled = false;
-    } else {
-      document.getElementById('gmail-start-btn').disabled = false;
-      document.getElementById('gmail-stop-btn').disabled = true;
+    // Update behavior summary from stored rules
+    if (status.connected) {
+      fetch('/gmail/prompt-rules').then(r => r.json()).then(d => {
+        if (d.status === 'ok') updateBehaviorSummary(d.rules.reply_style || 'professional');
+      }).catch(() => {});
     }
 
-    // Update events table
-    const eventsEl = document.getElementById('gmail-events');
-    if (events.events && events.events.length > 0) {
-      let html = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
-      html += '<thead><tr style="color:#a3a3a3;border-bottom:1px solid #383838;">';
-      html += '<th style="padding:6px 8px;text-align:left;">Time</th>';
-      html += '<th style="padding:6px 8px;text-align:left;">From</th>';
-      html += '<th style="padding:6px 8px;text-align:left;">Subject</th>';
-      html += '<th style="padding:6px 8px;text-align:left;">Category</th>';
-      html += '<th style="padding:6px 8px;text-align:left;">Importance</th>';
-      html += '<th style="padding:6px 8px;text-align:left;">Summary</th>';
-      html += '<th style="padding:6px 8px;text-align:left;">JD</th>';
-      html += '<th style="padding:6px 8px;text-align:left;">Draft</th>';
-      html += '</tr></thead><tbody>';
-      for (const ev of events.events) {
-        html += '<tr style="border-bottom:1px solid #27272a;">';
-        html += '<td style="padding:6px 8px;">' + (ev.detected_at || ev.email_date || '') + '</td>';
-        html += '<td style="padding:6px 8px;">' + escapeHtml(ev.from || '') + '</td>';
-        html += '<td style="padding:6px 8px;">' + escapeHtml(ev.subject || '') + '</td>';
-        html += '<td style="padding:6px 8px;">' + escapeHtml(ev.category || '') + '</td>';
-        html += '<td style="padding:6px 8px;">' + escapeHtml(ev.importance || '') + '</td>';
-        html += '<td style="padding:6px 8px;">' + escapeHtml(ev.summary || '') + '</td>';
-        html += '<td style="padding:6px 8px;">' + (ev.jd_saved_path ? '✓' : '') + '</td>';
-        html += '<td style="padding:6px 8px;">' + (ev.draft_path ? '✓' : '') + '</td>';
-        html += '</tr>';
-      }
-      html += '</tbody></table>';
-      eventsEl.innerHTML = html;
-    } else {
-      eventsEl.innerHTML = '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">No events yet.</div>';
+    // Update start/stop buttons and live badge
+    const isMonitoring = !!(status.monitoring_active || status.running);
+    const startBtn = document.getElementById('gmail-start-btn');
+    const stopBtn  = document.getElementById('gmail-stop-btn');
+    if (startBtn) startBtn.disabled = isMonitoring;
+    if (stopBtn)  stopBtn.disabled  = !isMonitoring;
+    showGmailLiveBadge(isMonitoring);
+    if (isMonitoring && !_nextScanTimer) {
+      updateNextScanLabel();
+    } else if (!isMonitoring) {
+      clearNextScanLabel();
     }
+
+    // Show activity card if there is step data or monitoring
+    const activityCard = document.getElementById('gmail-live-activity');
+    if (activityCard && !isMonitoring && !window._checkStepsState) {
+      activityCard.style.display = 'none';
+    }
+
+    // Update events
+    renderGmailEvents(events.events || []);
   } catch(e) { /* poll retries */ }
+}
+
+function fmtEventTime(raw) {
+  if (!raw) return '—';
+  try {
+    const d = new Date(raw);
+    if (isNaN(d)) return raw;
+    return d.toLocaleDateString('en-US', {month:'short', day:'numeric'}) + ', ' +
+           d.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+  } catch(_) { return raw; }
+}
+
+function categoryBadge(cat) {
+  const map = {
+    job_description:  {label:'Job Description',  bg:'#1a2a1a', color:'#4ade80', border:'#16a34a'},
+    interview_invite: {label:'Interview',         bg:'#1a1a2a', color:'#818cf8', border:'#4f46e5'},
+    recruiter:        {label:'Recruiter',         bg:'#2a1a1a', color:'#fb923c', border:'#ea580c'},
+    offer:            {label:'Offer',             bg:'#2a2a00', color:'#facc15', border:'#ca8a04'},
+    ignored:          {label:'Ignored',           bg:'#1a1a1a', color:'#555',    border:'#333'},
+    error:            {label:'Error',             bg:'#2a1a1a', color:'#f87171', border:'#dc2626'},
+  };
+  const s = map[cat] || {label: cat || '—', bg:'#1a1a1a', color:'#888', border:'#333'};
+  return `<span style="display:inline-block;padding:3px 9px;border-radius:6px;font-size:11px;font-weight:600;background:${s.bg};color:${s.color};border:1px solid ${s.border};white-space:nowrap;">${escapeHtml(s.label)}</span>`;
+}
+
+function importanceBadge(imp) {
+  const map = {
+    critical: {label:'Critical', color:'#ef4444'},
+    high:     {label:'High',     color:'#f4cf63'},
+    medium:   {label:'Medium',   color:'#fb923c'},
+    low:      {label:'Low',      color:'#555'},
+  };
+  const s = map[imp] || {label: imp || '—', color:'#555'};
+  return `<span style="font-size:12px;font-weight:600;color:${s.color};">${escapeHtml(s.label)}</span>`;
+}
+
+function jdBadge(path) {
+  if (path) return '<span style="display:inline-block;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;background:#1a2a1a;color:#4ade80;border:1px solid #16a34a;">✓ Saved</span>';
+  return '<span style="font-size:11px;color:#444;">—</span>';
+}
+
+function draftBadge(path) {
+  if (path) return '<span style="display:inline-block;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;background:#1a1a2a;color:#818cf8;border:1px solid #4f46e5;">✓ Created</span>';
+  return '<span style="font-size:11px;color:#444;">—</span>';
+}
+
+function renderGmailEvents(evList) {
+  const eventsEl = document.getElementById('gmail-events');
+  const countEl  = document.getElementById('gmail-events-count');
+  if (!eventsEl) return;
+
+  if (!evList || evList.length === 0) {
+    if (countEl) countEl.textContent = '';
+    eventsEl.innerHTML = `
+      <div style="color:#555;font-size:14px;text-align:center;padding:32px 16px;line-height:1.6;">
+        No Gmail activity yet.<br>
+        <span style="color:#444;font-size:13px;">Click <strong style="color:#f4cf63;">Check Now</strong> to scan recent emails.</span>
+      </div>`;
+    return;
+  }
+
+  if (countEl) countEl.textContent = evList.length + ' event' + (evList.length !== 1 ? 's' : '');
+
+  let html = '<div style="display:flex;flex-direction:column;gap:0;">';
+  for (const ev of evList) {
+    const sender = escapeHtml(ev.from || ev.from_ || '');
+    const subject = escapeHtml(ev.subject || '');
+    const summary = escapeHtml(ev.summary || '');
+    const time = fmtEventTime(ev.detected_at || ev.email_date);
+
+    html += `
+    <div style="padding:14px 16px;border-bottom:1px solid #151515;display:grid;grid-template-columns:130px 1fr auto;gap:12px;align-items:start;transition:background 0.15s;" onmouseover="this.style.background='#0d0d0d'" onmouseout="this.style.background=''">
+      <!-- Left: time + badges -->
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0;">
+        <div style="font-size:12px;color:#555;white-space:nowrap;">${time}</div>
+        <div>${categoryBadge(ev.category)}</div>
+        <div>${importanceBadge(ev.importance)}</div>
+      </div>
+      <!-- Centre: sender, subject, summary -->
+      <div style="min-width:0;display:flex;flex-direction:column;gap:4px;">
+        <div style="font-size:12px;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${sender}">${sender || '<span style=color:#444>Unknown sender</span>'}</div>
+        <div style="font-size:14px;color:#e5e5e5;font-weight:500;line-height:1.4;word-break:break-word;">${subject || '<span style=color:#444>No subject</span>'}</div>
+        ${summary ? `<div style="font-size:12px;color:#666;line-height:1.5;word-break:break-word;">${summary}</div>` : ''}
+      </div>
+      <!-- Right: JD + Draft badges -->
+      <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;flex-shrink:0;">
+        ${jdBadge(ev.jd_saved_path)}
+        ${draftBadge(ev.draft_reply_path || ev.draft_path)}
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+  eventsEl.innerHTML = html;
 }
 
 async function gmailUpdateConfig() {
@@ -1288,6 +1950,95 @@ function showGmailError(msg) {
 function gmailViewLog() {
   const today = new Date().toISOString().split('T')[0];
   window.open('/notes/gmail_monitor_log_' + today + '.jsonl', '_blank');
+}
+
+function gmailOpenJDFolder() {
+  window.open('/gmail/jd-files', '_blank');
+}
+
+function gmailOpenDrafts() {
+  window.open('/gmail/drafts', '_blank');
+}
+
+async function gmailOpenPromptRules() {
+  // Load current rules from backend
+  try {
+    const res = await fetch('/gmail/prompt-rules');
+    const data = await res.json();
+    if (data.status === 'ok' && data.rules) {
+      const r = data.rules;
+      document.getElementById('prompt-monitoring-objective').value = r.monitoring_objective || PROMPT_DEFAULTS.monitoring_objective;
+      document.getElementById('prompt-important-rules').value = r.important_rules || PROMPT_DEFAULTS.important_rules;
+      document.getElementById('prompt-ignore-rules').value = r.ignore_rules || PROMPT_DEFAULTS.ignore_rules;
+      document.getElementById('prompt-reply-style').value = r.reply_style || 'professional';
+    } else {
+      loadPromptDefaults();
+    }
+  } catch(e) {
+    console.error('Failed to load prompt rules:', e);
+    loadPromptDefaults();
+  }
+  document.getElementById('gmail-prompt-rules-overlay').classList.remove('hidden');
+}
+
+function closePromptRulesModal() {
+  document.getElementById('gmail-prompt-rules-overlay').classList.add('hidden');
+}
+
+async function savePromptRules() {
+  const rules = {
+    monitoring_objective: document.getElementById('prompt-monitoring-objective').value.trim() || PROMPT_DEFAULTS.monitoring_objective,
+    important_rules: document.getElementById('prompt-important-rules').value.trim() || PROMPT_DEFAULTS.important_rules,
+    ignore_rules: document.getElementById('prompt-ignore-rules').value.trim() || PROMPT_DEFAULTS.ignore_rules,
+    reply_style: document.getElementById('prompt-reply-style').value || 'professional',
+    draft_only_safety: true
+  };
+
+  try {
+    const res = await fetch('/gmail/prompt-rules', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(rules)
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showGmailToast('✅ Prompt rules saved', 'success');
+      updateBehaviorSummary(rules.reply_style);
+      closePromptRulesModal();
+    } else {
+      showGmailToast('❌ Failed to save rules', 'error');
+    }
+  } catch(e) {
+    console.error('Failed to save prompt rules:', e);
+    showGmailToast('❌ Connection error', 'error');
+  }
+}
+
+async function resetPromptRulesToDefault() {
+  loadPromptDefaults();
+  // Also save the defaults to backend
+  try {
+    const res = await fetch('/gmail/prompt-rules', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({...PROMPT_DEFAULTS, draft_only_safety: true})
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showGmailToast('📋 Prompt rules reset to defaults', 'info');
+      updateBehaviorSummary(PROMPT_DEFAULTS.reply_style);
+    } else {
+      showGmailToast('⚠️ Reset locally but could not save to server', 'warning');
+    }
+  } catch(e) {
+    console.error('Failed to save reset rules:', e);
+    showGmailToast('📋 Prompt rules reset to defaults', 'info');
+  }
+}
+
+function gmailHandleError() {
+  // Retry check or reconnect based on error type
+  gmailCheckNow();
 }
 
 </script>

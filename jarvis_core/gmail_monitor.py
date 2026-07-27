@@ -28,6 +28,7 @@ from jarvis_core.gmail_service import (
     list_recent_unread,
     mark_as_read,
     reset_service,
+    token_exists,
 )
 from jarvis_core.jd_saver import save_jd_attachment, save_jd_link, extract_jd_links_from_body
 
@@ -288,37 +289,160 @@ def stop_monitor() -> dict:
 def check_now() -> dict:
     """Trigger an immediate check (runs in current thread).
 
-    Returns status dict with count of new emails found.
+    Returns structured status dict with detailed summary and events.
+    
+    Success response:
+    {
+        "status": "ok",
+        "message": "Check completed",
+        "checked_at": "...",
+        "summary": {
+            "emails_scanned": 0,
+            "important_found": 0,
+            "jd_files_saved": 0,
+            "drafts_created": 0,
+            "errors": 0
+        },
+        "events": [...]
+    }
+    
+    Error response:
+    {
+        "status": "error",
+        "message": "Safe human-readable reason",
+        "error_code": "gmail_not_connected / token_invalid / gmail_api_error / network_error"
+    }
     """
     global _state
 
+    logger.info("Check Now: started")
+    
+    # Check if Gmail is connected
     if not is_connected():
         with _lock:
             _state.connected = False
             _state.error_message = "Gmail not connected."
-        return {"status": "not_connected", "new_emails": 0}
-
-    processed_ids = _load_processed_ids()
-    messages = list_recent_unread(max_results=10)
-    new_count = 0
-
-    for preview in messages:
-        if preview.message_id in processed_ids:
-            continue
+        
+        logger.warning("Check Now: failed - Gmail not connected")
+        
+        # Check if token exists but is invalid
+        if token_exists():
+            return {
+                "status": "error",
+                "message": "Gmail session expired. Please reconnect Gmail.",
+                "error_code": "token_invalid"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Gmail is not connected. Please connect Gmail first.",
+                "error_code": "gmail_not_connected"
+            }
+    
+    logger.info("Check Now: Gmail connected - yes")
+    
+    # Initialize counters
+    emails_scanned = 0
+    important_found = 0
+    jd_files_saved = 0
+    drafts_created = 0
+    errors = 0
+    warnings = []
+    events_processed = []
+    
+    try:
+        processed_ids = _load_processed_ids()
+        
+        # Fetch recent unread messages
         try:
-            _process_email(preview)
-            processed_ids.add(preview.message_id)
-            new_count += 1
+            messages = list_recent_unread(max_results=10)
+            emails_scanned = len(messages)
+            logger.info("Check Now: emails scanned - %d", emails_scanned)
         except Exception as e:
-            logger.error("Error processing email %s: %s", preview.message_id, e)
-            continue
-
-    _save_processed_ids(processed_ids)
-
-    with _lock:
-        _state.last_checked = datetime.now().isoformat()
-
-    return {"status": "ok", "new_emails": new_count}
+            logger.error("Check Now: Gmail API error - %s", str(e))
+            return {
+                "status": "error",
+                "message": "Failed to fetch emails from Gmail. Please check your connection.",
+                "error_code": "gmail_api_error"
+            }
+        
+        # Process each message
+        for preview in messages:
+            if preview.message_id in processed_ids:
+                continue
+                
+            try:
+                # Process the email
+                event_data = _process_email(preview)
+                processed_ids.add(preview.message_id)
+                
+                # Track statistics
+                if event_data:
+                    events_processed.append(event_data)
+                    
+                    # Check if it's important
+                    if hasattr(event_data, 'importance') and event_data.importance in ('high', 'critical'):
+                        important_found += 1
+                    
+                    # Check if JD was saved (look for attachments or links in action)
+                    if hasattr(event_data, 'action_required'):
+                        action = event_data.action_required or ""
+                        if "JD" in action or "attachment" in action or "link" in action:
+                            jd_files_saved += 1
+                    
+                    # Check if draft was created
+                    if hasattr(event_data, 'action_required'):
+                        action = event_data.action_required or ""
+                        if "draft" in action.lower():
+                            drafts_created += 1
+                            
+            except Exception as e:
+                logger.error("Check Now: error processing email %s - %s", preview.message_id, str(e))
+                errors += 1
+                warnings.append(f"Failed to process email from {preview.sender}: {str(e)[:50]}")
+                continue
+        
+        # Save processed IDs
+        _save_processed_ids(processed_ids)
+        
+        # Update state
+        checked_at = datetime.now().isoformat()
+        with _lock:
+            _state.last_checked = checked_at
+        
+        logger.info("Check Now: important mails found - %d", important_found)
+        logger.info("Check Now: JD files saved - %d", jd_files_saved)
+        logger.info("Check Now: drafts created - %d", drafts_created)
+        logger.info("Check Now: errors - %d", errors)
+        logger.info("Check Now: completed successfully")
+        
+        # Return success response
+        response = {
+            "status": "ok" if errors == 0 else "partial",
+            "message": "Check completed" if errors == 0 else "Check completed with warnings",
+            "checked_at": checked_at,
+            "summary": {
+                "emails_scanned": emails_scanned,
+                "important_found": important_found,
+                "jd_files_saved": jd_files_saved,
+                "drafts_created": drafts_created,
+                "errors": errors
+            },
+            "events": [e.model_dump() if hasattr(e, 'model_dump') else e for e in events_processed]
+        }
+        
+        if warnings:
+            response["warnings"] = warnings
+            
+        return response
+        
+    except Exception as e:
+        logger.error("Check Now: unexpected error - %s", str(e))
+        return {
+            "status": "error",
+            "message": f"An unexpected error occurred: {str(e)[:100]}",
+            "error_code": "unexpected_error"
+        }
 
 
 def get_state() -> GmailMonitorState:

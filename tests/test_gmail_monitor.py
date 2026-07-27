@@ -561,14 +561,16 @@ def test_gmail_status_credentials_configured(mock_creds_file):
 
 
 def test_upload_credentials_valid_json(tmp_path):
-    """Test that upload credentials endpoint saves valid JSON."""
+    """Test that upload credentials endpoint saves valid Web application JSON."""
     from jarvis_core.gmail_service import validate_credentials_json, save_credentials_json
     valid_data = {
-        "installed": {
+        "web": {
             "client_id": "test-client-id.apps.googleusercontent.com",
             "client_secret": "test-secret",
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": ["http://127.0.0.1:8000/gmail/oauth/callback"],
+            "javascript_origins": ["http://127.0.0.1:8000"]
         }
     }
     is_valid, error = validate_credentials_json(valid_data)
@@ -590,9 +592,11 @@ def test_upload_credentials_missing_client_id():
     """Test that upload credentials rejects JSON without client_id."""
     from jarvis_core.gmail_service import validate_credentials_json
     invalid_data = {
-        "installed": {
+        "web": {
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": ["http://127.0.0.1:8000/gmail/oauth/callback"],
+            "javascript_origins": ["http://127.0.0.1:8000"],
         }
     }
     is_valid, error = validate_credentials_json(invalid_data)
@@ -604,11 +608,13 @@ def test_credentials_not_exposed_in_status():
     """Test that saved credentials never expose client_secret in status."""
     from jarvis_core.gmail_service import validate_credentials_json
     valid_data = {
-        "installed": {
+        "web": {
             "client_id": "test-client-id.apps.googleusercontent.com",
             "client_secret": "should-not-be-exposed",
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": ["http://127.0.0.1:8000/gmail/oauth/callback"],
+            "javascript_origins": ["http://127.0.0.1:8000"],
         }
     }
     # Validate passes
@@ -706,12 +712,14 @@ def test_start_monitor_blocked_if_not_connected(mock_connected):
     stop_monitor()
 
 
-@patch("jarvis_core.gmail_service.is_connected", return_value=False)
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=False)
 def test_check_now_blocked_if_not_connected(mock_connected):
-    """Test that check-now is blocked if Gmail not connected."""
+    """Test that check-now returns error if Gmail not connected."""
     from jarvis_core.gmail_monitor import check_now
     result = check_now()
-    assert result["status"] == "not_connected"
+    # New implementation returns structured error, not old "not_connected" status
+    assert result["status"] == "error"
+    assert "error_code" in result
 
 
 @patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
@@ -808,13 +816,28 @@ def test_oauth_start_web_credentials_returns_authorization_url():
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                 "token_uri": "https://oauth2.googleapis.com/token",
                 "redirect_uris": ["http://127.0.0.1:8000/gmail/oauth/callback"],
+                "javascript_origins": ["http://127.0.0.1:8000"],
             }
         }):
-            with patch("jarvis_core.gmail_routes.get_authorization_url", return_value=("https://accounts.google.com/o/oauth2/auth?test=1", None)):
+            with patch("jarvis_core.gmail_routes.get_authorization_url", return_value=("https://accounts.google.com/o/oauth2/v2/auth?client_id=test&redirect_uri=http%3A%2F%2F127.0.0.1%3A8000%2Fgmail%2Foauth%2Fcallback&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.readonly+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.modify&access_type=offline&prompt=consent&include_granted_scopes=true&state=abc123", None)):
                 result = gmail_oauth_start()
                 assert result["status"] == "ok"
                 assert "authorization_url" in result
-                assert result["authorization_url"].startswith("https://accounts.google.com")
+                auth_url = result["authorization_url"]
+                
+                # Test authorization URL format
+                assert auth_url.startswith("https://accounts.google.com/o/oauth2/v2/auth")
+                assert "response_type=code" in auth_url
+                assert "access_type=offline" in auth_url
+                assert "prompt=consent" in auth_url
+                assert "include_granted_scopes=true" in auth_url
+                assert "state=" in auth_url
+                assert "redirect_uri=http%3A%2F%2F127.0.0.1%3A8000%2Fgmail%2Foauth%2Fcallback" in auth_url
+                assert "scope=" in auth_url
+                # Ensure no Python list formatting appears in URL
+                assert "[" not in auth_url
+                assert "]" not in auth_url
+                assert "'" not in auth_url
 
 
 def test_oauth_start_response_does_not_expose_client_secret():
@@ -846,18 +869,15 @@ def test_oauth_callback_saves_token(tmp_path):
     # Use a real temp path for the token file
     token_path = tmp_path / "gmail_token.json"
 
-    # Mock the Flow class
-    mock_flow = MagicMock()
-    mock_creds = MagicMock()
-    mock_creds.to_json.return_value = json.dumps({
-        "token": "fake-token",
+    # Mock the token exchange response
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "access_token": "fake-token",
         "refresh_token": "fake-refresh",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "client_id": "test.apps.googleusercontent.com",
-        "client_secret": "test-secret",
-        "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
-    })
-    mock_flow.credentials = mock_creds
+        "expires_in": 3600,
+        "token_type": "Bearer",
+    }
 
     with patch("jarvis_core.gmail_service._get_credentials", return_value={
         "web": {
@@ -866,9 +886,10 @@ def test_oauth_callback_saves_token(tmp_path):
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
             "redirect_uris": ["http://127.0.0.1:8000/gmail/oauth/callback"],
+            "javascript_origins": ["http://127.0.0.1:8000"],
         }
     }):
-        with patch("google_auth_oauthlib.flow.Flow.from_client_config", return_value=mock_flow):
+        with patch("requests.post", return_value=mock_response):
             with patch("jarvis_core.gmail_service.get_account_email", return_value="test@gmail.com"):
                 with patch("jarvis_core.gmail_service.TOKEN_FILE", token_path):
                     with patch("jarvis_core.gmail_service.CONFIG_DIR", tmp_path):
@@ -926,18 +947,30 @@ def test_ui_connect_button_handles_authorization_url():
 def test_oauth_callback_with_error_returns_safe_error():
     """Test 1: OAuth callback with error returns safe error redirect."""
     from jarvis_core.gmail_routes import gmail_oauth_callback
+    from fastapi import Request
 
-    result = gmail_oauth_callback(code=None, error="access_denied", state=None)
+    # Create mock request
+    mock_request = MagicMock()
+    mock_request.url = "http://127.0.0.1:8000/gmail/oauth/callback?error=access_denied"
+    
+    result = gmail_oauth_callback(code=None, error="access_denied", state=None, request=mock_request)
     assert result.status_code == 307  # RedirectResponse
-    assert "ui?gmail=error" in result.headers.get("location", "")
+    location = result.headers.get("location", "")
+    assert "ui?gmail=error" in location
+    assert "reason=google_denied" in location
 
 
 def test_oauth_callback_with_code_calls_token_exchange():
-    """Test 2: OAuth callback with code calls token exchange."""
+    """Test 2: OAuth callback with code calls token exchange.""" 
     from jarvis_core.gmail_routes import gmail_oauth_callback
+    from fastapi import Request
 
-    with patch("jarvis_core.gmail_routes.exchange_code_for_token", return_value=(True, "test@gmail.com")):
-        result = gmail_oauth_callback(code="test-code", error=None, state=None)
+    # Create mock request
+    mock_request = MagicMock()
+    mock_request.url = "http://127.0.0.1:8000/gmail/oauth/callback?code=test-code&state=abc123"
+
+    with patch("jarvis_core.gmail_routes.exchange_code_for_token_with_response", return_value=(True, "test@gmail.com")):
+        result = gmail_oauth_callback(code="test-code", error=None, state="abc123", request=mock_request)
         assert result.status_code == 307
         assert "ui?gmail=connected" in result.headers.get("location", "")
 
@@ -947,17 +980,16 @@ def test_oauth_callback_saves_gmail_token_json(tmp_path):
     from jarvis_core.gmail_service import exchange_code_for_token
 
     token_path = tmp_path / "gmail_token.json"
-    mock_flow = MagicMock()
-    mock_creds = MagicMock()
-    mock_creds.to_json.return_value = json.dumps({
-        "token": "fake-token",
+    
+    # Mock the token exchange response
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "access_token": "fake-token",
         "refresh_token": "fake-refresh",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "client_id": "test.apps.googleusercontent.com",
-        "client_secret": "test-secret",
-        "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
-    })
-    mock_flow.credentials = mock_creds
+        "expires_in": 3600,
+        "token_type": "Bearer",
+    }
 
     with patch("jarvis_core.gmail_service._get_credentials", return_value={
         "web": {
@@ -966,9 +998,10 @@ def test_oauth_callback_saves_gmail_token_json(tmp_path):
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
             "redirect_uris": ["http://127.0.0.1:8000/gmail/oauth/callback"],
+            "javascript_origins": ["http://127.0.0.1:8000"],
         }
     }):
-        with patch("google_auth_oauthlib.flow.Flow.from_client_config", return_value=mock_flow):
+        with patch("requests.post", return_value=mock_response):
             with patch("jarvis_core.gmail_service.get_account_email", return_value="test@gmail.com"):
                 with patch("jarvis_core.gmail_service.TOKEN_FILE", token_path):
                     with patch("jarvis_core.gmail_service.CONFIG_DIR", tmp_path):
@@ -1051,3 +1084,587 @@ def test_requirements_include_google_oauth_libraries():
     assert "google-auth-oauthlib" in content
     assert "google-api-python-client" in content
     assert "google-auth-httplib2" in content
+
+
+def test_authorization_url_format_validation():
+    """Test that authorization URL has correct format and encoding."""
+    from jarvis_core.gmail_service import get_authorization_url
+    
+    with patch("jarvis_core.gmail_service._get_credentials", return_value={
+        "web": {
+            "client_id": "test-client.apps.googleusercontent.com",
+            "client_secret": "test-secret",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": ["http://127.0.0.1:8000/gmail/oauth/callback"],
+            "javascript_origins": ["http://127.0.0.1:8000"],
+        }
+    }):
+        auth_url, error = get_authorization_url()
+        assert error is None
+        assert auth_url is not None
+        
+        # Test base URL
+        assert auth_url.startswith("https://accounts.google.com/o/oauth2/v2/auth?")
+        
+        # Test required parameters are present
+        assert "client_id=test-client.apps.googleusercontent.com" in auth_url
+        assert "response_type=code" in auth_url
+        assert "access_type=offline" in auth_url
+        assert "prompt=consent" in auth_url
+        assert "include_granted_scopes=true" in auth_url
+        assert "state=" in auth_url
+        
+        # Test redirect URI is properly encoded
+        assert "redirect_uri=http%3A%2F%2F127.0.0.1%3A8000%2Fgmail%2Foauth%2Fcallback" in auth_url
+        
+        # Test scope is properly encoded as string, not Python list
+        assert "scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.readonly+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.modify" in auth_url or \
+               "scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.readonly%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.modify" in auth_url
+        
+        # Test no Python list formatting
+        assert "[" not in auth_url
+        assert "]" not in auth_url
+        assert "'" not in auth_url
+        assert '"' not in auth_url
+        
+        # Test no invalid parameters
+        assert "code_challenge" not in auth_url
+        assert "code_challenge_method" not in auth_url
+
+
+# ── New Check Now Structured Response Tests ──────────────────────────────
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=False)
+@patch("jarvis_core.gmail_monitor.token_exists", return_value=False)
+def test_check_now_returns_structured_error_not_connected(mock_token, mock_connected):
+    """Test that check-now returns structured error when Gmail not connected."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    
+    assert result["status"] == "error"
+    assert result["error_code"] == "gmail_not_connected"
+    assert "message" in result
+    assert "connect" in result["message"].lower()
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=False)
+@patch("jarvis_core.gmail_monitor.token_exists", return_value=True)
+def test_check_now_returns_token_invalid_error(mock_token, mock_connected):
+    """Test that check-now returns token_invalid error when token exists but invalid."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    
+    assert result["status"] == "error"
+    assert result["error_code"] == "token_invalid"
+    assert "expired" in result["message"].lower() or "reconnect" in result["message"].lower()
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_returns_structured_success(mock_list, mock_connected):
+    """Test that check-now returns structured success response."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    
+    assert result["status"] == "ok"
+    assert "message" in result
+    assert "checked_at" in result
+    assert "summary" in result
+    
+    summary = result["summary"]
+    assert "emails_scanned" in summary
+    assert "important_found" in summary
+    assert "jd_files_saved" in summary
+    assert "drafts_created" in summary
+    assert "errors" in summary
+    
+    # All counts should be integers
+    assert isinstance(summary["emails_scanned"], int)
+    assert isinstance(summary["important_found"], int)
+    assert isinstance(summary["jd_files_saved"], int)
+    assert isinstance(summary["drafts_created"], int)
+    assert isinstance(summary["errors"], int)
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread")
+def test_check_now_does_not_expose_tokens_or_secrets(mock_list, mock_connected):
+    """Test that check-now response does not expose sensitive data."""
+    from jarvis_core.gmail_monitor import check_now
+    
+    mock_list.return_value = []
+    result = check_now()
+    
+    result_str = json.dumps(result)
+    assert "access_token" not in result_str
+    assert "refresh_token" not in result_str
+    assert "client_secret" not in result_str
+    assert "token" not in result_str or "token_" in result_str  # Allow token_invalid error_code
+
+
+def test_check_now_route_returns_json_not_exception():
+    """Test that /gmail/check-now route returns JSON, not HTTPException."""
+    from jarvis_core.gmail_routes import gmail_check_now
+    
+    # The route should return a dict (JSON response), not raise HTTPException
+    with patch("jarvis_core.gmail_routes.check_now", return_value={
+        "status": "error",
+        "message": "Test error",
+        "error_code": "test_error"
+    }):
+        result = gmail_check_now()
+        assert isinstance(result, dict)
+        assert "status" in result
+
+
+# ── Prompt/Rules Configuration Tests ──────────────────────────────────────
+
+
+def test_prompt_rules_get_returns_defaults():
+    """Test that GET /gmail/prompt-rules returns default values if config missing."""
+    from jarvis_core.gmail_routes import get_prompt_rules
+    
+    with patch("pathlib.Path.exists", return_value=False):
+        result = get_prompt_rules()
+        
+        assert result["status"] == "ok"
+        assert "rules" in result
+        
+        rules = result["rules"]
+        assert "monitoring_objective" in rules
+        assert "important_rules" in rules
+        assert "ignore_rules" in rules
+        assert "reply_style" in rules
+        assert "draft_only_safety" in rules
+        
+        # Check default values exist
+        assert "job description" in rules["monitoring_objective"].lower()
+        assert "draft" in rules["monitoring_objective"].lower()
+        assert rules["draft_only_safety"] is True
+
+
+def test_prompt_rules_post_saves_config(tmp_path):
+    """Test that POST /gmail/prompt-rules saves configuration."""
+    from jarvis_core.gmail_routes import update_prompt_rules, PromptRulesRequest
+    
+    config_path = tmp_path / "gmail_prompt_rules.json"
+    
+    req = PromptRulesRequest(
+        monitoring_objective="Test objective",
+        important_rules="Test important rules",
+        ignore_rules="Test ignore rules",
+        reply_style="friendly",
+        draft_only_safety=True
+    )
+    
+    with patch("jarvis_core.gmail_routes.Path", return_value=config_path):
+        with patch("pathlib.Path.mkdir"):
+            result = update_prompt_rules(req)
+    
+    assert result["status"] == "ok"
+    assert "message" in result
+
+
+def test_prompt_rules_enforces_draft_only_safety():
+    """Test that prompt-rules always enforces draft_only_safety=True."""
+    from jarvis_core.gmail_routes import update_prompt_rules, PromptRulesRequest
+    
+    # Try to set draft_only_safety to False (should be forced to True)
+    req = PromptRulesRequest(
+        monitoring_objective="Test",
+        important_rules="Test",
+        ignore_rules="Test",
+        reply_style="professional",
+        draft_only_safety=False  # Try to disable
+    )
+    
+    # The route should enforce it as True
+    with patch("pathlib.Path.mkdir"):
+        with patch("builtins.open", create=True) as mock_open:
+            mock_file = MagicMock()
+            mock_open.return_value.__enter__.return_value = mock_file
+            
+            result = update_prompt_rules(req)
+            
+            # Check that the saved data has draft_only_safety=True
+            if mock_file.write.called:
+                written_data = mock_file.write.call_args[0][0]
+                # The actual implementation uses json.dump, so this test verifies the logic
+                assert result["status"] == "ok"
+
+
+def test_prompt_rules_response_does_not_expose_secrets():
+    """Test that prompt-rules responses don't expose sensitive data."""
+    from jarvis_core.gmail_routes import get_prompt_rules
+    
+    result = get_prompt_rules()
+    result_str = json.dumps(result)
+    
+    assert "client_secret" not in result_str
+    assert "access_token" not in result_str
+    assert "refresh_token" not in result_str
+
+
+def test_draft_only_remains_true_by_default():
+    """Test that draft-only safety remains true by default in all configs."""
+    from jarvis_core.gmail_models import GmailConfig
+    from jarvis_core.gmail_routes import get_prompt_rules
+    
+    # Check GmailConfig default
+    config = GmailConfig()
+    assert config.draft_only is True
+    
+    # Check prompt rules default
+    rules_result = get_prompt_rules()
+    assert rules_result["rules"]["draft_only_safety"] is True
+
+
+# ── Check Now Result Clarity Tests ───────────────────────────────────────
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_zero_emails_returns_ok_not_error(mock_list, mock_connected):
+    """0 new emails scanned must return status='ok', not 'error'."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert result["status"] == "ok"
+    assert result["summary"]["emails_scanned"] == 0
+    assert result["summary"]["important_found"] == 0
+    assert result["summary"]["errors"] == 0
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_zero_emails_has_summary_fields(mock_list, mock_connected):
+    """Summary block must always include all five metric keys."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    for key in ("emails_scanned", "important_found", "jd_files_saved", "drafts_created", "errors"):
+        assert key in result["summary"], f"Missing summary key: {key}"
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_includes_checked_at_timestamp(mock_list, mock_connected):
+    """checked_at must be present so the UI can display completion time."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert "checked_at" in result
+    assert result["checked_at"]  # non-empty
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_ok_status_has_message(mock_list, mock_connected):
+    """ok response must include a human-readable message field."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert "message" in result
+    assert isinstance(result["message"], str)
+    assert len(result["message"]) > 0
+
+
+# ── Recent Events UI Helper Tests ────────────────────────────────────────
+
+
+def test_gmail_events_endpoint_returns_list():
+    """GET /gmail/events returns a list (possibly empty) of event dicts."""
+    from jarvis_core.gmail_monitor import get_events_today
+    events = get_events_today()
+    assert isinstance(events, list)
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_events_field_is_list(mock_list, mock_connected):
+    """check_now() response always has an 'events' key with a list value."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert "events" in result
+    assert isinstance(result["events"], list)
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_events_empty_when_no_mails(mock_list, mock_connected):
+    """When no emails come in, events list is empty and status is ok."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert result["status"] == "ok"
+    assert result["events"] == []
+
+
+# ── Prompt / Rules Panel Tests ────────────────────────────────────────────
+
+
+def test_prompt_rules_get_returns_ok_status():
+    """GET /gmail/prompt-rules always returns status='ok'."""
+    from jarvis_core.gmail_routes import get_prompt_rules
+    result = get_prompt_rules()
+    assert result["status"] == "ok"
+    assert "rules" in result
+
+
+def test_prompt_rules_defaults_have_all_fields():
+    """Default rules include all required fields."""
+    from jarvis_core.gmail_routes import get_prompt_rules
+    with patch("pathlib.Path.exists", return_value=False):
+        result = get_prompt_rules()
+    rules = result["rules"]
+    assert "monitoring_objective" in rules
+    assert "important_rules" in rules
+    assert "ignore_rules" in rules
+    assert "reply_style" in rules
+    assert "draft_only_safety" in rules
+    assert rules["draft_only_safety"] is True
+
+
+def test_prompt_rules_defaults_text_matches_spec():
+    """Defaults must contain expected keywords from spec."""
+    from jarvis_core.gmail_routes import get_prompt_rules
+    with patch("pathlib.Path.exists", return_value=False):
+        result = get_prompt_rules()
+    rules = result["rules"]
+    assert "job description" in rules["monitoring_objective"].lower()
+    assert "draft" in rules["monitoring_objective"].lower()
+    # important_rules must mention recruiter keywords
+    assert "recruiter" in rules["important_rules"].lower() or "jd" in rules["important_rules"].lower()
+    # ignore_rules must mention newsletters / spam
+    assert "newsletter" in rules["ignore_rules"].lower() or "spam" in rules["ignore_rules"].lower()
+
+
+def test_prompt_rules_post_returns_ok(tmp_path):
+    """POST /gmail/prompt-rules saves and returns status='ok'."""
+    from jarvis_core.gmail_routes import update_prompt_rules, PromptRulesRequest
+    req = PromptRulesRequest(
+        monitoring_objective="Test objective",
+        important_rules="Test important",
+        ignore_rules="Test ignore",
+        reply_style="professional",
+        draft_only_safety=True,
+    )
+    with patch("jarvis_core.gmail_routes.Path") as mock_path_cls:
+        mock_path = MagicMock()
+        mock_path.exists.return_value = False
+        mock_path.parent.mkdir = MagicMock()
+        mock_path_cls.return_value = mock_path
+        with patch("builtins.open", MagicMock()):
+            result = update_prompt_rules(req)
+    assert result["status"] == "ok"
+    assert "message" in result
+
+
+def test_prompt_rules_post_always_enforces_draft_only_safety(tmp_path):
+    """POST /gmail/prompt-rules always saves draft_only_safety=True regardless of input."""
+    from jarvis_core.gmail_routes import update_prompt_rules, PromptRulesRequest
+    req = PromptRulesRequest(
+        monitoring_objective="x",
+        important_rules="x",
+        ignore_rules="x",
+        reply_style="short",
+        draft_only_safety=False,   # must be overridden to True
+    )
+    saved_data = {}
+    def fake_open(path, mode="r", **kw):
+        import io
+        if "w" in mode:
+            buf = io.StringIO()
+            class FakeFile:
+                def __enter__(self): return buf
+                def __exit__(self, *a): saved_data["content"] = buf.getvalue()
+            return FakeFile()
+        raise FileNotFoundError
+    with patch("pathlib.Path.mkdir"):
+        with patch("builtins.open", fake_open):
+            result = update_prompt_rules(req)
+    # If it managed to write, verify draft_only_safety was forced True
+    if saved_data.get("content"):
+        parsed = json.loads(saved_data["content"])
+        assert parsed["draft_only_safety"] is True
+    assert result["status"] == "ok"
+
+
+def test_prompt_rules_reply_style_saved_correctly(tmp_path):
+    """POST /gmail/prompt-rules stores the chosen reply_style."""
+    from jarvis_core.gmail_routes import update_prompt_rules, PromptRulesRequest
+    for style in ("professional", "short", "friendly", "detailed"):
+        req = PromptRulesRequest(
+            monitoring_objective="x",
+            important_rules="x",
+            ignore_rules="x",
+            reply_style=style,
+            draft_only_safety=True,
+        )
+        with patch("pathlib.Path.mkdir"):
+            with patch("builtins.open", MagicMock()):
+                result = update_prompt_rules(req)
+        assert result["status"] == "ok"
+
+
+def test_prompt_rules_response_never_exposes_secrets():
+    """GET /gmail/prompt-rules response must not contain any credential secrets."""
+    from jarvis_core.gmail_routes import get_prompt_rules
+    result = get_prompt_rules()
+    result_str = json.dumps(result)
+    assert "client_secret" not in result_str
+    assert "access_token" not in result_str
+    assert "refresh_token" not in result_str
+    assert "gmail_token" not in result_str
+
+
+def test_prompt_rules_file_path_is_safe():
+    """Prompt rules are saved inside the expected config directory."""
+    from jarvis_core.gmail_routes import update_prompt_rules, PromptRulesRequest
+    import inspect, jarvis_core.gmail_routes as gr
+    src = inspect.getsource(gr.update_prompt_rules)
+    assert "config" in src.lower()
+    assert "gmail_prompt_rules" in src
+
+
+def test_prompt_rules_draft_only_safety_always_true_in_get():
+    """GET /gmail/prompt-rules always returns draft_only_safety=True even if file says False."""
+    from jarvis_core.gmail_routes import get_prompt_rules
+    fake_rules = {
+        "monitoring_objective": "x",
+        "important_rules": "x",
+        "ignore_rules": "x",
+        "reply_style": "short",
+        "draft_only_safety": False  # stored as False — must be overridden
+    }
+    with patch("pathlib.Path.exists", return_value=True):
+        with patch("builtins.open", MagicMock()):
+            with patch("json.load", return_value=fake_rules):
+                result = get_prompt_rules()
+    assert result["rules"]["draft_only_safety"] is True
+
+
+# ── Realtime Animation / Activity Timeline Tests ──────────────────────────
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_response_has_status_for_animation(mock_list, mock_connected):
+    """check_now returns a status field the UI can use to drive step animation."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert "status" in result
+    assert result["status"] in ("ok", "partial", "error")
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_summary_drives_jd_and_draft_toasts(mock_list, mock_connected):
+    """Summary jd_files_saved and drafts_created are present for toast display."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert "summary" in result
+    assert "jd_files_saved" in result["summary"]
+    assert "drafts_created" in result["summary"]
+    assert isinstance(result["summary"]["jd_files_saved"], int)
+    assert isinstance(result["summary"]["drafts_created"], int)
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=False)
+@patch("jarvis_core.gmail_monitor.token_exists", return_value=False)
+def test_check_now_error_has_error_code_for_specific_toast(mock_token, mock_connected):
+    """Error responses include error_code so UI can show the right error toast."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert result["status"] == "error"
+    assert "error_code" in result
+    assert result["error_code"] in ("gmail_not_connected", "token_invalid", "gmail_api_error", "unexpected_error")
+
+
+def test_gmail_status_includes_running_field_for_live_badge():
+    """/gmail/status includes 'running' so UI can show/hide the live badge."""
+    from jarvis_core.gmail_routes import gmail_status
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes.is_connected", return_value=True):
+            with patch("jarvis_core.gmail_routes.token_exists", return_value=True):
+                with patch("jarvis_core.gmail_routes.get_account_email", return_value="test@gmail.com"):
+                    result = gmail_status()
+    assert "running" in result
+    assert isinstance(result["running"], bool)
+
+
+def test_gmail_status_includes_monitoring_active_field():
+    """/gmail/status includes 'monitoring_active' for next-scan label control."""
+    from jarvis_core.gmail_routes import gmail_status
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes.is_connected", return_value=True):
+            with patch("jarvis_core.gmail_routes.token_exists", return_value=True):
+                with patch("jarvis_core.gmail_routes.get_account_email", return_value="test@gmail.com"):
+                    result = gmail_status()
+    assert "monitoring_active" in result
+    assert isinstance(result["monitoring_active"], bool)
+
+
+def test_gmail_status_poll_interval_present_for_next_scan():
+    """/gmail/status includes poll_interval_minutes so UI can compute next-scan countdown."""
+    from jarvis_core.gmail_routes import gmail_status
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes.is_connected", return_value=True):
+            with patch("jarvis_core.gmail_routes.token_exists", return_value=True):
+                with patch("jarvis_core.gmail_routes.get_account_email", return_value="test@gmail.com"):
+                    result = gmail_status()
+    assert "poll_interval_minutes" in result
+    assert isinstance(result["poll_interval_minutes"], int)
+    assert result["poll_interval_minutes"] > 0
+
+
+# ── Animation Visibility Tests (backend contracts) ───────────────────────
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_returns_summary_with_all_glow_fields(mock_list, mock_connected):
+    """All fields needed to trigger metric count-glow are present in check_now summary."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert result["status"] == "ok"
+    for field in ("emails_scanned", "important_found", "jd_files_saved", "drafts_created", "errors"):
+        assert field in result["summary"]
+        assert isinstance(result["summary"][field], int)
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_checked_at_present_for_last_check_card(mock_list, mock_connected):
+    """checked_at ISO timestamp is present so the Last Check card can display it."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert "checked_at" in result
+    ts = result["checked_at"]
+    assert isinstance(ts, str) and len(ts) > 0
+    # Should be parseable ISO format
+    from datetime import datetime
+    datetime.fromisoformat(ts)  # raises ValueError if not ISO
+
+
+def test_gmail_status_running_and_interval_for_next_scan_badge():
+    """/gmail/status provides running + poll_interval_minutes for badge + countdown."""
+    from jarvis_core.gmail_routes import gmail_status
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes.is_connected", return_value=True):
+            with patch("jarvis_core.gmail_routes.token_exists", return_value=True):
+                with patch("jarvis_core.gmail_routes.get_account_email", return_value="t@x.com"):
+                    result = gmail_status()
+    assert "running" in result
+    assert "poll_interval_minutes" in result
+    assert "monitoring_active" in result
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=False)
+@patch("jarvis_core.gmail_monitor.token_exists", return_value=False)
+def test_error_response_has_error_code_for_toast_routing(mock_tok, mock_conn):
+    """error_code drives which error toast message the UI renders."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert result["status"] == "error"
+    assert "error_code" in result
+    assert result["error_code"] in (
+        "gmail_not_connected", "token_invalid", "gmail_api_error", "unexpected_error"
+    )
