@@ -24,6 +24,10 @@ config/gmail_credentials.json
 config/gmail_token.json
 config/*.secret.json
 data/gmail_processed.json
+data/gmail_oauth_state.json
 jobs_jd/
 notes/gmail_monitor_log_*.jsonl
 notes/gmail_drafts/
+
+# Separate project with its own git repo and remote
+TelegramForward/
