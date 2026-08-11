@@ -1,0 +1,7 @@
+{
+  "MSAcpi": "ERROR: <x_wmi: Unexpected COM Error (-2147217405, 'OLE error 0x80041003', None, None)>",
+  "Win32_TemperatureProbe": [],
+  "PS_MSAcpi": "Get-WmiObject : Access denied \nAt line:1 char:1\n+ Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace root/wmi | Sel ...\n+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n    + CategoryInfo          : InvalidOperation: (:) [Get-WmiObject], ManagementException\n    + FullyQualifiedErrorId : GetWMIManagementException,Microsoft.PowerShell.Commands.GetWmiObjectCommand",
+  "nvidia_smi": "not found",
+  "taskmgr_startfile": "launched OK"
+}
