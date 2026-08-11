@@ -43,7 +43,7 @@ for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":8000 "') do (
 REM --- Start Jarvis server in background ---
 echo.
 echo Starting Jarvis server on 127.0.0.1:8000...
-start /B "" uvicorn app:app --host 127.0.0.1 --port 8000 --log-level warning
+start /B "" .venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8000 --log-level warning
 
 REM --- Wait for server to be ready (up to 30 seconds) ---
 echo Waiting for Jarvis to be ready...

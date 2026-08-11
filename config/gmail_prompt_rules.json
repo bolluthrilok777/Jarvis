@@ -1,0 +1,7 @@
+{
+  "monitoring_objective": "Monitor Gmail for job descriptions, recruiter emails, interview updates, selections, offers, and joining-related messages. Save JD attachments and create safe draft replies only.",
+  "important_rules": "Mark as important if mail contains JD, job description, interview schedule, recruiter follow-up, offer, selection, joining, client interview, technical round, HR round, or urgent response request.",
+  "ignore_rules": "Ignore promotions, newsletters, OTPs, generic alerts, spam, social media notifications,Naukri and unrelated marketing emails.",
+  "reply_style": "professional",
+  "draft_only_safety": true
+}

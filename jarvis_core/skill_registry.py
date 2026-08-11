@@ -344,7 +344,35 @@ def _exec_note_create(content: str) -> dict:
 
 def _exec_system_status() -> dict:
     from jarvis_core.system_tools import get_system_status
-    return get_system_status()
+    data = get_system_status(launch_task_manager=False)
+
+    cpu_temp = data.get("cpu_temp_c")
+    temp_str = f"{cpu_temp}°C" if cpu_temp is not None else "N/A"
+
+    lines = [
+        f"🖥️  CPU       : {data['cpu_percent']}%",
+        f"🌡️  Temp      : {temp_str}",
+        f"🧠  RAM       : {data['ram_percent']}%  ({data['ram_used_gb']} / {data['ram_total_gb']} GB)",
+        f"💾  Disk (C:) : {data['disk_percent']}%  ({data['disk_used_gb']} / {data['disk_total_gb']} GB)",
+        f"⚙️  Processes : {data['running_processes']} running",
+    ]
+    if "gpu_percent" in data:
+        gpu_temp = data.get("gpu_temp_c")
+        lines.insert(3, f"🎮  GPU       : {data['gpu_percent']}%  (Temp: {gpu_temp}°C)")
+    if "vram_used_gb" in data:
+        lines.insert(4, f"📦  VRAM      : {data['vram_used_gb']} / {data['vram_total_gb']} GB")
+
+    lines.append("")
+    lines.append("📊  Live monitor is now active in the dashboard.")
+    lines.append("💡  Need Task Manager? Press Ctrl + Shift + Esc")
+
+    data["status"] = "done"
+    data["summary"] = "\n".join(lines)
+    data["panel"] = "system_status"   # ← tells the UI to open the live monitor
+    return data
+
+
+
 
 
 def _exec_system_screenshot() -> dict:

@@ -3,10 +3,32 @@ import pathlib
 APP_NAME = "Jarvis Local Agent - Phase 2"
 OLLAMA_URL = "http://localhost:11434"
 
+# ── Model Configuration ──────────────────────────────────────────────────────
 LIGHT_MODEL = "gemma2:2b"
 HEAVY_MODEL = "qwen2.5:7b"
 
-BASE_DIR = pathlib.Path("C:/Jarvis")
+# Additional Ollama models available for selection
+AVAILABLE_OLLAMA_MODELS = [
+    {"id": "gemma2:2b", "name": "Gemma 2 (2B)", "description": "Fast & lightweight", "category": "light"},
+    {"id": "qwen2.5:7b", "name": "Qwen 2.5 (7B)", "description": "Balanced performance", "category": "medium"},
+    {"id": "llama3.2:3b", "name": "Llama 3.2 (3B)", "description": "Efficient & capable", "category": "light"},
+    {"id": "llama3.1:8b", "name": "Llama 3.1 (8B)", "description": "Strong reasoning", "category": "medium"},
+    {"id": "mistral:7b", "name": "Mistral (7B)", "description": "Fast & accurate", "category": "medium"},
+    {"id": "mixtral:8x7b", "name": "Mixtral (8x7B)", "description": "Heavy reasoning", "category": "heavy"},
+    {"id": "deepseek-r1:7b", "name": "DeepSeek R1 (7B)", "description": "Deep reasoning", "category": "heavy"},
+    {"id": "phi3:3.8b", "name": "Phi-3 (3.8B)", "description": "Microsoft efficient", "category": "light"},
+    {"id": "nomic-embed-text:v1.5", "name": "Nomic Embed", "description": "Embeddings only", "category": "special"},
+]
+
+# Free API key mode configuration
+FREE_API_KEY_ENABLED = True
+FREE_API_KEY_URL = "https://api.openai.com/v1/chat/completions"  # Can be changed to any OpenAI-compatible API
+FREE_API_KEY_MODEL = "gpt-4o-mini"  # Default model for API key mode
+
+# Current active mode (persisted across requests)
+ACTIVE_MODE = "auto"  # "auto", "light", "medium", "heavy", or a specific model ID, or "api_key"
+
+BASE_DIR = pathlib.Path("C:/Project Opus")
 USER_HOME = pathlib.Path.home()
 ONEDRIVE_DIR = USER_HOME / "OneDrive"
 NOTES_DIR = BASE_DIR / "notes"

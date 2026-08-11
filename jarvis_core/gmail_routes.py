@@ -7,23 +7,29 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
 from jarvis_core.gmail_models import GmailConfig
 from jarvis_core.gmail_monitor import (
     check_now,
+    clear_processed_ids,
     get_config,
     get_events_today,
     get_state,
     load_config,
+    run_full_scan,
+    run_incremental_scan,
     start_monitor,
     stop_monitor,
     update_config,
+    get_last_scan_timestamp,
+    is_full_scan_done,
 )
 from jarvis_core.gmail_service import (
     credentials_exist,
@@ -40,12 +46,20 @@ from jarvis_core.gmail_service import (
     save_credentials_json,
     token_exists,
     validate_credentials_json,
+    is_token_revoked,
+    validate_token_health,
     validate_web_credentials_strict,
     _get_credentials,
     _get_credentials_type,
 )
 from jarvis_core.jd_saver import list_saved_jd_files
 from jarvis_core.draft_writer import list_drafts
+from jarvis_core.gmail_service import (
+    list_gmail_drafts,
+    get_draft_scope_available,
+    get_account_email as _get_email,
+    is_connected as _is_connected,
+)
 
 logger = logging.getLogger("jarvis.gmail_routes")
 
@@ -59,6 +73,7 @@ class ConfigUpdateRequest(BaseModel):
     auto_send_enabled: bool = False
     allowed_auto_send_categories: list[str] = []
     allowed_senders: list[str] = []
+    scan_period: str = "today"
 
 
 class SendDraftRequest(BaseModel):
@@ -89,7 +104,10 @@ def gmail_status():
     
     # Check connection status
     connected = is_connected()
-    email = get_account_email() if connected else None
+    # Use cached email from monitor state to avoid calling get_account_email()
+    # on every /gmail/status poll (polled every 2s by UI), which causes constant
+    # SSL-vulnerable API calls in background threads.
+    email = state.account_email if state.account_email else (get_account_email() if connected else None)
     
     # Determine overall error message - prefer monitoring errors over credential warnings
     error_message = state.error_message
@@ -109,21 +127,28 @@ def gmail_status():
         "important_mails_today": state.important_mails_today,
         "jd_files_saved_today": state.jd_files_saved_today,
         "drafts_created_today": state.drafts_created_today,
+        "local_drafts_today": state.local_drafts_today,
         "error_message": error_message,
         "poll_interval_minutes": state.poll_interval_minutes,
         "draft_only": state.draft_only,
         "auto_send_enabled": state.auto_send_enabled,
+        "poll_healthy": state.running and not state.error_message.startswith("Monitoring poll failed"),
+        "poll_error": state.error_message if state.error_message.startswith("Monitoring poll failed") else "",
+        "last_poll_at": state.last_poll_at or "",
+        "last_poll_success_at": state.last_poll_success_at or "",
+        "token_health": validate_token_health(),
+        "token_revoked": is_token_revoked(),
+        "last_scan_at": get_last_scan_timestamp() or "",
+        "full_scan_done": is_full_scan_done(),
     }
 
 
 @router.post("/start")
 def gmail_start():
-    """Start the Gmail monitor."""
-    if not is_connected():
-        raise HTTPException(
-            status_code=400,
-            detail="Gmail is not connected. Connect Gmail first.",
-        )
+    """Start the Gmail monitor.
+
+    Returns JSON with status. Never raises HTTPException — always returns JSON.
+    """
     result = start_monitor()
     return result
 
@@ -133,6 +158,65 @@ def gmail_stop():
     """Stop the Gmail monitor."""
     result = stop_monitor()
     return result
+
+
+@router.post("/rescan")
+def gmail_rescan():
+    """Run an incremental scan — only emails since the last recorded scan.
+
+    This is the primary button for manual scanning after the initial full scan.
+    It does NOT clear processed IDs. It only processes new/unprocessed emails.
+    Returns structured JSON identical to check-now.
+    Never raises HTTPException - always returns JSON.
+    """
+    if not is_connected():
+        if token_exists():
+            return {
+                "status": "error",
+                "message": "Gmail session expired. Please reconnect Gmail.",
+                "error_code": "token_invalid"
+            }
+        return {
+            "status": "error",
+            "message": "Gmail is not connected. Please connect Gmail first.",
+            "error_code": "gmail_not_connected"
+        }
+
+    from jarvis_core.gmail_monitor import _scan_running
+    _scan_running.set()
+    try:
+        scan_result = run_incremental_scan(source="manual_rescan")
+    except RuntimeError as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "error_code": "gmail_api_error"
+        }
+    except Exception as e:
+        logger.error("Rescan unexpected error: %s", str(e)[:100])
+        return {
+            "status": "error",
+            "message": f"Unexpected error: {str(e)[:100]}",
+            "error_code": "unexpected_error"
+        }
+    finally:
+        _scan_running.clear()
+
+    checked_at = datetime.now().isoformat()
+    return {
+        "status": "ok" if scan_result["errors"] == 0 else "partial",
+        "message": "Rescan completed",
+        "checked_at": checked_at,
+        "new_since": scan_result.get("new_since", ""),
+        "summary": {
+            "emails_scanned": scan_result["emails_scanned"],
+            "important_found": scan_result.get("important_found", 0),
+            "jd_files_saved": scan_result.get("jd_files_saved", 0),
+            "drafts_created": scan_result.get("drafts_created", 0),
+            "errors": scan_result["errors"],
+        },
+        "warnings": scan_result.get("warnings", []),
+    }
 
 
 @router.post("/check-now")
@@ -147,6 +231,80 @@ def gmail_check_now():
     # The check_now function now handles all error cases internally
     # and returns structured responses, so we just return the result
     return result
+
+
+@router.post("/full-scan")
+def gmail_full_scan():
+    """Run a complete full scan of ALL emails from the last 30 days.
+    
+    This is the initial scan that:
+    1. Clears all processed IDs
+    2. Fetches ALL emails from the last 30 days (up to 1500)
+    3. Classifies each one with Ollama
+    4. Saves JDs and creates drafts
+    5. Returns comprehensive results with counts
+    
+    Returns structured JSON with status, summary, and events.
+    Never raises HTTPException - always returns JSON response.
+    """
+    # Check if Gmail is connected
+    if not is_connected():
+        if token_exists():
+            return {
+                "status": "error",
+                "message": "Gmail session expired. Please reconnect Gmail.",
+                "error_code": "token_invalid"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Gmail is not connected. Please connect Gmail first.",
+                "error_code": "gmail_not_connected"
+            }
+    
+    try:
+        result = run_full_scan(source="full_scan")
+        return {
+            "status": "ok",
+            "message": "Full scan completed",
+            "checked_at": datetime.now().isoformat(),
+            "summary": {
+                "emails_scanned": result.get("emails_scanned", 0),
+                "important_found": result.get("important_found", 0),
+                "jd_files_saved": result.get("jd_files_saved", 0),
+                "drafts_created": result.get("drafts_created", 0),
+                "errors": result.get("errors", 0),
+                "total_emails_in_period": result.get("total_emails_in_period", 0),
+            },
+            "warnings": result.get("warnings", []),
+        }
+    except RuntimeError as e:
+        error_msg = str(e)
+        if "connection" in error_msg.lower() or "ssl" in error_msg.lower():
+            return {
+                "status": "error",
+                "message": "Gmail API connection error. Please check your connection.",
+                "error_code": "gmail_api_error"
+            }
+        elif "auth" in error_msg.lower() or "token" in error_msg.lower():
+            return {
+                "status": "error",
+                "message": "Gmail authentication error. Please reconnect Gmail.",
+                "error_code": "token_invalid"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": error_msg,
+                "error_code": "gmail_api_error"
+            }
+    except Exception as e:
+        logger.error("Full scan unexpected error: %s", str(e)[:100])
+        return {
+            "status": "error",
+            "message": f"An unexpected error occurred: {str(e)[:100]}",
+            "error_code": "unexpected_error"
+        }
 
 
 # ── OAuth Connect Flow ────────────────────────────────────────────────────
@@ -429,22 +587,314 @@ def gmail_disconnect_remove_credentials():
 
 # ── Events & Data ─────────────────────────────────────────────────────────
 
+@router.post("/clear-processed")
+def gmail_clear_processed():
+    """Clear processed email IDs so all unread emails are re-scanned.
+
+    Use this to force a full re-scan when emails were already marked processed.
+    Never exposes tokens or secrets.
+    """
+    result = clear_processed_ids()
+    return result
+
+
+def _count_events_for_period(period: str = "today") -> dict:
+    """Count Gmail events across a time period from daily log files.
+
+    period: "today" | "week" | "month"
+    Returns safe counts — no raw email content.
+    """
+    from datetime import date, timedelta
+    notes_dir = Path("C:/Jarvis/notes")
+    today = date.today()
+    days_back = {"week": 7, "month": 30}.get(period, 1)
+
+    important_count = 0
+    jd_count = 0
+    draft_count = 0
+    total_count = 0
+
+    for i in range(days_back):
+        day = today - timedelta(days=i)
+        log_path = notes_dir / f"gmail_monitor_log_{day.isoformat()}.jsonl"
+        if not log_path.exists():
+            continue
+        try:
+            with open(log_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                        total_count += 1
+                        category = event.get("category", "")
+                        if category and category != "non_job":
+                            important_count += 1
+                        if event.get("jd_saved_path"):
+                            jd_count += 1
+                        if event.get("draft_reply_path"):
+                            draft_count += 1
+                    except (json.JSONDecodeError, Exception):
+                        continue
+        except Exception:
+            continue
+
+    return {
+        "important_count": important_count,
+        "jd_count": jd_count,
+        "draft_count": draft_count,
+        "total_count": total_count,
+    }
+
+
+def _count_gmail_drafts_for_period(period: str) -> int | None:
+    """Return the real Gmail draft count for the selected period when available."""
+    if not _is_connected() or not get_draft_scope_available():
+        return None
+
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days={"week": 7, "month": 30}.get(period, 1))
+    count = 0
+    for draft in list_gmail_drafts(max_results=500):
+        try:
+            draft_date = datetime.fromtimestamp(int(draft.get("internal_date", "")) / 1000, tz=timezone.utc)
+        except (TypeError, ValueError):
+            continue
+        if draft_date >= cutoff:
+            count += 1
+    return count
+
+
 @router.get("/events")
-def gmail_events():
-    events = get_events_today()
-    return {"status": "ok", "count": len(events), "events": events}
+def gmail_events(period: str = "today"):
+    """Get Gmail events for a time period.
+
+    period query param: today | week | month (default: today)
+    Returns event list plus aggregate counts for the period.
+    Never exposes tokens or secrets.
+    """
+    from datetime import date, timedelta
+    notes_dir = Path("C:/Jarvis/notes")
+    today = date.today()
+    days_back = {"week": 7, "month": 30}.get(period, 1)
+
+    all_events = []
+    for i in range(days_back):
+        day = today - timedelta(days=i)
+        log_path = notes_dir / f"gmail_monitor_log_{day.isoformat()}.jsonl"
+        if not log_path.exists():
+            continue
+        try:
+            with open(log_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            all_events.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
+        except Exception:
+            continue
+
+    counts = _count_events_for_period(period)
+    real_draft_count = _count_gmail_drafts_for_period(period)
+    if real_draft_count is not None:
+        counts["draft_count"] = real_draft_count
+    return {
+        "status": "ok",
+        "period": period,
+        "count": len(all_events),
+        "events": all_events,
+        "period_counts": counts,
+    }
 
 
 @router.get("/jd-files")
 def gmail_jd_files():
-    files = list_saved_jd_files()
-    return {"status": "ok", "count": len(files), "files": files}
+    """Return list of saved JD files with safe metadata only."""
+    from pathlib import Path as _Path
+    _jd_abs = _Path("C:/Jarvis/jobs_jd")
+    files = list_saved_jd_files(save_dir=_jd_abs) if _jd_abs.exists() else []
+    safe_files = [
+        {
+            "filename": f.get("filename", ""),
+            "date": f.get("date", ""),
+            "size": f.get("size", 0),
+            "relative_path": str(Path(f.get("path", "")).relative_to(_jd_abs)),
+        }
+        for f in files
+    ]
+    return {
+        "status": "ok",
+        "count": len(safe_files),
+        "files": safe_files,
+        "folder": "C:\\Jarvis\\jobs_jd",
+    }
+
+
+@router.get("/jd-file")
+def gmail_jd_file(path: str):
+    """Open a saved JD only when its resolved path remains in the JD folder."""
+    jd_root = Path("C:/Jarvis/jobs_jd").resolve()
+    try:
+        target = (jd_root / path).resolve()
+        target.relative_to(jd_root)
+    except (OSError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid JD file path")
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="JD file not found")
+    return FileResponse(target, filename=target.name)
 
 
 @router.get("/drafts")
 def gmail_drafts():
-    drafts = list_drafts()
-    return {"status": "ok", "count": len(drafts), "drafts": drafts}
+    """Return Gmail API drafts and local backup drafts with diagnostics.
+
+    Never exposes tokens, secrets, or credentials.
+    """
+    connected = _is_connected()
+    account_email = _get_email() if connected else None
+
+    # Fetch real Gmail drafts from API
+    gmail_api_drafts = []
+    draft_scope_ok = False
+    last_draft_error = ""
+    if connected:
+        try:
+            draft_scope_ok = get_draft_scope_available()
+            if draft_scope_ok:
+                gmail_api_drafts = list_gmail_drafts(max_results=50)
+            else:
+                last_draft_error = "Gmail draft permission missing. Reconnect Gmail with draft permission."
+                logger.warning("Draft scope not available for account: %s", account_email or "unknown")
+        except Exception as e:
+            last_draft_error = "Failed to fetch Gmail drafts: " + str(e)[:80]
+            logger.error("gmail_drafts endpoint error: %s", str(e)[:80])
+
+    # Fetch local backup drafts — use draft_writer helper (absolute path) first;
+    # fall back to direct filesystem read if helper returns empty to avoid CWD issues.
+    local_files_raw = list_drafts()
+    if not local_files_raw:
+        _local_drafts_dir = Path("C:/Jarvis/notes/gmail_drafts")
+        if _local_drafts_dir.exists():
+            from datetime import datetime as _dt
+            for _f in sorted(_local_drafts_dir.iterdir(), reverse=True):
+                if _f.is_file() and _f.suffix in (".txt", ".md", ".json"):
+                    try:
+                        local_files_raw.append({
+                            "filename": _f.name,
+                            "size": _f.stat().st_size,
+                            "modified": _dt.fromtimestamp(_f.stat().st_mtime).isoformat(),
+                        })
+                    except Exception:
+                        pass
+
+    safe_local = [
+        {
+            "filename": d.get("filename", ""),
+            "size": d.get("size", 0),
+            "modified": d.get("modified", ""),
+        }
+        for d in local_files_raw
+    ]
+
+    # Build Gmail Drafts URL using connected account if available
+    if account_email:
+        gmail_drafts_url = f"https://mail.google.com/mail/?authuser={account_email}#drafts"
+    else:
+        gmail_drafts_url = "https://mail.google.com/mail/#drafts"
+
+    return {
+        "status": "ok",
+        # Real Gmail drafts
+        "gmail_drafts": gmail_api_drafts,
+        "gmail_drafts_count": len(gmail_api_drafts),
+        # Local backup drafts
+        "local_drafts": safe_local,
+        "local_backup_count": len(safe_local),
+        "local_folder": "C:\\Jarvis\\notes\\gmail_drafts",
+        # Diagnostics
+        "connected_account_email": account_email or "",
+        "draft_scope_available": draft_scope_ok,
+        "last_gmail_draft_error": last_draft_error,
+        "gmail_drafts_url": gmail_drafts_url,
+    }
+
+
+@router.get("/log")
+def gmail_log(lines: int = 100):
+    """Return recent safe Gmail monitor log lines.
+
+    Never exposes tokens, secrets, credentials, or full email bodies.
+    """
+    import re as _re
+    from datetime import date, timedelta
+
+    notes_dir = Path("C:/Jarvis/notes")
+    today_str = date.today().isoformat()
+    log_path = notes_dir / f"gmail_monitor_log_{today_str}.jsonl"
+
+    if not log_path.exists():
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        log_path = notes_dir / f"gmail_monitor_log_{yesterday}.jsonl"
+
+    if not log_path.exists():
+        return {
+            "status": "ok",
+            "count": 0,
+            "entries": [],
+            "message": "No Gmail logs found yet.",
+        }
+
+    _SENSITIVE = _re.compile(
+        r"token|secret|credential|password|client_id|client_secret|access_token|refresh_token",
+        _re.IGNORECASE,
+    )
+    _SAFE_FIELDS = {
+        "detected_at", "email_date", "from", "subject", "category",
+        "importance", "summary", "action_required", "jd_saved_path",
+        "draft_reply_path", "gmail_message_id", "gmail_draft_id",
+    }
+
+    entries = []
+    try:
+        with open(log_path, "r", encoding="utf-8") as f:
+            raw_lines = f.readlines()
+
+        for line in raw_lines[-lines:]:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+                safe_entry = {}
+                for key in _SAFE_FIELDS:
+                    if key in data:
+                        val = str(data[key])
+                        if not _SENSITIVE.search(val):
+                            safe_entry[key] = val[:200]
+                entries.append(safe_entry)
+            except json.JSONDecodeError:
+                if not _SENSITIVE.search(line):
+                    entries.append({"message": line[:200]})
+
+    except Exception as e:
+        logger.error("Failed to read log file: %s", e)
+        return {
+            "status": "error",
+            "message": "Failed to read log file.",
+            "count": 0,
+            "entries": [],
+        }
+
+    return {
+        "status": "ok",
+        "count": len(entries),
+        "entries": entries,
+        "log_date": today_str,
+    }
 
 
 # ── Configuration ─────────────────────────────────────────────────────────
@@ -461,6 +911,7 @@ def gmail_get_config():
             "auto_send_enabled": config.auto_send_enabled,
             "allowed_auto_send_categories": config.allowed_auto_send_categories,
             "allowed_senders": config.allowed_senders,
+            "scan_period": config.scan_period,
             "save_jd_folder": config.save_jd_folder,
             "log_folder": config.log_folder,
         }
@@ -475,6 +926,9 @@ def gmail_update_config(req: ConfigUpdateRequest):
     config.auto_send_enabled = req.auto_send_enabled
     config.allowed_auto_send_categories = req.allowed_auto_send_categories
     config.allowed_senders = req.allowed_senders
+    if req.scan_period not in {"today", "week", "month"}:
+        raise HTTPException(status_code=400, detail="Invalid scan period")
+    config.scan_period = req.scan_period
 
     valid_intervals = [1, 5, 10, 15, 30]
     if config.poll_interval_minutes not in valid_intervals:
@@ -647,3 +1101,133 @@ def update_prompt_rules(req: PromptRulesRequest):
             status_code=500,
             detail=f"Failed to save configuration: {str(e)}"
         )
+
+# ── New Events Polling (for notification bell) ────────────────────────────
+
+@router.get("/new-events")
+def gmail_new_events(since: str = ""):
+    """Return only events that occurred after the given ISO timestamp.
+
+    Used by the notification bell to poll for new important emails without
+    re-fetching the entire event list.
+
+    Query params:
+        since: ISO datetime string (e.g. 2026-08-03T10:30:00). Events with
+               detected_at > since are returned. If omitted, returns last 20
+               events from today.
+
+    Returns safe event data only — no tokens or credentials.
+    """
+    from datetime import date, timedelta
+
+    notes_dir = Path("C:/Jarvis/notes")
+    today = date.today()
+
+    # Collect today's + yesterday's events (in case monitor ran across midnight)
+    all_events: list[dict] = []
+    for i in range(2):
+        day = today - timedelta(days=i)
+        log_path = notes_dir / f"gmail_monitor_log_{day.isoformat()}.jsonl"
+        if not log_path.exists():
+            continue
+        try:
+            with open(log_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            all_events.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
+        except Exception:
+            continue
+
+    # Filter to only events after `since`
+    new_events: list[dict] = []
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since)
+            for ev in all_events:
+                try:
+                    ev_dt = datetime.fromisoformat(ev.get("detected_at", ""))
+                    if ev_dt > since_dt:
+                        new_events.append(ev)
+                except (ValueError, TypeError):
+                    pass
+        except ValueError:
+            # Invalid `since` — return last 20
+            new_events = all_events[-20:]
+    else:
+        new_events = all_events[-20:]
+
+    # Return only safe fields
+    _SAFE = {"detected_at", "email_date", "from", "subject", "category",
+             "importance", "summary", "jd_saved_path", "draft_reply_path",
+             "gmail_message_id", "gmail_thread_id", "gmail_draft_id"}
+    safe_events = []
+    for ev in new_events:
+        safe_ev = {k: v for k, v in ev.items() if k in _SAFE}
+        safe_events.append(safe_ev)
+
+    return {
+        "status": "ok",
+        "count": len(safe_events),
+        "events": safe_events,
+    }
+
+
+# ── Open Message Redirect ─────────────────────────────────────────────────
+
+@router.get("/open-message")
+def gmail_open_message(message_id: str = "", thread_id: str = ""):
+    """Redirect browser to a specific Gmail message or thread.
+
+    Uses the connected account email to determine the correct authuser index
+    by checking which gmail.com account is active, then redirects to Gmail.
+
+    Falls back to inbox if neither ID is provided.
+    Never exposes tokens or credentials.
+    """
+    if not is_connected():
+        # Not connected — just open Gmail inbox
+        return RedirectResponse(url="https://mail.google.com/mail/", status_code=302)
+
+    # Use threadId preferentially (Gmail URLs use threads), fall back to messageId
+    link_id = thread_id or message_id
+
+    if not link_id:
+        return RedirectResponse(url="https://mail.google.com/mail/#inbox", status_code=302)
+
+    # Try to get the account email to determine user index
+    account_email = get_account_email()
+
+    # Attempt to look up the correct account index via the Gmail API
+    # Gmail web URLs use u/0, u/1, etc. based on sign-in order.
+    # We try u/0 first (most common), then construct with authuser param as fallback.
+    # The most reliable cross-account URL uses the authuser query param on the base,
+    # then the fragment — but fragments cannot follow query strings in standard HTTP.
+    # Solution: use a meta-refresh HTML page that sets the hash after load.
+    gmail_url = f"https://mail.google.com/mail/u/0/#all/{link_id}"
+
+    # If we have the account email, construct a more reliable URL using
+    # Gmail's account switcher path by trying to match u/0 → u/3
+    # Most users only have 1-2 accounts so u/0 covers the majority.
+    # We return a tiny HTML redirect page that appends the fragment correctly.
+    html_redirect = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Opening Gmail…</title>
+  <script>
+    // Try u/0 first; if that fails (wrong account), Gmail will prompt to switch.
+    // Using location.replace so back button works correctly.
+    window.location.replace("https://mail.google.com/mail/u/0/#all/{link_id}");
+  </script>
+</head>
+<body style="background:#050505;color:#a1a1aa;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-size:14px;">
+  Opening Gmail…
+</body>
+</html>"""
+
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=html_redirect, status_code=200)

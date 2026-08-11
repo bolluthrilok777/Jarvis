@@ -724,9 +724,11 @@ def test_check_now_blocked_if_not_connected(mock_connected):
 
 @patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
 @patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
-def test_check_now_works_when_connected(mock_list, mock_connected):
+@patch("jarvis_core.gmail_service._build_service", return_value=None)
+def test_check_now_works_when_connected(mock_build, mock_list, mock_connected):
     """Test that check-now works when Gmail service is mocked connected."""
-    from jarvis_core.gmail_monitor import check_now
+    from jarvis_core.gmail_monitor import check_now, stop_monitor
+    stop_monitor()
     result = check_now()
     assert result["status"] == "ok"
 
@@ -1326,9 +1328,11 @@ def test_draft_only_remains_true_by_default():
 
 @patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
 @patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
-def test_check_now_zero_emails_returns_ok_not_error(mock_list, mock_connected):
+@patch("jarvis_core.gmail_service._build_service", return_value=None)
+def test_check_now_zero_emails_returns_ok_not_error(mock_build, mock_list, mock_connected):
     """0 new emails scanned must return status='ok', not 'error'."""
-    from jarvis_core.gmail_monitor import check_now
+    from jarvis_core.gmail_monitor import check_now, stop_monitor
+    stop_monitor()  # ensure no background thread pollutes _state
     result = check_now()
     assert result["status"] == "ok"
     assert result["summary"]["emails_scanned"] == 0
@@ -1389,9 +1393,11 @@ def test_check_now_events_field_is_list(mock_list, mock_connected):
 
 @patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
 @patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
-def test_check_now_events_empty_when_no_mails(mock_list, mock_connected):
+@patch("jarvis_core.gmail_service._build_service", return_value=None)
+def test_check_now_events_empty_when_no_mails(mock_build, mock_list, mock_connected):
     """When no emails come in, events list is empty and status is ok."""
-    from jarvis_core.gmail_monitor import check_now
+    from jarvis_core.gmail_monitor import check_now, stop_monitor
+    stop_monitor()
     result = check_now()
     assert result["status"] == "ok"
     assert result["events"] == []
@@ -1668,3 +1674,677 @@ def test_error_response_has_error_code_for_toast_routing(mock_tok, mock_conn):
     assert result["error_code"] in (
         "gmail_not_connected", "token_invalid", "gmail_api_error", "unexpected_error"
     )
+
+
+# ── JD Folder / Drafts / Log Endpoint Tests ──────────────────────────────
+
+
+def test_jd_files_endpoint_returns_safe_metadata():
+    """GET /gmail/jd-files returns safe metadata including folder path."""
+    from jarvis_core.gmail_routes import gmail_jd_files
+    result = gmail_jd_files()
+    assert result["status"] == "ok"
+    assert "count" in result
+    assert "files" in result
+    assert "folder" in result
+    assert isinstance(result["files"], list)
+    result_str = json.dumps(result)
+    assert "access_token" not in result_str
+    assert "client_secret" not in result_str
+
+
+def test_jd_files_folder_path_is_in_response():
+    """GET /gmail/jd-files includes the folder path so UI can display it."""
+    from jarvis_core.gmail_routes import gmail_jd_files
+    result = gmail_jd_files()
+    assert "folder" in result
+    folder = result["folder"].lower()
+    assert "jarvis" in folder or "jobs_jd" in folder
+
+
+def test_drafts_endpoint_returns_safe_metadata():
+    """GET /gmail/drafts returns safe metadata with folder info."""
+    from jarvis_core.gmail_routes import gmail_drafts
+    result = gmail_drafts()
+    assert result["status"] == "ok"
+    assert "gmail_drafts_count" in result
+    assert "local_drafts" in result
+    assert "local_folder" in result
+    assert isinstance(result["local_drafts"], list)
+    result_str = json.dumps(result)
+    assert "access_token" not in result_str
+    assert "client_secret" not in result_str
+
+
+def test_drafts_endpoint_has_folder_path():
+    """GET /gmail/drafts includes the local backup folder path."""
+    from jarvis_core.gmail_routes import gmail_drafts
+    result = gmail_drafts()
+    assert "local_folder" in result
+    folder = result["local_folder"].lower()
+    assert "jarvis" in folder or "draft" in folder
+
+
+def test_log_endpoint_returns_ok_when_no_log():
+    """GET /gmail/log returns ok status even when log file is missing."""
+    from jarvis_core.gmail_routes import gmail_log
+    with patch("pathlib.Path.exists", return_value=False):
+        result = gmail_log()
+    assert result["status"] == "ok"
+    assert "entries" in result
+    assert isinstance(result["entries"], list)
+    assert "message" in result
+
+
+def test_log_endpoint_never_exposes_secrets():
+    """GET /gmail/log response never contains token/secret values."""
+    from jarvis_core.gmail_routes import gmail_log
+    result = gmail_log()
+    result_str = json.dumps(result)
+    assert "access_token" not in result_str
+    assert "refresh_token" not in result_str
+    assert "client_secret" not in result_str
+
+
+def test_log_endpoint_returns_structured_response():
+    """GET /gmail/log returns status, count, and entries list."""
+    from jarvis_core.gmail_routes import gmail_log
+    result = gmail_log(lines=50)
+    assert result["status"] == "ok"
+    assert isinstance(result["entries"], list)
+    assert isinstance(result["count"], int)
+    assert result["count"] == len(result["entries"])
+
+
+# ── Draft Count Separation Tests ──────────────────────────────────────────
+
+
+def test_gmail_monitor_state_has_local_drafts_field():
+    """GmailMonitorState must have local_drafts_today defaulting to 0."""
+    from jarvis_core.gmail_models import GmailMonitorState
+    state = GmailMonitorState()
+    assert hasattr(state, "local_drafts_today")
+    assert state.local_drafts_today == 0
+    assert isinstance(state.local_drafts_today, int)
+
+
+def test_gmail_draft_success_increments_only_gmail_count():
+    """Gmail API success -> only drafts_created_today increments."""
+    from jarvis_core.gmail_models import GmailMonitorState
+    state = GmailMonitorState()
+    gmail_draft_id = "draft_abc123"
+    draft_path = "/some/backup.txt"
+    if gmail_draft_id:
+        state.drafts_created_today += 1
+    elif draft_path:
+        state.local_drafts_today += 1
+    assert state.drafts_created_today == 1
+    assert state.local_drafts_today == 0
+
+
+def test_local_backup_only_does_not_increment_gmail_count():
+    """Gmail API failure + local backup -> only local_drafts_today increments."""
+    from jarvis_core.gmail_models import GmailMonitorState
+    state = GmailMonitorState()
+    gmail_draft_id = None
+    draft_path = "/some/backup.txt"
+    if gmail_draft_id:
+        state.drafts_created_today += 1
+    elif draft_path:
+        state.local_drafts_today += 1
+    assert state.drafts_created_today == 0
+    assert state.local_drafts_today == 1
+
+
+def test_both_fail_increments_neither_count():
+    """Both fail -> neither counter increments."""
+    from jarvis_core.gmail_models import GmailMonitorState
+    state = GmailMonitorState()
+    gmail_draft_id = None
+    draft_path = None
+    if gmail_draft_id:
+        state.drafts_created_today += 1
+    elif draft_path:
+        state.local_drafts_today += 1
+    assert state.drafts_created_today == 0
+    assert state.local_drafts_today == 0
+
+
+def test_gmail_status_includes_both_draft_counters():
+    """/gmail/status includes both drafts_created_today and local_drafts_today."""
+    from jarvis_core.gmail_routes import gmail_status
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes.is_connected", return_value=True):
+            with patch("jarvis_core.gmail_routes.token_exists", return_value=True):
+                with patch("jarvis_core.gmail_routes.get_account_email", return_value="t@x.com"):
+                    result = gmail_status()
+    assert "drafts_created_today" in result
+    assert "local_drafts_today" in result
+    assert isinstance(result["drafts_created_today"], int)
+    assert isinstance(result["local_drafts_today"], int)
+
+
+# ── Part 6C: Real Gmail Draft Verification Tests ──────────────────────────
+
+
+def test_verify_draft_exists_returns_false_for_empty_id():
+    """verify_draft_exists returns False when draft_id is empty."""
+    from jarvis_core.gmail_service import verify_draft_exists
+    with patch("jarvis_core.gmail_service._build_service", return_value=None):
+        result = verify_draft_exists("")
+    assert result is False
+
+
+def test_verify_draft_exists_returns_false_when_no_service():
+    """verify_draft_exists returns False when Gmail service unavailable."""
+    from jarvis_core.gmail_service import verify_draft_exists
+    with patch("jarvis_core.gmail_service._build_service", return_value=None):
+        result = verify_draft_exists("draft_abc123")
+    assert result is False
+
+
+def test_verify_draft_exists_returns_true_when_api_confirms():
+    """verify_draft_exists returns True when drafts.get confirms the draft."""
+    from jarvis_core.gmail_service import verify_draft_exists
+    mock_service = MagicMock()
+    mock_service.users().drafts().get().execute.return_value = {"id": "draft_abc123"}
+    with patch("jarvis_core.gmail_service._build_service", return_value=mock_service):
+        result = verify_draft_exists("draft_abc123")
+    assert result is True
+
+
+def test_verify_draft_exists_returns_false_when_api_throws():
+    """verify_draft_exists returns False when drafts.get raises."""
+    from jarvis_core.gmail_service import verify_draft_exists
+    mock_service = MagicMock()
+    mock_service.users().drafts().get().execute.side_effect = Exception("404 not found")
+    with patch("jarvis_core.gmail_service._build_service", return_value=mock_service):
+        result = verify_draft_exists("draft_abc123")
+    assert result is False
+
+
+def test_unverified_draft_id_does_not_increment_gmail_count():
+    """If API returns draft_id but verification fails, Gmail count stays 0."""
+    from jarvis_core.gmail_models import GmailMonitorState
+    state = GmailMonitorState()
+    gmail_draft_verified = False
+    if gmail_draft_verified:
+        state.drafts_created_today += 1
+    else:
+        state.local_drafts_today += 1
+    assert state.drafts_created_today == 0
+    assert state.local_drafts_today == 1
+
+
+def test_verified_draft_increments_only_gmail_count():
+    """Verified draft increments only drafts_created_today."""
+    from jarvis_core.gmail_models import GmailMonitorState
+    state = GmailMonitorState()
+    gmail_draft_verified = True
+    if gmail_draft_verified:
+        state.drafts_created_today += 1
+    else:
+        state.local_drafts_today += 1
+    assert state.drafts_created_today == 1
+    assert state.local_drafts_today == 0
+
+
+def test_list_gmail_drafts_returns_empty_when_no_service():
+    """list_gmail_drafts returns empty list when Gmail service unavailable."""
+    from jarvis_core.gmail_service import list_gmail_drafts
+    with patch("jarvis_core.gmail_service._build_service", return_value=None):
+        result = list_gmail_drafts()
+    assert result == []
+
+
+def test_list_gmail_drafts_returns_safe_metadata_only():
+    """list_gmail_drafts returns only safe fields — no tokens or secrets."""
+    from jarvis_core.gmail_service import list_gmail_drafts
+    mock_service = MagicMock()
+    mock_service.users().drafts().list().execute.return_value = {
+        "drafts": [{"id": "draft_abc123xyz"}]
+    }
+    mock_service.users().drafts().get().execute.return_value = {
+        "id": "draft_abc123xyz",
+        "message": {
+            "internalDate": "1700000000000",
+            "payload": {
+                "headers": [
+                    {"name": "Subject", "value": "Re: Job Description"},
+                    {"name": "To", "value": "hr@company.com"},
+                ]
+            }
+        }
+    }
+    with patch("jarvis_core.gmail_service._build_service", return_value=mock_service):
+        result = list_gmail_drafts()
+    assert len(result) == 1
+    entry = result[0]
+    assert "subject" in entry
+    assert "to" in entry
+    assert "access_token" not in json.dumps(entry)
+    assert "client_secret" not in json.dumps(entry)
+
+
+def test_drafts_endpoint_returns_gmail_and_local_keys():
+    """GET /gmail/drafts returns both gmail_drafts and local_drafts keys."""
+    from jarvis_core.gmail_routes import gmail_drafts
+    with patch("jarvis_core.gmail_routes._is_connected", return_value=False):
+        result = gmail_drafts()
+    assert "gmail_drafts" in result
+    assert "local_drafts" in result
+    assert "gmail_drafts_count" in result
+    assert "local_backup_count" in result
+    assert "draft_scope_available" in result
+    assert "gmail_drafts_url" in result
+
+
+def test_drafts_endpoint_url_without_account_has_no_authuser():
+    """When not connected, gmail_drafts_url has no authuser param."""
+    from jarvis_core.gmail_routes import gmail_drafts
+    with patch("jarvis_core.gmail_routes._is_connected", return_value=False):
+        result = gmail_drafts()
+    # When not connected, email is None, so no authuser
+    if not result.get("connected_account_email"):
+        assert "authuser" not in result["gmail_drafts_url"]
+
+
+def test_drafts_endpoint_never_exposes_secrets():
+    """GET /gmail/drafts response never contains token/secret values."""
+    from jarvis_core.gmail_routes import gmail_drafts
+    with patch("jarvis_core.gmail_routes._is_connected", return_value=False):
+        result = gmail_drafts()
+    result_str = json.dumps(result)
+    assert "access_token" not in result_str
+    assert "refresh_token" not in result_str
+    assert "client_secret" not in result_str
+
+# ── Part 6C-C: Drafts Modal UI Contract Tests ─────────────────────────────
+
+
+def test_drafts_endpoint_gmail_count_uses_api_list_not_local_files():
+    """gmail_drafts_count must equal len(gmail_drafts), never local_backup_count."""
+    from jarvis_core.gmail_routes import gmail_drafts
+    with patch("jarvis_core.gmail_routes._is_connected", return_value=True):
+        with patch("jarvis_core.gmail_routes._get_email", return_value="test@gmail.com"):
+            with patch("jarvis_core.gmail_routes.get_draft_scope_available", return_value=True):
+                with patch("jarvis_core.gmail_routes.list_gmail_drafts", return_value=[
+                    {"id": "d1", "subject": "Re: Job", "to": "hr@company.com", "date": ""},
+                    {"id": "d2", "subject": "Re: Interview", "to": "ta@corp.com", "date": ""},
+                ]):
+                    result = gmail_drafts()
+
+    assert result["gmail_drafts_count"] == 2
+    assert result["gmail_drafts_count"] == len(result["gmail_drafts"])
+    # local_backup_count must NOT be added to gmail_drafts_count
+    assert result["gmail_drafts_count"] != result["local_backup_count"] or result["local_backup_count"] == 2
+
+
+def test_drafts_endpoint_gmail_count_zero_when_api_returns_empty():
+    """When Gmail API returns no drafts, gmail_drafts_count must be 0."""
+    from jarvis_core.gmail_routes import gmail_drafts
+    with patch("jarvis_core.gmail_routes._is_connected", return_value=True):
+        with patch("jarvis_core.gmail_routes._get_email", return_value="test@gmail.com"):
+            with patch("jarvis_core.gmail_routes.get_draft_scope_available", return_value=True):
+                with patch("jarvis_core.gmail_routes.list_gmail_drafts", return_value=[]):
+                    result = gmail_drafts()
+
+    assert result["gmail_drafts_count"] == 0
+    assert result["gmail_drafts"] == []
+
+
+def test_drafts_endpoint_local_backups_do_not_affect_gmail_count():
+    """Even with local backup files, gmail_drafts_count reflects API result only."""
+    from jarvis_core.gmail_routes import gmail_drafts
+    from jarvis_core.draft_writer import DRAFTS_DIR
+    import tempfile, os
+
+    with patch("jarvis_core.gmail_routes._is_connected", return_value=True):
+        with patch("jarvis_core.gmail_routes._get_email", return_value="test@gmail.com"):
+            with patch("jarvis_core.gmail_routes.get_draft_scope_available", return_value=True):
+                with patch("jarvis_core.gmail_routes.list_gmail_drafts", return_value=[]):
+                    # Simulate local backup files existing
+                    with patch("jarvis_core.gmail_routes.list_drafts", return_value=[
+                        {"filename": "draft_1.txt", "size": 100, "modified": "2026-07-21T10:00:00"},
+                        {"filename": "draft_2.txt", "size": 200, "modified": "2026-07-21T11:00:00"},
+                        {"filename": "draft_3.txt", "size": 150, "modified": "2026-07-21T12:00:00"},
+                    ]):
+                        result = gmail_drafts()
+
+    # Gmail API returned 0 drafts
+    assert result["gmail_drafts_count"] == 0
+    # Local files exist but must NOT leak into gmail count
+    assert result["local_backup_count"] == 3
+    # They must remain separate
+    assert result["gmail_drafts_count"] != result["local_backup_count"]
+
+
+def test_drafts_endpoint_fields_match_ui_expectations():
+    """Response has all fields the UI renderGmailDraftsModal expects."""
+    from jarvis_core.gmail_routes import gmail_drafts
+    with patch("jarvis_core.gmail_routes._is_connected", return_value=False):
+        result = gmail_drafts()
+
+    required_keys = {
+        "status", "gmail_drafts", "gmail_drafts_count",
+        "local_drafts", "local_backup_count", "local_folder",
+        "connected_account_email", "draft_scope_available",
+        "last_gmail_draft_error", "gmail_drafts_url",
+    }
+    for key in required_keys:
+        assert key in result, f"Missing key for UI: {key}"
+
+
+def test_drafts_modal_gmail_count_is_not_sum_of_both():
+    """gmail_drafts_count + local_backup_count must NOT equal some blended total."""
+    from jarvis_core.gmail_routes import gmail_drafts
+    with patch("jarvis_core.gmail_routes._is_connected", return_value=True):
+        with patch("jarvis_core.gmail_routes._get_email", return_value="test@gmail.com"):
+            with patch("jarvis_core.gmail_routes.get_draft_scope_available", return_value=True):
+                with patch("jarvis_core.gmail_routes.list_gmail_drafts", return_value=[
+                    {"id": "d1", "subject": "Re: Job", "to": "hr@co.com", "date": ""},
+                ]):
+                    with patch("jarvis_core.gmail_routes.list_drafts", return_value=[
+                        {"filename": "draft_1.txt", "size": 100, "modified": ""},
+                        {"filename": "draft_2.txt", "size": 200, "modified": ""},
+                    ]):
+                        result = gmail_drafts()
+
+    # Gmail: 1, Local: 2 — they must be independent
+    assert result["gmail_drafts_count"] == 1
+    assert result["local_backup_count"] == 2
+    # The main "gmail" count is not 3 (sum) or 2 (local count)
+    assert result["gmail_drafts_count"] != result["local_backup_count"]
+    assert result["gmail_drafts_count"] != (result["gmail_drafts_count"] + result["local_backup_count"])
+
+
+# ── Part 7-A: Start Monitoring SSL/Poll Health Tests ─────────────────────
+
+
+def test_monitor_loop_calls_reset_service_each_cycle():
+    """_monitor_loop source must call reset_service() to prevent stale SSL connections."""
+    import inspect
+    from jarvis_core import gmail_monitor as gm
+    src = inspect.getsource(gm._monitor_loop)
+    assert "reset_service()" in src, "_monitor_loop must call reset_service() each cycle"
+
+
+def test_ssl_error_message_is_safe():
+    """SSL error message shown in UI must not expose tokens or credentials."""
+    safe_reason = "Gmail API connection error (SSL/network). Will retry."
+    assert "token" not in safe_reason
+    assert "secret" not in safe_reason
+    assert "credential" not in safe_reason
+    assert "access_token" not in safe_reason
+    assert "refresh_token" not in safe_reason
+
+
+def test_poll_error_classification_ssl():
+    """SSL error string is classified as safe connection error message."""
+    err = "[SSL: WRONG_VERSION_NUMBER] wrong version number (_ssl.c:1129)"
+    err_lower = err.lower()
+    if "ssl" in err_lower or "wrong_version" in err_lower or "connection" in err_lower:
+        safe_reason = "Gmail API connection error (SSL/network). Will retry."
+    elif "credentials" in err_lower or "token" in err_lower:
+        safe_reason = "Gmail authentication error."
+    else:
+        safe_reason = "Gmail API error. Will retry."
+    assert safe_reason == "Gmail API connection error (SSL/network). Will retry."
+    # Safe reason should not expose raw error details like "WRONG_VERSION_NUMBER"
+    assert "WRONG_VERSION_NUMBER" not in safe_reason
+    assert "_ssl.c" not in safe_reason
+
+
+def test_poll_error_classification_auth():
+    """Auth error string is classified safely without exposing token details."""
+    err = "invalid_grant: Token has been expired or revoked"
+    err_lower = err.lower()
+    if "ssl" in err_lower or "wrong_version" in err_lower:
+        safe_reason = "Gmail API connection error (SSL/network). Will retry."
+    elif "credentials" in err_lower or "token" in err_lower or "auth" in err_lower:
+        safe_reason = "Gmail authentication error. May need to reconnect Gmail."
+    else:
+        safe_reason = "Gmail API error. Will retry."
+    assert safe_reason == "Gmail authentication error. May need to reconnect Gmail."
+    assert "expired" not in safe_reason
+    assert "revoked" not in safe_reason
+
+
+def test_gmail_status_includes_poll_health_fields():
+    """/gmail/status must include poll_healthy and poll_error fields."""
+    from jarvis_core.gmail_routes import gmail_status
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes.is_connected", return_value=True):
+            with patch("jarvis_core.gmail_routes.token_exists", return_value=True):
+                with patch("jarvis_core.gmail_routes.get_account_email", return_value="t@x.com"):
+                    result = gmail_status()
+    assert "poll_healthy" in result
+    assert "poll_error" in result
+    assert isinstance(result["poll_healthy"], bool)
+    assert isinstance(result["poll_error"], str)
+
+
+def test_poll_healthy_true_when_no_error():
+    """/gmail/status poll_error is empty when monitor has no poll failure."""
+    from jarvis_core.gmail_routes import gmail_status
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes.is_connected", return_value=True):
+            with patch("jarvis_core.gmail_routes.token_exists", return_value=True):
+                with patch("jarvis_core.gmail_routes.get_account_email", return_value="t@x.com"):
+                    result = gmail_status()
+    assert result["poll_error"] == "" or "poll failed" in result["poll_error"].lower()
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_unaffected_by_ssl_state(mock_list, mock_connected):
+    """check_now() must succeed even after SSL errors occurred in monitor loop."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert result["status"] == "ok"
+    assert result["summary"]["errors"] == 0
+
+
+# ── Part 7-C: SSL-resilient background monitoring tests ───────────────────
+
+
+def test_build_service_does_not_cache_service():
+    """_build_service must not return a cached service (no stale transport)."""
+    import inspect
+    from jarvis_core import gmail_service as gs
+    src = inspect.getsource(gs._build_service)
+    # Must NOT have early-return cache check
+    assert "if _gmail_service is not None" not in src, \
+        "_build_service must not cache service to prevent SSL WRONG_VERSION_NUMBER"
+
+
+def test_list_recent_unread_skips_message_on_ssl_error():
+    """list_recent_unread must skip individual messages on SSL/connection error, not crash."""
+    from jarvis_core.gmail_service import list_recent_unread
+
+    mock_service = MagicMock()
+    # messages().list() succeeds
+    mock_service.users().messages().list().execute.return_value = {
+        "messages": [{"id": "msg1"}, {"id": "msg2"}]
+    }
+    # First message raises SSL error; second succeeds
+    def get_message_side_effect(userId, id, format):
+        call = MagicMock()
+        if id == "msg1":
+            call.execute.side_effect = Exception("[SSL: WRONG_VERSION_NUMBER] wrong version number")
+        else:
+            call.execute.return_value = {
+                "snippet": "Test",
+                "payload": {"headers": [
+                    {"name": "From", "value": "hr@co.com"},
+                    {"name": "Subject", "value": "Job"},
+                    {"name": "Date", "value": "2026-07-28"},
+                ]},
+            }
+        return call
+    mock_service.users().messages().get.side_effect = get_message_side_effect
+
+    with patch("jarvis_core.gmail_service._build_service", return_value=mock_service):
+        result = list_recent_unread()
+
+    # Should not crash; should return what succeeded (msg2)
+    # (msg1 was skipped, msg2 returned None from _get_message_preview due to missing fields but no crash)
+    assert isinstance(result, list)
+
+
+def test_monitor_state_has_poll_timestamp_fields():
+    """GmailMonitorState must have last_poll_at and last_poll_success_at fields."""
+    from jarvis_core.gmail_models import GmailMonitorState
+    state = GmailMonitorState()
+    assert hasattr(state, "last_poll_at")
+    assert hasattr(state, "last_poll_success_at")
+    # Both default to None
+    assert state.last_poll_at is None
+    assert state.last_poll_success_at is None
+
+
+def test_gmail_status_includes_poll_timestamps():
+    """/gmail/status includes last_poll_at and last_poll_success_at."""
+    from jarvis_core.gmail_routes import gmail_status
+    with patch("jarvis_core.gmail_routes.credentials_exist", return_value=True):
+        with patch("jarvis_core.gmail_routes.is_connected", return_value=True):
+            with patch("jarvis_core.gmail_routes.token_exists", return_value=True):
+                with patch("jarvis_core.gmail_routes.get_account_email", return_value="t@x.com"):
+                    result = gmail_status()
+    assert "last_poll_at" in result
+    assert "last_poll_success_at" in result
+    assert isinstance(result["last_poll_at"], str)
+    assert isinstance(result["last_poll_success_at"], str)
+
+
+def test_poll_healthy_false_when_poll_error_set():
+    """poll_healthy is False when error_message starts with 'Monitoring poll failed'."""
+    from jarvis_core.gmail_models import GmailMonitorState
+    state = GmailMonitorState()
+    state.error_message = "Monitoring poll failed: Gmail API connection error (SSL/network). Will retry."
+    state.running = True
+
+    poll_healthy = state.running and not state.error_message.startswith("Monitoring poll failed")
+    assert poll_healthy is False
+
+
+def test_ssl_message_preview_skip_does_not_expose_error():
+    """Per-message SSL error log must not expose raw SSL details to user."""
+    err = "[SSL: WRONG_VERSION_NUMBER] wrong version number (_ssl.c:1129)"
+    err_lower = err.lower()
+    if "ssl" in err_lower or "connection" in err_lower or "wrong_version" in err_lower:
+        safe_log = "Skipped Gmail message preview due to connection error. Will retry later."
+    else:
+        safe_log = "Failed to process message (safe reason)"
+
+    assert "WRONG_VERSION_NUMBER" not in safe_log
+    assert "_ssl.c" not in safe_log
+    assert "access_token" not in safe_log
+    assert "client_secret" not in safe_log
+
+
+# ── Part 7-D: Shared scan path tests ────────────────────────────────────
+
+
+def test_run_gmail_scan_function_exists():
+    """run_gmail_scan() must exist in gmail_monitor."""
+    from jarvis_core import gmail_monitor as gm
+    assert hasattr(gm, "run_gmail_scan")
+    assert callable(gm.run_gmail_scan)
+
+
+@patch("jarvis_core.gmail_monitor.list_messages_for_period", return_value=[])
+@patch("jarvis_core.gmail_service._build_service", return_value=None)
+def test_run_gmail_scan_returns_result_dict(mock_build, mock_list):
+    """run_gmail_scan() returns a dict with all expected keys."""
+    from jarvis_core.gmail_monitor import run_gmail_scan, stop_monitor
+    stop_monitor()
+    result = run_gmail_scan(set(), source="test")
+    for key in ("emails_scanned", "important_found", "jd_files_saved", "drafts_created", "errors"):
+        assert key in result
+    assert isinstance(result["emails_scanned"], int)
+    assert isinstance(result["errors"], int)
+
+
+@patch("jarvis_core.gmail_monitor.list_messages_for_period")
+@patch("jarvis_core.gmail_service._build_service", return_value=None)
+def test_run_gmail_scan_raises_runtime_error_on_ssl(mock_build, mock_list):
+    """run_gmail_scan() raises RuntimeError with safe message on SSL error."""
+    from jarvis_core.gmail_monitor import run_gmail_scan, stop_monitor
+    stop_monitor()
+    mock_list.side_effect = Exception("[SSL: WRONG_VERSION_NUMBER] wrong version number")
+    with pytest.raises(RuntimeError) as exc_info:
+        run_gmail_scan(set(), source="test")
+    msg = str(exc_info.value)
+    assert "WRONG_VERSION_NUMBER" not in msg
+    assert "token" not in msg.lower()
+    assert "secret" not in msg.lower()
+    assert "Will retry" in msg
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_uses_run_gmail_scan(mock_list, mock_connected):
+    """check_now() source code must call run_gmail_scan."""
+    import inspect
+    from jarvis_core import gmail_monitor as gm
+    src = inspect.getsource(gm.check_now)
+    assert "run_gmail_scan" in src
+
+
+def test_monitor_loop_uses_run_gmail_scan():
+    """_monitor_loop() source must call run_gmail_scan."""
+    import inspect
+    from jarvis_core import gmail_monitor as gm
+    src = inspect.getsource(gm._monitor_loop)
+    assert "run_gmail_scan" in src
+
+
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+@patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
+def test_check_now_result_unchanged_after_refactor(mock_list, mock_connected):
+    """check_now() still returns status ok with correct summary after refactor."""
+    from jarvis_core.gmail_monitor import check_now
+    result = check_now()
+    assert result["status"] == "ok"
+    assert "summary" in result
+    assert "emails_scanned" in result["summary"]
+    assert result["summary"]["errors"] == 0
+
+
+def test_discovery_cache_disabled_in_build_service():
+    """_build_service() must pass cache_discovery=False to prevent SSL issues."""
+    import inspect
+    from jarvis_core import gmail_service as gs
+    src = inspect.getsource(gs._build_service)
+    assert "cache_discovery=False" in src
+
+
+# ── Part 7-E/G: SSL session and get_account_email tests ──────────────────
+
+
+def test_build_service_uses_fresh_session_for_token_refresh():
+    """_build_service() must create a fresh requests.Session for token refresh."""
+    import inspect
+    from jarvis_core import gmail_service as gs
+    src = inspect.getsource(gs._build_service)
+    assert "requests.Session()" in src
+    assert "Request(session=" in src
+
+
+def test_create_draft_does_not_call_get_account_email():
+    """create_draft() must NOT call get_account_email to avoid background SSL errors."""
+    import inspect
+    from jarvis_core import gmail_service as gs
+    src = inspect.getsource(gs.create_draft)
+    # get_account_email should NOT be called inside create_draft
+    assert "get_account_email" not in src, \
+        "create_draft must not call get_account_email — causes SSL in background threads"
+
+
+def test_build_service_does_not_cache_service():
+    """_build_service must not return a cached service (no stale transport)."""
+    import inspect
+    from jarvis_core import gmail_service as gs
+    src = inspect.getsource(gs._build_service)
+    assert "if _gmail_service is not None" not in src

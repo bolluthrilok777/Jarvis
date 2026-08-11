@@ -110,6 +110,9 @@ def _summarize_output(output: dict) -> str:
     """Convert a step output dict into a short human-readable string."""
     if not output:
         return ""
+    # Prefer a pre-formatted summary (e.g. system status metrics)
+    if "summary" in output:
+        return str(output["summary"])
     if "result" in output:
         result = str(output["result"])
         if output.get("gui_ok") is True:

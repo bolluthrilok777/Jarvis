@@ -3,22 +3,41 @@ import logging
 import requests
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from typing import Optional
 
 from jarvis_core.config import (
     APP_NAME, OLLAMA_URL, LIGHT_MODEL, HEAVY_MODEL, OLLAMA_ROBOT_IMAGE,
-    UI_FILE,
+    UI_FILE, AVAILABLE_OLLAMA_MODELS, FREE_API_KEY_ENABLED,
 )
 from jarvis_core.models import (
     ActivityEntryRequest, ChatRequest, CommandRequest, ConfirmRequest,
     MonitoringRequest, TaskSubmitRequest, TaskConfirmRequest,
 )
-from jarvis_core.ollama_service import ask_ollama
+from jarvis_core.ollama_service import (
+    ask_ollama, get_active_mode, set_active_mode, set_api_key,
+    get_api_key, get_installed_ollama_models,
+)
 from jarvis_core.system_tools import get_system_status
 from jarvis_core.command_dispatcher import run_agent_command, confirm_action
 
 logger = logging.getLogger("jarvis.routes")
 
 router = APIRouter()
+
+
+# ── Model Management Models ──────────────────────────────────────────────────
+
+
+class SetModeRequest(BaseModel):
+    mode: str
+
+
+class SetApiKeyRequest(BaseModel):
+    api_key: str
+
+
+# ── Existing Routes ──────────────────────────────────────────────────────────
 
 
 @router.get("/")
@@ -44,6 +63,7 @@ def health():
             "installed_models": [m.get("name") for m in models],
             "default_model": LIGHT_MODEL,
             "heavy_model": HEAVY_MODEL,
+            "active_mode": get_active_mode(),
             "system": get_system_status(),
         }
     except Exception as e:
@@ -51,6 +71,7 @@ def health():
             "jarvis": "running",
             "ollama": "not reachable",
             "error": str(e),
+            "active_mode": get_active_mode(),
             "system": get_system_status(),
         }
 
@@ -97,6 +118,73 @@ def confirm_action_route(req: ConfirmRequest):
 def action(req: CommandRequest):
     from jarvis_core.action_engine import engine
     return engine.run(req)
+
+
+# ── Model Management Routes ──────────────────────────────────────────────────
+
+
+@router.get("/models")
+def get_models():
+    """Get all available models and current configuration."""
+    installed = get_installed_ollama_models()
+    active_mode = get_active_mode()
+    has_api_key = bool(get_api_key())
+    
+    # Mark which models are installed
+    available = []
+    for m in AVAILABLE_OLLAMA_MODELS:
+        available.append({
+            **m,
+            "installed": m["id"] in installed,
+        })
+    
+    return {
+        "status": "ok",
+        "active_mode": active_mode,
+        "available_models": available,
+        "installed_models": installed,
+        "api_key_configured": has_api_key,
+        "api_key_enabled": FREE_API_KEY_ENABLED,
+        "light_model": LIGHT_MODEL,
+        "heavy_model": HEAVY_MODEL,
+    }
+
+
+@router.post("/models/mode")
+def set_mode(req: SetModeRequest):
+    """Set the active model mode."""
+    valid_modes = ["auto", "light", "medium", "heavy", "api_key"]
+    # Also allow any model ID from the available list
+    valid_model_ids = [m["id"] for m in AVAILABLE_OLLAMA_MODELS]
+    
+    if req.mode not in valid_modes and req.mode not in valid_model_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid mode '{req.mode}'. Valid modes: {', '.join(valid_modes)}. Valid model IDs: {', '.join(valid_model_ids[:5])}..."
+        )
+    
+    set_active_mode(req.mode)
+    return {"status": "ok", "active_mode": req.mode}
+
+
+@router.post("/models/api-key")
+def set_api_key_route(req: SetApiKeyRequest):
+    """Set the API key for free API key mode."""
+    if not req.api_key or not req.api_key.strip():
+        raise HTTPException(status_code=400, detail="API key cannot be empty")
+    set_api_key(req.api_key.strip())
+    return {"status": "ok", "message": "API key configured successfully"}
+
+
+@router.get("/models/api-key")
+def get_api_key_status():
+    """Check if API key is configured (without exposing the key)."""
+    has_key = bool(get_api_key())
+    return {
+        "status": "ok",
+        "configured": has_key,
+        "enabled": FREE_API_KEY_ENABLED,
+    }
 
 
 # ── Phase 5A-1 Task API ───────────────────────────────────────────────────────
@@ -210,3 +298,12 @@ def monitoring_activity(req: ActivityEntryRequest):
 def apps_list():
     from jarvis_core.app_adapters import public_adapters
     return {"status": "ok", "apps": public_adapters()}
+
+
+@router.get("/api/system-status")
+def api_system_status():
+    """Lightweight real-time metrics endpoint — polled every 2s by the live dashboard."""
+    from jarvis_core.system_tools import get_system_status
+    data = get_system_status(launch_task_manager=False)
+    data["status"] = "ok"
+    return data

@@ -19,6 +19,7 @@ class GmailConfig(BaseModel):
     auto_send_enabled: bool = False
     allowed_auto_send_categories: list[str] = Field(default_factory=list)
     allowed_senders: list[str] = Field(default_factory=list)
+    scan_period: str = "today"
     save_jd_folder: str = "C:\\Jarvis\\jobs_jd"
     log_folder: str = "C:\\Jarvis\\notes"
 
@@ -53,6 +54,8 @@ class GmailEvent(BaseModel):
     jd_saved_path: str = ""
     draft_reply_path: str = ""
     gmail_message_id: str = ""
+    gmail_thread_id: str = ""
+    gmail_draft_id: str = ""
 
     class Config:
         populate_by_name = True
@@ -87,6 +90,7 @@ class GmailMessagePreview(BaseModel):
     """Privacy-minimized email preview for classification."""
 
     message_id: str = ""
+    thread_id: str = ""
     sender: str = ""
     subject: str = ""
     snippet: str = ""
@@ -110,7 +114,10 @@ class GmailMonitorState(BaseModel):
     last_checked: Optional[str] = None
     important_mails_today: int = 0
     jd_files_saved_today: int = 0
-    drafts_created_today: int = 0
+    drafts_created_today: int = 0      # Only real Gmail API drafts
+    local_drafts_today: int = 0        # Only local .txt backup drafts
+    last_poll_at: Optional[str] = None          # ISO timestamp of last poll attempt
+    last_poll_success_at: Optional[str] = None  # ISO timestamp of last successful poll
     error_message: str = ""
     poll_interval_minutes: int = 5
     draft_only: bool = True

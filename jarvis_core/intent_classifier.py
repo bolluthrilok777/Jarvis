@@ -47,7 +47,22 @@ _CONV_PREFIXES: tuple[str, ...] = (
 _ACTION_VERBS: frozenset[str] = frozenset({
     "open", "search", "find", "launch", "start", "create", "take", "show",
     "list", "read", "get", "calculate", "compute", "close", "focus",
-    "type", "save", "screenshot", "calculate",
+    "type", "save", "screenshot", "calculate", "check",
+})
+
+# Phrases that look conversational but are actually executable commands
+_EXECUTABLE_EXACT: frozenset[str] = frozenset({
+    "system status", "pc status", "laptop status", "computer status",
+    "task manager", "resource usage", "performance stats",
+    "cpu status", "ram status", "gpu status", "memory status",
+    "check cpu", "check ram", "check gpu", "check memory",
+    "check disk", "check temperature", "check temp",
+    "what is system status", "what is the system status",
+    "how is my pc", "how is my laptop", "how is my computer",
+    "how is the pc doing", "how is my pc doing",
+    "system info", "system information", "system health",
+    "system monitor", "system metrics", "system performance",
+    "system resources",
 })
 
 _CONV_EXACT: frozenset[str] = frozenset({
@@ -74,6 +89,11 @@ def classify(normalized: str) -> str:
     text = normalized.strip().lower()
 
     if not text:
+        return "executable_command"
+
+    # Hard-coded executable overrides — checked FIRST before any conversational
+    # patterns so phrases like "what is system status" are never mis-routed.
+    if text in _EXECUTABLE_EXACT:
         return "executable_command"
 
     # Check for math expressions first — these are always executable commands

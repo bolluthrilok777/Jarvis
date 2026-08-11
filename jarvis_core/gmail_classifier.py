@@ -40,7 +40,7 @@ NON_JOB_KEYWORDS = [
     "sale", "offer ends", "subscribe", "unsubscribe", "you won",
     "lottery", "prize", "click here", "limited time",
     "amazon", "flipkart", "myntra", "ajio", "zomato", "swiggy",
-    "instagram", "facebook", "twitter", "linkedin notification",
+    "instagram", "facebook", "twitter",
     "youtube", "netflix", "spotify",
 ]
 
@@ -98,17 +98,17 @@ def deterministic_pre_filter(preview: GmailMessagePreview) -> Optional[bool]:
     body_lower = preview.body_preview.lower()
     combined = f"{subject_lower} {snippet_lower} {body_lower}"
 
-    # Check non-job keywords first (strong signal)
-    for kw in NON_JOB_KEYWORDS:
-        if kw in combined or kw in subject_lower:
-            return False
-
-    # Check job keywords
-    for kw in JOB_KEYWORDS:
-        if kw in combined or kw in subject_lower:
+    # Step 1: Check sender domains first — recruiter platforms always pass
+    recruiter_domains = [
+        "naukri.com", "linkedin.com", "indeed.com", "monster.com",
+        "shine.com", "timesjobs.com", "hirect.in", "apna.co",
+        "foundit.in", "hirist.com", "cutshort.com",
+    ]
+    for domain in recruiter_domains:
+        if domain in sender_lower:
             return True
 
-    # Check sender patterns
+    # Step 2: Check sender patterns — recruiter senders always pass
     job_sender_patterns = [
         r"@recruit", r"@hiring", r"@talent", r"@career",
         r"@jobs", r"@placement", r"@hr\.",
@@ -118,15 +118,15 @@ def deterministic_pre_filter(preview: GmailMessagePreview) -> Optional[bool]:
         if re.search(pattern, sender_lower):
             return True
 
-    # Check for common recruiter platforms
-    recruiter_domains = [
-        "naukri.com", "linkedin.com", "indeed.com", "monster.com",
-        "shine.com", "timesjobs.com", "hirect.in", "apna.co",
-        "foundit.in", "hirist.com", "cutshort.com",
-    ]
-    for domain in recruiter_domains:
-        if domain in sender_lower:
+    # Step 3: Check job keywords before non-job filter
+    for kw in JOB_KEYWORDS:
+        if kw in combined or kw in subject_lower:
             return True
+
+    # Step 4: Check non-job keywords (only fires after job checks above)
+    for kw in NON_JOB_KEYWORDS:
+        if kw in combined or kw in subject_lower:
+            return False
 
     return None  # Uncertain
 
@@ -304,8 +304,20 @@ def classify_email(preview: GmailMessagePreview) -> ClassificationResult:
     # Step 2: Try AI classification
     ai_result = classify_with_ai(preview)
     if ai_result is not None:
-        return ai_result
+        result = ai_result
+    else:
+        # Step 3: Fall back to deterministic
+        logger.info("AI classification unavailable, using deterministic fallback")
+        result = deterministic_classify(preview)
 
-    # Step 3: Fall back to deterministic
-    logger.info("AI classification unavailable, using deterministic fallback")
-    return deterministic_classify(preview)
+    # Step 4: Override rules for specific senders — applied after any classification
+    sender_lower = preview.sender.lower()
+    # Naukri alert emails: low priority, no draft needed (they are automated job alerts, not recruiter contact)
+    if "naukri.com" in sender_lower or "naukrialerts" in sender_lower:
+        result.importance = "low"
+        result.should_create_draft = False
+        result.draft_type = None
+        result.action_required = "Review job alert (automated)"
+        logger.debug("Naukri sender override applied: low priority, no draft")
+
+    return result

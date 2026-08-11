@@ -12,7 +12,7 @@ import os
 import re
 import secrets
 import urllib.parse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email import message_from_bytes
 from pathlib import Path
 from typing import Any, Optional
@@ -44,6 +44,9 @@ SCOPES_WITH_SEND = [
 # Global service cache
 _gmail_service = None
 _credentials_available = False
+# Set True when Google returns invalid_grant (token revoked/expired permanently)
+# Cleared when a new token is saved after re-authorization.
+_token_revoked = False
 
 EXPECTED_REDIRECT_URI = "http://127.0.0.1:8000/gmail/oauth/callback"
 
@@ -92,22 +95,21 @@ def _get_token() -> Any:
 
 
 def _build_service() -> Any:
-    """Build and return a Gmail API service instance.
+    """Build Gmail API service using requests transport (bypasses httplib2).
 
-    Returns None if credentials/token are missing or if google libraries
-    are not installed.
+    Fixes [SSL: WRONG_VERSION_NUMBER] on Windows by using urllib3/requests
+    instead of httplib2 for all Gmail API HTTP calls.
+
+    Never caches the service — always builds fresh per call.
     """
     global _gmail_service, _credentials_available
-
-    if _gmail_service is not None:
-        return _gmail_service
 
     if not is_connected():
         _credentials_available = False
         return None
 
     try:
-        from google.auth.transport.requests import Request
+        from google.auth.transport.requests import Request, AuthorizedSession
         from google.oauth2.credentials import Credentials
         from googleapiclient.discovery import build
 
@@ -117,26 +119,126 @@ def _build_service() -> Any:
 
         creds = Credentials.from_authorized_user_info(token_data, SCOPES_READ_ONLY)
 
-        # If token is expired, try to refresh
+        # Refresh expired token using requests transport (not httplib2)
         if creds and creds.expired and creds.refresh_token:
             try:
-                creds.refresh(Request())
+                fresh_session = requests.Session()
+                creds.refresh(Request(session=fresh_session))
                 # Save refreshed token
+                refreshed_json = creds.to_json()
                 with open(TOKEN_FILE, "w", encoding="utf-8") as f:
-                    f.write(creds.to_json())
+                    f.write(refreshed_json)
                 logger.info("Gmail token refreshed successfully")
+                # Reload from saved JSON to get a clean, valid Credentials object.
+                # The in-memory creds object may have stale internal state after
+                # refresh (expiry not propagated), causing creds.valid = False.
+                creds = Credentials.from_authorized_user_info(
+                    json.loads(refreshed_json), SCOPES_READ_ONLY
+                )
             except Exception as e:
-                logger.warning("Could not refresh Gmail token: %s", e)
+                err_str = str(e).lower()
+                if "invalid_grant" in err_str or "token has been expired or revoked" in err_str:
+                    global _token_revoked
+                    _token_revoked = True
+                    # Delete the dead token file so is_connected() returns False
+                    # and the monitor stops trying. User must re-authorize.
+                    try:
+                        if TOKEN_FILE.exists():
+                            TOKEN_FILE.unlink()
+                    except Exception:
+                        pass
+                    # Write a marker file so the UI shows the reconnect banner
+                    # even after Jarvis is restarted
+                    try:
+                        marker = CONFIG_DIR / "gmail_token_revoked.marker"
+                        marker.write_text("revoked")
+                    except Exception:
+                        pass
+                    logger.warning(
+                        "Gmail token permanently revoked (invalid_grant). "
+                        "Token file deleted. Please reconnect Gmail via the UI."
+                    )
+                else:
+                    logger.warning("Could not refresh Gmail token: %s", e)
                 return None
 
         if not creds or not creds.valid:
-            logger.warning("Gmail credentials are not valid")
+            # Log why credentials are invalid for debugging (safe, no secrets)
+            if creds:
+                logger.warning(
+                    "Gmail credentials are not valid: token=%s expired=%s has_token=%s",
+                    "set" if creds.token else "missing",
+                    creds.expired,
+                    bool(creds.token),
+                )
+            else:
+                logger.warning("Gmail credentials are not valid: creds is None")
             return None
 
-        service = build("gmail", "v1", credentials=creds)
-        _gmail_service = service
+        # Use AuthorizedSession (requests/urllib3) instead of httplib2.
+        # httplib2 causes [SSL: WRONG_VERSION_NUMBER] on Windows.
+        # AuthorizedSession wraps requests.Session with auto token refresh.
+        authed_session = AuthorizedSession(creds)
+
+        # Adapter class: makes AuthorizedSession look like httplib2 to googleapiclient.
+        # This completely bypasses httplib2 for all Gmail API HTTP calls, fixing
+        # [SSL: WRONG_VERSION_NUMBER] on Windows where httplib2's TLS negotiation fails.
+        class _RequestsHttpAdapter:
+            """Adapts google.auth.transport.requests.AuthorizedSession
+            to the httplib2-like interface expected by googleapiclient.
+            Fixes [SSL: WRONG_VERSION_NUMBER] on Windows.
+            """
+
+            def __init__(self, session: AuthorizedSession):
+                self._session = session
+                self.connections = {}  # googleapiclient may check this attribute
+
+            def request(
+                self,
+                uri: str,
+                method: str = "GET",
+                body: Any = None,
+                headers: Any = None,
+                redirections: int = 5,
+                connection_type: Any = None,
+                **kwargs,
+            ):
+                """Make HTTP request via requests, return (httplib2-like Response, content)."""
+                resp = self._session.request(
+                    method=method,
+                    url=uri,
+                    data=body,
+                    headers=headers or {},
+                    timeout=30,
+                    allow_redirects=(redirections > 0),
+                )
+
+                # Build httplib2-compatible response object
+                class _HttpResponse:
+                    def __init__(self, r):
+                        self.status = r.status_code
+                        self.reason = r.reason
+                        self._headers = {k.lower(): v for k, v in r.headers.items()}
+
+                    def __getitem__(self, key):
+                        return self._headers.get(key.lower(), "")
+
+                    def get(self, key, default=None):
+                        return self._headers.get(key.lower(), default)
+
+                    def items(self):
+                        return self._headers.items()
+
+                    def __contains__(self, key):
+                        return key.lower() in self._headers
+
+                content = resp.content
+                return _HttpResponse(resp), content
+
+        http_adapter = _RequestsHttpAdapter(authed_session)
+        service = build("gmail", "v1", http=http_adapter, cache_discovery=False)
         _credentials_available = True
-        logger.info("Gmail API service built successfully")
+        logger.debug("Gmail API service built (requests/urllib3, no httplib2)")
         return service
 
     except ImportError:
@@ -155,6 +257,63 @@ def reset_service() -> None:
     global _gmail_service, _credentials_available
     _gmail_service = None
     _credentials_available = False
+
+
+def mark_token_fresh() -> None:
+    """Clear the revoked flag when a new token is saved after re-authorization."""
+    global _token_revoked
+    _token_revoked = False
+    # Delete marker file so the reconnect banner disappears after fresh login
+    try:
+        marker = CONFIG_DIR / "gmail_token_revoked.marker"
+        if marker.exists():
+            marker.unlink()
+    except Exception:
+        pass
+
+
+def is_token_revoked() -> bool:
+    """Return True if token was revoked (checks in-memory flag + marker file)."""
+    if _token_revoked:
+        return True
+    # Also check marker file — persists across restarts
+    return (CONFIG_DIR / "gmail_token_revoked.marker").exists()
+
+
+def validate_token_health() -> dict:
+    """Check token file health and return a safe status dict.
+
+    Returns:
+    {
+        "valid": bool,
+        "has_token": bool,
+        "has_refresh_token": bool,
+        "expired": bool,
+        "error": str or None
+    }
+    Never exposes token values or secrets.
+    """
+    if not TOKEN_FILE.exists():
+        return {"valid": False, "has_token": False, "has_refresh_token": False,
+                "expired": False, "error": "Token file not found"}
+    try:
+        from google.oauth2.credentials import Credentials
+        token_data = _get_token()
+        if not token_data:
+            return {"valid": False, "has_token": False, "has_refresh_token": False,
+                    "expired": False, "error": "Token file empty or unreadable"}
+        creds = Credentials.from_authorized_user_info(token_data, SCOPES_READ_ONLY)
+        return {
+            "valid": creds.valid,
+            "has_token": bool(creds.token),
+            "has_refresh_token": bool(creds.refresh_token),
+            "expired": creds.expired,
+            "revoked": _token_revoked,
+            "error": None,
+        }
+    except Exception as e:
+        return {"valid": False, "has_token": False, "has_refresh_token": False,
+                "expired": False, "revoked": _token_revoked, "error": str(e)[:100]}
 
 
 # ── Direct OAuth2 Web Flow Methods (New Implementation) ─────────────────
@@ -356,6 +515,7 @@ def exchange_code_for_token_direct(code: str, state: str = None) -> tuple[bool, 
 
         logger.info("Token saved: yes")
         reset_service()
+        mark_token_fresh()
 
         # Try to get account email
         email = get_account_email()
@@ -683,6 +843,7 @@ def exchange_code_for_token(code: str, state: str = None) -> tuple[bool, str]:
         logger.info("Token saved: yes")
         logger.info("Token file exists: yes")
         reset_service()
+        mark_token_fresh()
 
         # Try to get account email
         logger.info("Gmail profile fetch: attempting")
@@ -836,7 +997,11 @@ def list_recent_messages(max_results: int = 20) -> list[GmailMessagePreview]:
 
 
 def list_recent_unread(max_results: int = 20) -> list[GmailMessagePreview]:
-    """Fetch recent UNREAD messages from Gmail inbox."""
+    """Fetch recent UNREAD messages from Gmail inbox.
+
+    Retries once on SSL/network/read timeout errors by resetting the
+    service and building a fresh transport.
+    """
     service = _build_service()
     if service is None:
         return []
@@ -848,26 +1013,90 @@ def list_recent_unread(max_results: int = 20) -> list[GmailMessagePreview]:
             .list(userId="me", maxResults=max_results, q="in:inbox is:unread")
             .execute()
         )
-
-        messages = results.get("messages", [])
-        if not messages:
+    except Exception as e:
+        err_lower = str(e).lower()
+        is_timeout = any(w in err_lower for w in ("read operation timed out", "timed out", "timeout"))
+        is_ssl = any(w in err_lower for w in ("ssl", "connection", "wrong_version"))
+        if is_timeout or is_ssl:
+            if is_timeout:
+                logger.warning("Gmail list unread timed out once; retrying with fresh service")
+            else:
+                logger.warning("Gmail list unread failed once; retrying with fresh service")
+            reset_service()
+            service = _build_service()
+            if service is None:
+                logger.warning("Gmail list unread retry aborted: service still unavailable")
+                return []
+            try:
+                results = (
+                    service.users()
+                    .messages()
+                    .list(userId="me", maxResults=max_results, q="in:inbox is:unread")
+                    .execute()
+                )
+            except Exception as retry_err:
+                logger.warning("Gmail list unread retry also failed: %s", retry_err)
+                return []
+        else:
+            logger.error("Failed to list unread Gmail messages: %s", e)
             return []
 
-        previews = []
-        for msg in messages:
-            try:
-                preview = _get_message_preview(service, msg["id"])
-                if preview:
-                    previews.append(preview)
-            except Exception as e:
-                logger.warning("Failed to process message %s: %s", msg["id"], e)
-                continue
-
-        return previews
-
-    except Exception as e:
-        logger.error("Failed to list unread Gmail messages: %s", e)
+    messages = results.get("messages", [])
+    if not messages:
         return []
+
+    previews = []
+    for msg in messages:
+        try:
+            preview = _get_message_preview(service, msg["id"])
+            if preview:
+                previews.append(preview)
+        except Exception as e:
+            err_lower = str(e).lower()
+            if "ssl" in err_lower or "connection" in err_lower or "wrong_version" in err_lower:
+                logger.warning("Skipped Gmail message preview due to connection error. Will retry later.")
+            else:
+                logger.warning("Failed to process message %s (safe reason)", msg["id"])
+            continue
+
+    return previews
+
+
+def list_messages_for_period(period: str = "today", max_results: int = 500) -> list[GmailMessagePreview]:
+    """Fetch inbox messages in the selected period, including read messages.
+
+    This is deliberately separate from the unread-only polling helper: the
+    initial selected-period scan must be able to review the whole inbox.
+    """
+    service = _build_service()
+    if service is None:
+        return []
+
+    days_back = {"today": 1, "week": 7, "month": 30}.get(period, 1)
+    start = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y/%m/%d")
+    query = f"in:inbox after:{start}"
+    messages: list[dict] = []
+    page_token: Optional[str] = None
+    try:
+        while len(messages) < max_results:
+            response = service.users().messages().list(
+                userId="me", q=query, maxResults=min(100, max_results - len(messages)),
+                pageToken=page_token,
+            ).execute()
+            messages.extend(response.get("messages", []))
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+    except Exception as exc:
+        logger.error("Failed to list Gmail messages for selected period: %s", exc)
+        return []
+
+    previews = []
+    for message in messages:
+        preview = _get_message_preview(service, message.get("id", ""))
+        if preview:
+            previews.append(preview)
+    return previews
 
 
 def _get_message_preview(service: Any, message_id: str) -> Optional[GmailMessagePreview]:
@@ -892,8 +1121,10 @@ def _get_message_preview(service: Any, message_id: str) -> Optional[GmailMessage
         # Get a short body preview (privacy-minimized)
         body_preview = _get_body_preview(msg, max_chars=500)
 
+        thread_id = msg.get("threadId", "")
         return GmailMessagePreview(
             message_id=message_id,
+            thread_id=thread_id,
             sender=sender,
             subject=subject,
             snippet=snippet,
@@ -1086,6 +1317,10 @@ def create_draft(to: str, subject: str, body: str) -> Optional[str]:
     try:
         import email.mime.text
 
+        # The From header is intentionally omitted here.
+        # Fetching the account email makes an extra API call that can fail
+        # with SSL errors in background threads.
+        # Gmail auto-populates From from the authenticated account.
         message = email.mime.text.MIMEText(body)
         message["To"] = to
         message["Subject"] = subject
@@ -1100,12 +1335,103 @@ def create_draft(to: str, subject: str, body: str) -> Optional[str]:
         )
 
         draft_id = draft.get("id", "")
-        logger.info("Created draft for %s: %s", to, draft_id)
+        if not draft_id:
+            logger.warning("Gmail draft creation returned empty id")
+            return None
+
+        logger.info("Gmail draft created (id prefix): %s", draft_id[:8])
         return draft_id
 
     except Exception as e:
         logger.error("Failed to create draft: %s", e)
         return None
+
+
+def verify_draft_exists(draft_id: str) -> bool:
+    """Verify that a Gmail draft actually exists using drafts.get.
+
+    Returns True only if the draft can be fetched from Gmail API.
+    Never logs or exposes draft content.
+    """
+    service = _build_service()
+    if service is None:
+        return False
+    if not draft_id:
+        return False
+    try:
+        result = service.users().drafts().get(
+            userId="me", id=draft_id, format="metadata"
+        ).execute()
+        exists = bool(result.get("id"))
+        logger.info("Draft verification: id=%s exists=%s", draft_id[:8], exists)
+        return exists
+    except Exception as e:
+        # 404 means draft does not exist
+        logger.warning("Draft verification failed (id=%s): %s", draft_id[:8], str(e)[:60])
+        return False
+
+
+def list_gmail_drafts(max_results: int = 50) -> list[dict]:
+    """Fetch list of Gmail drafts from the API.
+
+    Returns safe metadata only — no message bodies, no tokens.
+    """
+    service = _build_service()
+    if service is None:
+        return []
+    try:
+        result = service.users().drafts().list(
+            userId="me", maxResults=max_results
+        ).execute()
+        drafts_raw = result.get("drafts", [])
+        safe_drafts = []
+        for d in drafts_raw:
+            draft_id = d.get("id", "")
+            if not draft_id:
+                continue
+            # Fetch metadata for subject/to (no body)
+            try:
+                detail = service.users().drafts().get(
+                    userId="me", id=draft_id, format="metadata"
+                ).execute()
+                msg = detail.get("message", {})
+                headers = {
+                    h["name"].lower(): h["value"]
+                    for h in msg.get("payload", {}).get("headers", [])
+                    if h.get("name") and h.get("value")
+                }
+                safe_drafts.append({
+                    "id": draft_id[:16],  # Truncated — not a secret but keeps it short
+                    "subject": headers.get("subject", "")[:200],
+                    "to": headers.get("to", "")[:100],
+                    "date": headers.get("date", "")[:50],
+                    "internal_date": msg.get("internalDate", ""),
+                })
+            except Exception:
+                # If we can't fetch details, still include the ID
+                safe_drafts.append({"id": draft_id[:16], "subject": "", "to": "", "date": ""})
+        return safe_drafts
+    except Exception as e:
+        logger.warning("Failed to list Gmail drafts: %s", str(e)[:80])
+        return []
+
+
+def get_draft_scope_available() -> bool:
+    """Check if Gmail draft scope is available by attempting a safe drafts.list call.
+
+    Returns True if scope is available, False if permission denied.
+    """
+    service = _build_service()
+    if service is None:
+        return False
+    try:
+        service.users().drafts().list(userId="me", maxResults=1).execute()
+        return True
+    except Exception as e:
+        err = str(e).lower()
+        if any(w in err for w in ("insufficient", "scope", "permission", "403", "forbidden")):
+            return False
+        return True  # Other errors don't mean scope is missing
 
 
 def send_email(to: str, subject: str, body: str) -> bool:

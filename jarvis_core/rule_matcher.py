@@ -367,11 +367,28 @@ def _build_rules():
     ))
 
     # ── 17. System status ─────────────────────────────────────────────────────
+    # Matches many natural-language phrasings. Optional trailing qualifier words
+    # like "current", "now", "today" are allowed after the main phrase.
+    _sys_status_pattern = (
+        r"^(?:system\s+status"
+        r"|(?:pc|laptop|computer|machine|system)\s+status"
+        r"|status"
+        r"|(?:show|check|get|display|what(?:'s|\s+is)?)\s+(?:the\s+)?system\s+(?:status|health|info|information|stats|metrics|performance|resources?|usage)"
+        r"|(?:show|check|get|display)\s+(?:my\s+)?(?:pc|laptop|computer|machine)\s+(?:status|health|info|information|stats|metrics|performance|resources?|usage)"
+        r"|(?:how\s+is\s+(?:my\s+|the\s+)?(?:pc|laptop|computer|system|machine)(?:\s+doing)?)"
+        r"|(?:(?:cpu|ram|gpu|memory|disk)\s+(?:status|usage|info|stats|performance|load|temperature|temp))"
+        r"|(?:check\s+(?:cpu|ram|gpu|memory|disk|temperature|temp|performance|resources?|health))"
+        r"|(?:resource\s+(?:usage|monitor|stats|info|status))"
+        r"|(?:performance\s+(?:status|stats|info|check|monitor))"
+        r"|task\s+manager"
+        r"|open\s+task\s+manager"
+        r"|show\s+task\s+manager"
+        r"|(?:system\s+(?:info|information|health|monitor|metrics|performance|resources?))"
+        r"|(?:(?:what(?:'s|\s+is)?|show\s+me)\s+(?:my\s+)?(?:ram|cpu|gpu|memory|disk)\s+(?:usage|percent(?:age)?|temperature|temp|status|load))"
+        r")(?:\s+(?:current|now|today|please|right\s+now|at\s+this\s+(?:time|moment)))?$"
+    )
     rules.append((
-        re.compile(
-            r"^(?:system\s+status|status|pc\s+status|laptop\s+status)$",
-            re.IGNORECASE,
-        ),
+        re.compile(_sys_status_pattern, re.IGNORECASE),
         lambda m, raw, norm: _plan([
             _step("system.status", {}, "System status"),
         ], raw, norm),

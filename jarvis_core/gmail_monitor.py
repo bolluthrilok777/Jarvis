@@ -11,7 +11,7 @@ import json
 import logging
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -25,6 +25,7 @@ from jarvis_core.gmail_models import (
 )
 from jarvis_core.gmail_service import (
     is_connected,
+    list_messages_for_period,
     list_recent_unread,
     mark_as_read,
     reset_service,
@@ -47,6 +48,11 @@ _stop_event = threading.Event()
 _state = GmailMonitorState()
 _config = GmailConfig()
 _lock = threading.Lock()
+# Flag to prevent Check Now and background scan from overlapping
+_scan_running = threading.Event()
+
+# Persistent state file — survives Jarvis restarts
+STATE_FILE = DATA_DIR / "gmail_monitor_state.json"
 
 
 def _ensure_dirs() -> None:
@@ -54,6 +60,47 @@ def _ensure_dirs() -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     NOTES_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _load_persistent_state() -> dict:
+    """Load persistent monitor state from disk (survives restarts)."""
+    try:
+        if STATE_FILE.exists():
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        logger.warning("Failed to load persistent state: %s", e)
+    return {}
+
+
+def _save_persistent_state(data: dict) -> None:
+    """Save persistent monitor state to disk."""
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        logger.warning("Failed to save persistent state: %s", e)
+
+
+def get_last_scan_timestamp() -> Optional[str]:
+    """Return the ISO timestamp of the last completed scan, or None."""
+    state = _load_persistent_state()
+    return state.get("last_scan_at")
+
+
+def set_last_scan_timestamp(ts: str) -> None:
+    """Persist the ISO timestamp of the last completed scan."""
+    state = _load_persistent_state()
+    state["last_scan_at"] = ts
+    state["full_scan_done"] = True
+    _save_persistent_state(state)
+
+
+def is_full_scan_done() -> bool:
+    """Return True if the initial full scan has been completed at least once."""
+    state = _load_persistent_state()
+    return bool(state.get("full_scan_done", False))
 
 
 def _load_processed_ids() -> set[str]:
@@ -121,6 +168,7 @@ def _process_email(preview: GmailMessagePreview) -> None:
         summary=classification.summary,
         action_required=classification.action_required,
         gmail_message_id=preview.message_id,
+        gmail_thread_id=getattr(preview, 'thread_id', ''),
     )
 
     # Save JD attachments
@@ -161,11 +209,57 @@ def _process_email(preview: GmailMessagePreview) -> None:
             config=_config,
         )
         if draft:
+            # Attempt real Gmail API draft creation first
+            gmail_draft_id = None
+            try:
+                from jarvis_core.gmail_service import create_draft as create_gmail_draft
+                gmail_draft_id = create_gmail_draft(
+                    to=draft.to,
+                    subject=draft.subject,
+                    body=draft.body,
+                )
+                if gmail_draft_id:
+                    logger.info("Gmail draft created: id=%s", gmail_draft_id[:8] + "...")
+            except Exception as e:
+                error_msg = str(e)
+                if any(w in error_msg.lower() for w in ("insufficient", "scope", "permission", "forbidden")):
+                    logger.warning("Gmail draft permission missing — falling back to local file only")
+                    with _lock:
+                        _state.error_message = "Gmail draft permission missing. Reconnect Gmail with draft permission."
+                else:
+                    logger.warning("Gmail API draft creation failed (%s) — falling back to local file", error_msg[:80])
+
+            # Always save local backup file
             draft_path = save_draft_to_file(draft)
             if draft_path:
                 event.draft_reply_path = str(draft_path)
+
+            # Verify draft exists before counting — prevent phantom counts
+            gmail_draft_verified = False
+            if gmail_draft_id:
+                try:
+                    from jarvis_core.gmail_service import verify_draft_exists
+                    gmail_draft_verified = verify_draft_exists(gmail_draft_id)
+                    if not gmail_draft_verified:
+                        logger.warning("Gmail draft id=%s returned by API but NOT verified — not counting", gmail_draft_id[:8])
+                except Exception as ve:
+                    logger.warning("Draft verification error: %s", str(ve)[:60])
+                    gmail_draft_verified = False
+
+            if gmail_draft_verified:
+                # Confirmed real Gmail draft — store ID for deep linking
+                event.gmail_draft_id = gmail_draft_id or ""
                 with _lock:
                     _state.drafts_created_today += 1
+                logger.info("Gmail draft verified and counted")
+            else:
+                # Only local backup — do NOT increment Gmail drafts metric
+                with _lock:
+                    _state.local_drafts_today += 1
+                if gmail_draft_id:
+                    logger.warning("Gmail draft was not created. Local backup saved.")
+                else:
+                    logger.info("Gmail draft was not created (no API id). Local backup saved.")
 
     # Log event
     _log_event(event)
@@ -180,6 +274,252 @@ def _process_email(preview: GmailMessagePreview) -> None:
         logger.warning("Failed to mark message as read: %s", e)
 
 
+def run_incremental_scan(source: str = "incremental") -> dict:
+    """Scan only emails received AFTER the last recorded scan timestamp.
+
+    This is used by the background monitor and manual Rescan button.
+    It preserves all existing processed IDs and only processes new mail.
+    Returns dict with keys: emails_scanned, important_found, jd_files_saved,
+    drafts_created, errors, warnings, new_since.
+    """
+    global _state
+
+    logger.info("Incremental scan started (source=%s)", source)
+
+    # Get last scan timestamp — scan only emails since then
+    last_scan = get_last_scan_timestamp()
+    new_since = last_scan or ""
+
+    # Snapshot counters before scan
+    with _lock:
+        _snap_important = _state.important_mails_today
+        _snap_jd = _state.jd_files_saved_today
+        _snap_drafts = _state.drafts_created_today + _state.local_drafts_today
+
+    result = {
+        "emails_scanned": 0,
+        "important_found": 0,
+        "jd_files_saved": 0,
+        "drafts_created": 0,
+        "errors": 0,
+        "warnings": [],
+        "new_since": new_since,
+    }
+
+    processed_ids = _load_processed_ids()
+
+    try:
+        # Always fetch recent messages — the processed_ids set prevents re-processing
+        # Use "week" window to catch any emails from the past 7 days that slipped through
+        messages = list_messages_for_period("week", max_results=500)
+        logger.info("Incremental scan: %d messages fetched (source=%s)", len(messages), source)
+    except Exception as e:
+        err_lower = str(e).lower()
+        if "ssl" in err_lower or "wrong_version" in err_lower or "connection" in err_lower:
+            raise RuntimeError("Gmail API connection error (SSL/network). Will retry.")
+        elif "credentials" in err_lower or "token" in err_lower or "auth" in err_lower:
+            raise RuntimeError("Gmail authentication error. May need to reconnect Gmail.")
+        elif "quota" in err_lower or "rate" in err_lower:
+            raise RuntimeError("Gmail API rate limit. Will retry.")
+        else:
+            raise RuntimeError("Gmail API error. Will retry.")
+
+    for preview in messages:
+        # Skip already-processed emails
+        if preview.message_id in processed_ids:
+            continue
+        result["emails_scanned"] += 1
+        try:
+            _process_email(preview)
+            processed_ids.add(preview.message_id)
+        except Exception:
+            logger.error("Incremental scan: skipped one email (source=%s)", source)
+            result["errors"] += 1
+            result["warnings"].append("Skipped one email due to processing error.")
+            continue
+
+    _save_processed_ids(processed_ids)
+
+    # Compute delta for this scan
+    with _lock:
+        result["important_found"] = max(0, _state.important_mails_today - _snap_important)
+        result["jd_files_saved"] = max(0, _state.jd_files_saved_today - _snap_jd)
+        result["drafts_created"] = max(0, (_state.drafts_created_today + _state.local_drafts_today) - _snap_drafts)
+
+    # Persist scan timestamp
+    now_iso = datetime.now().isoformat()
+    set_last_scan_timestamp(now_iso)
+
+    logger.info(
+        "Incremental scan completed (source=%s): scanned=%d important=%d jd=%d drafts=%d errors=%d",
+        source, result["emails_scanned"], result["important_found"],
+        result["jd_files_saved"], result["drafts_created"], result["errors"],
+    )
+    return result
+
+
+def run_gmail_scan(processed_ids: set, source: str = "unknown") -> dict:
+    """Legacy shared scan logic — kept for backward compatibility.
+    New code should use run_incremental_scan() instead.
+    """
+    # Snapshot state counters BEFORE scan to compute delta for THIS scan only.
+    with _lock:
+        _snap_important = _state.important_mails_today
+        _snap_jd = _state.jd_files_saved_today
+        _snap_drafts = _state.drafts_created_today + _state.local_drafts_today
+
+    result = {
+        "emails_scanned": 0,
+        "important_found": 0,
+        "jd_files_saved": 0,
+        "drafts_created": 0,
+        "errors": 0,
+        "warnings": [],
+    }
+
+    logger.info("Gmail scan started (source=%s)", source)
+
+    try:
+        messages = list_messages_for_period(_config.scan_period, max_results=500)
+        result["emails_scanned"] = len(messages)
+        logger.info("Gmail scan: %d messages fetched (source=%s)", len(messages), source)
+    except Exception as e:
+        err_lower = str(e).lower()
+        if "ssl" in err_lower or "wrong_version" in err_lower or "connection" in err_lower:
+            raise RuntimeError("Gmail API connection error (SSL/network). Will retry.")
+        elif "credentials" in err_lower or "token" in err_lower or "auth" in err_lower:
+            raise RuntimeError("Gmail authentication error. May need to reconnect Gmail.")
+        elif "quota" in err_lower or "rate" in err_lower:
+            raise RuntimeError("Gmail API rate limit. Will retry.")
+        else:
+            raise RuntimeError("Gmail API error. Will retry.")
+
+    for preview in messages:
+        if preview.message_id in processed_ids:
+            continue
+        try:
+            _process_email(preview)
+            processed_ids.add(preview.message_id)
+        except Exception:
+            logger.error("Scan: skipped one email due to processing error (source=%s)", source)
+            result["errors"] += 1
+            result["warnings"].append("Skipped one email due to processing error.")
+            continue
+
+    _save_processed_ids(processed_ids)
+    with _lock:
+        result["important_found"] = max(0, _state.important_mails_today - _snap_important)
+        result["jd_files_saved"] = max(0, _state.jd_files_saved_today - _snap_jd)
+        result["drafts_created"] = max(0, (_state.drafts_created_today + _state.local_drafts_today) - _snap_drafts)
+    logger.info(
+        "Gmail scan completed (source=%s): scanned=%d important=%d jd=%d drafts=%d errors=%d",
+        source, result["emails_scanned"], result["important_found"],
+        result["jd_files_saved"], result["drafts_created"], result["errors"],
+    )
+    return result
+
+
+def run_full_scan(source: str = "full_scan") -> dict:
+    """Run a complete full scan of ALL emails from the last 30 days.
+    
+    This is the initial scan that:
+    1. Clears all processed IDs
+    2. Fetches ALL emails from the last 30 days (up to 1500)
+    3. Classifies each one with Ollama
+    4. Saves JDs and creates drafts
+    5. Returns comprehensive results with counts
+    
+    Returns dict with keys: emails_scanned, important_found, jd_files_saved,
+    drafts_created, errors, warnings, total_emails_in_period.
+    """
+    global _state
+    
+    logger.info("Full scan started (source=%s)", source)
+    
+    # Snapshot state counters BEFORE scan
+    with _lock:
+        _snap_important = _state.important_mails_today
+        _snap_jd = _state.jd_files_saved_today
+        _snap_drafts = _state.drafts_created_today + _state.local_drafts_today
+        # Reset state for fresh scan
+        _state.important_mails_today = 0
+        _state.jd_files_saved_today = 0
+        _state.drafts_created_today = 0
+        _state.local_drafts_today = 0
+    
+    result = {
+        "emails_scanned": 0,
+        "important_found": 0,
+        "jd_files_saved": 0,
+        "drafts_created": 0,
+        "errors": 0,
+        "warnings": [],
+        "total_emails_in_period": 0,
+    }
+    
+    # Clear processed IDs so we re-process everything
+    processed_ids = set()
+    _save_processed_ids(processed_ids)
+    
+    try:
+        # Fetch ALL messages from last 30 days (up to 1500)
+        messages = list_messages_for_period("month", max_results=1500)
+        result["total_emails_in_period"] = len(messages)
+        logger.info("Full scan: %d messages fetched from last 30 days", len(messages))
+    except Exception as e:
+        err_lower = str(e).lower()
+        if "ssl" in err_lower or "wrong_version" in err_lower or "connection" in err_lower:
+            raise RuntimeError("Gmail API connection error (SSL/network). Will retry.")
+        elif "credentials" in err_lower or "token" in err_lower or "auth" in err_lower:
+            raise RuntimeError("Gmail authentication error. May need to reconnect Gmail.")
+        elif "quota" in err_lower or "rate" in err_lower:
+            raise RuntimeError("Gmail API rate limit. Will retry.")
+        else:
+            raise RuntimeError("Gmail API error. Will retry.")
+    
+    # Process each email
+    for preview in messages:
+        if preview.message_id in processed_ids:
+            continue
+        try:
+            _process_email(preview)
+            processed_ids.add(preview.message_id)
+            result["emails_scanned"] += 1
+        except Exception:
+            logger.error("Full scan: skipped one email due to processing error")
+            result["errors"] += 1
+            result["warnings"].append("Skipped one email due to processing error.")
+            continue
+    
+    _save_processed_ids(processed_ids)
+    
+    # Compute delta for THIS scan
+    with _lock:
+        result["important_found"] = max(0, _state.important_mails_today - 0)  # Reset to 0 above
+        result["jd_files_saved"] = max(0, _state.jd_files_saved_today - 0)
+        result["drafts_created"] = max(0, (_state.drafts_created_today + _state.local_drafts_today) - 0)
+    
+    # Update last checked timestamp and persist state
+    now_iso = datetime.now().isoformat()
+    with _lock:
+        _state.last_checked = now_iso
+        _state.last_poll_success_at = now_iso
+
+    # Mark full scan as done and set last scan timestamp so incremental scans start from here
+    set_last_scan_timestamp(now_iso)
+    
+    logger.info(
+        "Full scan completed: scanned=%d important=%d jd=%d drafts=%d errors=%d total_in_period=%d",
+        result["emails_scanned"],
+        result["important_found"],
+        result["jd_files_saved"],
+        result["drafts_created"],
+        result["errors"],
+        result["total_emails_in_period"],
+    )
+    return result
+
+
 def _monitor_loop() -> None:
     """Main monitoring loop running in background thread."""
     global _state
@@ -188,55 +528,76 @@ def _monitor_loop() -> None:
 
     processed_ids = _load_processed_ids()
 
+    _consecutive_failures = 0
+    _MAX_CONSECUTIVE_FAILURES = 3
+
     while not _stop_event.is_set():
         try:
             if not is_connected():
                 with _lock:
                     _state.connected = False
                     _state.error_message = "Gmail not connected. Add gmail_credentials.json and complete OAuth setup."
-                _stop_event.wait(60)  # Wait a minute before retrying
+                _stop_event.wait(60)
                 continue
 
             with _lock:
                 _state.connected = True
-                _state.error_message = ""
 
-            # Fetch unread messages
-            messages = list_recent_unread(max_results=10)
+            # Skip if Check Now is running to prevent overlap
+            if _scan_running.is_set():
+                logger.info("Background scan skipped because Check Now is running")
+                _stop_event.wait(30)
+                continue
 
-            for preview in messages:
-                if _stop_event.is_set():
-                    break
-
-                # Skip already processed
-                if preview.message_id in processed_ids:
-                    continue
-
-                try:
-                    _process_email(preview)
-                    processed_ids.add(preview.message_id)
-                except Exception as e:
-                    logger.error(
-                        "Error processing email %s: %s", preview.message_id, e
+            # Use incremental scan — only processes new emails since last scan
+            logger.info("Background scan started")
+            # Reset service before each cycle to prevent stale httplib2 transport
+            # causing [SSL: WRONG_VERSION_NUMBER] in long-running background threads.
+            reset_service()
+            _scan_running.set()
+            try:
+                run_incremental_scan(source="monitor")
+                _consecutive_failures = 0
+                now_iso = datetime.now().isoformat()
+                with _lock:
+                    if _state.error_message.startswith("Monitoring poll failed"):
+                        _state.error_message = ""
+                    _state.last_poll_at = now_iso
+                    _state.last_poll_success_at = now_iso
+                    _state.last_checked = now_iso
+                logger.info("Background scan completed")
+            except RuntimeError as poll_err:
+                _consecutive_failures += 1
+                safe_reason = str(poll_err)
+                logger.warning("Background scan failed (attempt %d): %s", _consecutive_failures, safe_reason)
+                with _lock:
+                    _state.error_message = f"Monitoring poll failed: {safe_reason}"
+                    _state.last_poll_at = datetime.now().isoformat()
+                logger.info("Background scan failed safely")
+                if _consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+                    logger.warning(
+                        "Gmail monitor: %d consecutive poll failures. Polling degraded.",
+                        _consecutive_failures,
                     )
-                    # Continue with next email — don't crash the monitor
-                    continue
+                _stop_event.wait(60)
+                continue
+            finally:
+                _scan_running.clear()
 
-            # Save processed IDs periodically
-            _save_processed_ids(processed_ids)
-
-            with _lock:
-                _state.last_checked = datetime.now().isoformat()
-
-            # Wait for next poll interval
             interval = _config.poll_interval_minutes * 60
             _stop_event.wait(interval)
 
         except Exception as e:
-            logger.error("Gmail monitor loop error: %s", e)
+            err_str = str(e)
+            if "ssl" in err_str.lower() or "wrong_version" in err_str.lower():
+                safe_msg = "SSL connection error in monitor loop. Resetting service."
+            else:
+                safe_msg = err_str[:100]
+            logger.error("Gmail monitor loop error: %s", safe_msg)
             with _lock:
-                _state.error_message = str(e)[:200]
-            _stop_event.wait(60)  # Wait before retrying
+                _state.error_message = safe_msg
+            reset_service()
+            _stop_event.wait(60)
 
     logger.info("Gmail monitor thread stopped")
 
@@ -244,9 +605,28 @@ def _monitor_loop() -> None:
 def start_monitor() -> dict:
     """Start the Gmail monitor in a background thread.
 
-    Returns status dict.
+    Validates Gmail connection health before starting.
+    Returns status dict with clear error if not ready.
     """
     global _monitor_thread, _stop_event, _state
+
+    # Pre-check: must be connected
+    if not is_connected():
+        return {
+            "status": "error",
+            "error_code": "not_connected",
+            "message": "Gmail is not connected. Please connect Gmail first.",
+        }
+
+    # Pre-check: token must be usable (valid or refreshable)
+    from jarvis_core.gmail_service import validate_token_health
+    health = validate_token_health()
+    if not health["valid"] and not health["has_refresh_token"]:
+        return {
+            "status": "error",
+            "error_code": "token_invalid",
+            "message": "Gmail token is expired and cannot be refreshed. Please reconnect Gmail.",
+        }
 
     with _lock:
         if _state.running:
@@ -351,59 +731,26 @@ def check_now() -> dict:
     events_processed = []
     
     try:
-        processed_ids = _load_processed_ids()
-        
-        # Fetch recent unread messages
+        # Use incremental scan — only new emails since last scan
+        _scan_running.set()
         try:
-            messages = list_recent_unread(max_results=10)
-            emails_scanned = len(messages)
+            scan_result = run_incremental_scan(source="check_now")
+            emails_scanned = scan_result["emails_scanned"]
+            important_found = scan_result.get("important_found", 0)
+            jd_files_saved = scan_result.get("jd_files_saved", 0)
+            drafts_created = scan_result.get("drafts_created", 0)
+            errors = scan_result["errors"]
+            warnings = scan_result.get("warnings", [])
             logger.info("Check Now: emails scanned - %d", emails_scanned)
-        except Exception as e:
-            logger.error("Check Now: Gmail API error - %s", str(e))
+        except RuntimeError as e:
+            logger.error("Check Now: Gmail scan error - %s", str(e))
             return {
                 "status": "error",
                 "message": "Failed to fetch emails from Gmail. Please check your connection.",
                 "error_code": "gmail_api_error"
             }
-        
-        # Process each message
-        for preview in messages:
-            if preview.message_id in processed_ids:
-                continue
-                
-            try:
-                # Process the email
-                event_data = _process_email(preview)
-                processed_ids.add(preview.message_id)
-                
-                # Track statistics
-                if event_data:
-                    events_processed.append(event_data)
-                    
-                    # Check if it's important
-                    if hasattr(event_data, 'importance') and event_data.importance in ('high', 'critical'):
-                        important_found += 1
-                    
-                    # Check if JD was saved (look for attachments or links in action)
-                    if hasattr(event_data, 'action_required'):
-                        action = event_data.action_required or ""
-                        if "JD" in action or "attachment" in action or "link" in action:
-                            jd_files_saved += 1
-                    
-                    # Check if draft was created
-                    if hasattr(event_data, 'action_required'):
-                        action = event_data.action_required or ""
-                        if "draft" in action.lower():
-                            drafts_created += 1
-                            
-            except Exception as e:
-                logger.error("Check Now: error processing email %s - %s", preview.message_id, str(e))
-                errors += 1
-                warnings.append(f"Failed to process email from {preview.sender}: {str(e)[:50]}")
-                continue
-        
-        # Save processed IDs
-        _save_processed_ids(processed_ids)
+        finally:
+            _scan_running.clear()
         
         # Update state
         checked_at = datetime.now().isoformat()
@@ -513,3 +860,20 @@ def get_events_today() -> list[dict]:
         logger.error("Failed to read events: %s", e)
 
     return events
+
+
+def clear_processed_ids() -> dict:
+    """Clear processed message IDs so all unread emails are re-scanned next cycle.
+
+    Use this when user wants to force a full re-scan of existing emails.
+    Never exposes tokens or credentials.
+    """
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with open(PROCESSED_IDS_FILE, "w", encoding="utf-8") as f:
+            json.dump({"processed_ids": []}, f)
+        logger.info("Processed IDs cleared -- next scan will re-process all unread emails")
+        return {"status": "ok", "message": "Processed email IDs cleared. Next scan will check all unread emails."}
+    except Exception as e:
+        logger.error("Failed to clear processed IDs: %s", e)
+        return {"status": "error", "message": "Failed to clear processed IDs."}

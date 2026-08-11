@@ -4,12 +4,12 @@ from typing import Optional
 
 class ChatRequest(BaseModel):
     message: str
-    mode: str = "light"
+    mode: str = "auto"
 
 
 class CommandRequest(BaseModel):
     command: str
-    mode: str = "light"
+    mode: str = "auto"
 
 
 class ConfirmRequest(BaseModel):
