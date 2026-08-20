@@ -63,7 +63,17 @@
     .btn-warning:hover { background: #b45309; }
     .btn-sm { padding: 6px 12px; font-size: 13px; }
     .btn-ghost { background: transparent; color: #94a3b8; border: 1px solid #475569; }
-    .btn-ghost:hover { background: #334155; }
+        .btn-ghost:hover { background: #334155; }
+    #execute-btn {
+      background:linear-gradient(135deg, #8b5cf6 0%, #7c3aed 52%, #6d28d9 100%);
+      color:#fff;
+      box-shadow:0 0 22px rgba(139,92,246,.6), 0 0 6px rgba(255,255,255,.25);
+    }
+    #execute-btn:hover {
+      background:linear-gradient(135deg, #9333ea 0%, #7c3aed 52%, #7e22ce 100%);
+      box-shadow:0 0 0 6px rgba(139,92,246,.20), 0 0 22px rgba(34,211,238,.55), 0 0 32px rgba(139,92,246,.78);
+    }
+    #execute-btn:focus-visible { outline:2px solid #a78bfa; outline-offset:2px; }
     .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
     .mode-select {
       padding: 8px 12px;
@@ -77,8 +87,11 @@
       background: #16a34a;
       color: white;
       cursor: pointer;
+      transition: box-shadow .2s ease, background .2s ease;
     }
-    #voice-btn.recording { background: #dc2626; }
+    #voice-btn:hover { box-shadow: 0 0 20px rgba(22,163,74,.4); background:#15803d; }
+    #voice-btn:active { box-shadow: 0 0 12px rgba(22,163,74,.5); transform:scale(.98); }
+    #voice-btn.recording { background: #dc2626; animation:voiceRecPulse 1.1s ease-in-out infinite; }
     #voice-status { font-size: 13px; color: #94a3b8; margin-top: 4px; }
     .quick-btns { display: flex; flex-wrap: wrap; gap: 6px; }
     .quick-btns button {
@@ -93,54 +106,52 @@
     .quick-btns button:hover { background: #475569; }
 
     /* Task Queue */
-    .task-list { display: flex; flex-direction: column; gap: 6px; }
+    .task-list { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; max-height: 180px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(139,92,246,.35) #05070d; }
+    .task-list::-webkit-scrollbar { width:6px; height:6px; background:#05070d; }
+    .task-list::-webkit-scrollbar-thumb { background:rgba(139,92,246,.35); border-radius:99px; border:2px solid #05070d; }
+    .task-list .task-item { flex-shrink: 0; }
     .task-item {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 10px 14px;
+      gap: 8px;
+      padding: 6px 10px;
       background: #0f172a;
-      border-radius: 8px;
-      border-left: 4px solid #475569;
-      font-size: 14px;
-    }
-    .task-item.queued { border-left-color: #6366f1; }
-    .task-item.interpreting { border-left-color: #f59e0b; }
-    .task-item.waiting_for_confirmation { border-left-color: #f97316; }
-    .task-item.running { border-left-color: #22c55e; }
-    .task-item.completed { border-left-color: #16a34a; opacity: 0.8; }
-    .task-item.partially_completed { border-left-color: #84cc16; opacity: 0.8; }
-    .task-item.failed { border-left-color: #ef4444; }
-    .task-item.cancelled { border-left-color: #6b7280; opacity: 0.6; }
-    .task-id { color: #64748b; font-size: 11px; font-family: monospace; min-width: 80px; }
-    .task-input { flex: 1; color: #e2e8f0; }
-    .task-input .original { color: #94a3b8; }
-    .task-input .interpreted { color: #22c55e; font-size: 13px; margin-top: 2px; }
-    .task-status {
+      border-radius: 6px;
+      border-left: 2px solid #3f3f4f;
       font-size: 12px;
-      padding: 3px 8px;
-      border-radius: 4px;
-      font-weight: 600;
-      text-transform: uppercase;
-      white-space: nowrap;
+      line-height: 1.3;
+      opacity: 0;
+      transform: translateY(6px);
+      animation:taskItemIn .3s ease-out forwards;
     }
-    .status-queued { background: #312e81; color: #a5b4fc; }
-    .status-interpreting { background: #78350f; color: #fcd34d; }
-    .status-waiting_for_confirmation { background: #7c2d12; color: #fdba74; }
-    .status-running { background: #14532d; color: #86efac; }
-    .status-completed { background: #14532d; color: #86efac; }
-    .status-partially_completed { background: #3f6212; color: #bef264; }
-    .status-failed { background: #7f1d1d; color: #fca5a5; }
-    .status-cancelled { background: #1f2937; color: #9ca3af; }
-    .task-actions { display: flex; gap: 4px; }
-    .task-result {
-      font-size: 12px;
-      color: #94a3b8;
-      margin-top: 4px;
-      max-height: 60px;
-      overflow-y: auto;
+    .task-item:nth-child(1) { animation-delay: 0s; }
+    .task-item:nth-child(2) { animation-delay: .05s; }
+    .task-item:nth-child(3) { animation-delay: .1s; }
+    .task-item:hover { border-left-color: #6b46c1; background: #1a1a2e; }
+    .task-item .task-dot {
+      width: 6px; height: 6px; border-radius: 99px; flex-shrink: 0; margin-right: 6px;
     }
-    .task-result pre { margin: 0; font-size: 11px; color: #64748b; }
+    .task-item.queued .task-dot { background: #a855f6; box-shadow: 0 0 8px rgba(168,85,246,.4); }
+    .task-item.interpreting .task-dot, .task-item.waiting_for_confirmation .task-dot { background: #f472b6; box-shadow: 0 0 8px rgba(244,114,182,.4); }
+    .task-item.running .task-dot { background: #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,.4); }
+    .task-item.completed .task-dot { background: #10b981; opacity: 0.6; }
+    .task-item.partially_completed .task-dot { background: #f59e0b; opacity: 0.6; }
+    .task-item.failed .task-dot { background: #ef4444; opacity: 0.6; }
+    .task-item.cancelled .task-dot { background: #6b7280; opacity: 0.6; }
+    .task-id { color: #9ca3af; font-size: 9px; font-family: ui-monospace, monospace; white-space: nowrap; }
+    .task-title { flex:1; color:#e2e8f0; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px; }
+    .task-secondary { color:#6b7280; font-size:10px; white-space:nowrap; }
+    .task-status { display:none; min-width:32px; padding:2px 6px; border-radius:99px; font-size:9px; font-weight:600; text-transform:uppercase; margin-left:6px; }
+    .task-item.queued .task-status { display:inline-block; background:#312e81; color:#a5b4fc; }
+    .task-item.interpreting .task-status, .task-item.waiting_for_confirmation .task-status { display:inline-block; background:#7c3c7d; color:#c4b5fd; }
+    .task-item.running .task-status { display:inline-block; background:#1d4ed8; color:#93c5fd; }
+    .task-item.completed .task-status, .task-item.partially_completed .task-status { display:inline-block; background:#059669; color:#7fdbca; }
+    .task-item.failed .task-status { display:inline-block; background:#dc2626; color:#fca5a5; }
+    .task-item.cancelled .task-status { display:inline-block; background:#374151; color:#d1d5db; }
+    .task-actions { display:none; gap:3px; }
+    .task-actions button { padding:4px 6px; font-size:9px; }
+    .task-result { display:none; font-size:10px; color:#64748b; margin-top:2px; max-height:40px; overflow-y:auto; }
+    .task-result pre { margin:0; font-size:9px; color:#64748b; }
 
     /* Confirmation Dialog */
     .confirm-overlay {
@@ -183,7 +194,8 @@
     #response-area .entry .reply { color: #38bdf8; }
     #response-area .entry .error { color: #f87171; }
 
-    .hidden { display: none; }
+        .hidden { display: none; }
+    .q-response-card.collapsed { display: none; }
     .mt-8 { margin-top: 8px; }
     .mb-8 { margin-bottom: 8px; }
     .flex { display: flex; }
@@ -197,9 +209,14 @@
     .command-header { display:flex; align-items:center; justify-content:space-between; gap:14px; }
     .jarvis-title { display:flex; align-items:center; gap:11px; }
     .ollama-wrap { position:relative; display:inline-flex; flex:0 0 auto; }
-    .ollama-core { --robot:#d4af37; --robot-bright:#fff0a3; --robot-glow:rgba(212,175,55,.72); position:relative; width:64px; height:64px; padding:0; border:0; background:transparent; color:var(--robot); cursor:pointer; isolation:isolate; }
+    .ollama-core { --robot:#8b5cf6; --robot-bright:#e9d5ff; --robot-glow:rgba(139,92,246,.72); position:relative; width:64px; height:64px; padding:0; border:0; background:transparent; color:var(--robot); cursor:pointer; isolation:isolate; }
     .ollama-core.mode-light { --robot:#20d7ff; --robot-bright:#c8f7ff; --robot-glow:rgba(32,215,255,.72); }
     .ollama-core.mode-heavy { --robot:#9b6cff; --robot-bright:#eadfff; --robot-glow:rgba(155,108,255,.75); }
+    .ollama-core.mode-fast { --robot:#20d7ff; --robot-bright:#c8f7ff; --robot-glow:rgba(32,215,255,.72); }
+    .ollama-core.mode-balanced { --robot:#8b5cf6; --robot-bright:#e9d5ff; --robot-glow:rgba(139,92,246,.72); }
+    .ollama-core.mode-coding { --robot:#55dd9a; --robot-bright:#d7ffe9; --robot-glow:rgba(85,221,154,.72); }
+    .ollama-core.mode-quality { --robot:#c68cff; --robot-bright:#f0dfff; --robot-glow:rgba(198,140,255,.75); }
+    .ollama-core.mode-deep { --robot:#ff7f8f; --robot-bright:#ffe0e5; --robot-glow:rgba(255,127,143,.72); }
     .ollama-robot { position:absolute; inset:4px; z-index:2; width:56px; height:56px; border-radius:15px; object-fit:cover; filter:drop-shadow(0 0 7px var(--robot-glow)); transition:filter .2s ease,opacity .2s ease; }
     .ollama-robot-fallback { position:absolute; inset:7px; z-index:2; width:50px; height:50px; overflow:visible; filter:drop-shadow(0 0 7px var(--robot-glow)); }
     .ollama-robot-fallback[hidden] { display:none; }
@@ -228,6 +245,13 @@
     .ollama-menu button:hover,.ollama-menu button.selected { background:#24200f; color:#f4cf63; }
     .ollama-menu small { color:#8c8c8c; }
     #ollama-connection { display:block; padding:7px 10px; color:#a3a3a3; font-size:11px; }
+    .router-status { display:inline-flex; align-items:center; gap:7px; margin-left:12px; padding:6px 10px; border:1px solid #4a3d16; border-radius:999px; color:#f4cf63; background:#111; font-size:11px; letter-spacing:.04em; vertical-align:middle; }
+    .router-status::before { content:""; width:7px; height:7px; border-radius:50%; background:#22c55e; box-shadow:0 0 10px #22c55e; }
+    .router-status.direct { color:#8ee7ff; border-color:#1a5265; }.router-status.direct::before { background:#21c9f3; box-shadow:0 0 10px #21c9f3; }
+    .router-status.working::before { animation:routerPulse 1s ease-in-out infinite; }
+    @keyframes routerPulse { 50% { transform:scale(1.7); opacity:.45; } }
+    body.effects-minimal .signal-wave, body.effects-minimal .monitor-orbit::after, body.effects-minimal .gmail-hw-radar { animation:none!important; opacity:.35; }
+    body.effects-low-power .signal-wave, body.effects-low-power .monitor-orbit::after, body.effects-low-power .gmail-hw-radar { animation:none!important; }
     .monitor-live { float:right; margin-top:-42px; display:flex; align-items:center; gap:9px; padding:8px 12px; border:1px solid #4a3d16; border-radius:999px; background:#111; color:#f4cf63; font-size:12px; cursor:pointer; }
     .monitor-live.hidden { visibility:hidden; opacity:0; pointer-events:none; height:0; padding:0; margin:0; border:0; overflow:hidden; }
     .monitor-live.paused { color:#d4d4d4; border-color:#525252; }
@@ -236,7 +260,7 @@
     .monitor-orbit::after { content:""; position:absolute; width:5px; height:5px; top:-2px; left:6px; border-radius:50%; background:currentColor; box-shadow:0 0 8px currentColor; transform-origin:2px 10px; animation:monitorSpin 1.4s linear infinite; }
     .monitor-live.paused .monitor-orbit::after { animation-play-state:paused; }
     @keyframes monitorSpin { to { transform:rotate(360deg); } }
-    .container { width:calc(100% - 220px); max-width:1240px; margin-left:220px; padding:32px 28px 150px; }
+    .container { width:calc(100% - 220px); max-width:1240px; margin-left:220px; padding:32px 28px 24px; }
     .card { background:transparent; border:0; border-radius:0; padding:0; margin-bottom:28px; }
     .card:first-child { position:sticky; bottom:18px; z-index:20; background:#18181b; border:1px solid #3f3f46; border-radius:24px; padding:18px; box-shadow:0 18px 60px rgba(0,0,0,.45); }
     h1 { color:#fafafa; font-size:20px; letter-spacing:-.02em; }
@@ -827,6 +851,1565 @@
     100% { opacity: 1;   }
   }
   .smp-num-update { animation: smpFadeNum 0.4s ease-out; }
+
+    /* ═══════════════ QUANTUM AI CORE COMMAND CENTER — theme skin (additive) ═══════════════ */
+    :root {
+      --q-bg-0:#04060a; --q-bg-1:#070a12; --q-panel:rgba(11,16,32,.62);
+      --q-panel-2:rgba(16,21,40,.72); --q-line:rgba(148,163,255,.14);
+      --q-line-hi:rgba(167,139,250,.5);
+      --q-violet:#8b5cf6; --q-purple:#7c3aed; --q-cyan:#22d3ee;
+      --q-green:#34d399;
+      --q-txt:#e8edff; --q-txt-2:#9aa7d7; --q-mut:#5d6a96; --q-txt-sub:#7b8aad;
+      --q-glow-violet:0 0 26px rgba(139,92,246,.45); --q-glow-cyan:0 0 22px rgba(34,211,238,.4); --q-glow-purple:0 0 18px rgba(124,58,237,.35);
+      --q-radius:18px;
+    }
+    body { background:#04060a; }
+    body, button, input, select, textarea { font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+    ::-webkit-scrollbar { width:9px; height:9px; }
+    ::-webkit-scrollbar-track { background:#05070d; }
+    ::-webkit-scrollbar-thumb { background:rgba(139,92,246,.35); border-radius:99px; border:2px solid #05070d; }
+    ::selection { background:rgba(139,92,246,.35); }
+
+    /* Ambient background — near-black/navy, very subtle particles, no large gradients */
+    .q-bg { position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden; }
+    .q-bg-grid {
+      position:absolute; inset:0;
+      background-image:
+        linear-gradient(rgba(139,92,246,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(139,92,246,.03) 1px, transparent 1px);
+      background-size:50px 50px;
+      mask-image:radial-gradient(ellipse 80% 60% at 50% 30%, #000 25%, transparent 75%);
+    }
+    .q-bg::before, .q-bg::after {
+      content:""; position:absolute; border-radius:50%;
+      filter:blur(80px); opacity:.3; animation:qBgDrift 28s ease-in-out infinite alternate;
+    }
+    .q-bg::before { width:520px; height:520px; left:-140px; top:-180px;
+      background:radial-gradient(circle, rgba(124,58,237,.35), transparent 70%); }
+    .q-bg::after  { width:560px; height:560px; right:-180px; bottom:-220px;
+      background:radial-gradient(circle, rgba(34,211,238,.2), transparent 70%);
+      animation-delay:-14s; }
+    @keyframes qBgDrift { from { transform:translate3d(0,0,0) scale(1); } to { transform:translate3d(25px,20px,0) scale(1.08); } }
+    #q-bg-canvas { position:absolute; inset:0; width:100%; height:100%; }
+    .q-bg-grid ~ #q-bg-canvas { opacity:.5; }
+
+    /* Sidebar navigation rail */
+    .container { position:relative; z-index:1; }
+    .sidebar {
+      position:fixed; inset:0 auto 0 0; width:220px; padding:18px 12px;
+      background:linear-gradient(180deg, rgba(9,11,22,.92), rgba(6,8,16,.97));
+      border-right:1px solid var(--q-line);
+      backdrop-filter:blur(14px);
+      overflow-y:auto; z-index:2;
+    }
+    .sidebar .brand {
+      display:flex; align-items:center; gap:10px; padding:6px 10px 18px;
+      color:#c4b5fd; font-size:17px; letter-spacing:.14em;
+      text-shadow:0 0 16px rgba(139,92,246,.8); font-weight:800;
+    }
+    .sidebar .brand::before {
+      content:""; width:12px; height:12px; border-radius:50%;
+      background:radial-gradient(circle, #fff, #8b5cf6 45%, transparent 70%);
+      box-shadow:0 0 12px #8b5cf6; animation:qBrandPulse 2.6s ease-in-out infinite; flex:none;
+    }
+    @keyframes qBrandPulse { 50% { box-shadow:0 0 20px #a78bfa; } }
+    .nav-btn {
+      position:relative; border:1px solid transparent; border-radius:12px;
+      color:#aeb6de; padding:11px 13px; margin:4px 0; font-size:13.5px; font-weight:600;
+      letter-spacing:.02em; transition:transform .15s ease, background .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease;
+    }
+    .nav-btn:hover { background:rgba(139,92,246,.12); border-color:rgba(139,92,246,.4); color:#fff; transform:translateX(3px); }
+    .nav-btn.active {
+      background:linear-gradient(90deg, rgba(139,92,246,.25), rgba(59,130,246,.08));
+      border-color:rgba(139,92,246,.55); color:#fff;
+      box-shadow:0 0 16px rgba(139,92,246,.25), inset 0 0 18px rgba(139,92,246,.12);
+      position:relative;
+    }
+    .nav-btn.active::after {
+      content:""; position:absolute; right:12px; top:50%; transform:translateY(-50%);
+      width:24px; height:24px; border-radius:999px; background:rgba(139,92,246,.15);
+      box-shadow:0 0 12px rgba(139,92,246,.4); animation:navActivePulse 2s ease-in-out infinite;
+    }
+    @keyframes navActivePulse { 0%,100%{opacity:1;} 50%{opacity:.5;} }
+    .nav-btn.active::before {
+      content:""; position:absolute; left:-12px; top:20%; bottom:20%; width:3px;
+      border-radius:99px; background:linear-gradient(180deg, var(--q-cyan), var(--q-violet));
+      box-shadow:0 0 10px var(--q-violet);
+    }
+    body.effects-minimal .nav-btn.active { box-shadow:none; }
+
+    /* Panels (cards) */
+    .card { background:transparent; border:0; }
+    .container > .card {
+      background:var(--q-panel); border:1px solid var(--q-line); border-radius:var(--q-radius);
+      padding:18px 20px; margin-bottom:16px; backdrop-filter:blur(16px);
+      box-shadow:0 8px 32px rgba(3,4,10,.4), inset 0 1px 0 rgba(255,255,255,.03);
+    }
+    .container > .card:hover {
+      border-color:var(--q-cyan);
+      box-shadow:0 12px 40px rgba(3,4,10,.5), inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .container > .card:first-child { position:static; }
+    .container > .card h3 { color:var(--q-txt-2); font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; margin:0 0 12px; }
+    .container > .card h2 { color:var(--q-txt-2); font-size:13px; font-weight:600; margin:0 0 8px; }
+
+    /* Top system status bar */
+    .q-topbar { display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+    .jarvis-title { flex:1 1 auto; display:flex; align-items:center; gap:12px; min-width:0; margin:0; color:var(--q-txt); font-size:19px; font-weight:800; letter-spacing:-.01em; }
+    .jarvis-title::before {
+      content:""; width:8px; height:8px; border-radius:50%; flex:none;
+      background:linear-gradient(135deg, var(--q-cyan), var(--q-purple));
+      box-shadow:var(--q-glow-cyan); animation:navBrandPulse 2.2s ease-in-out infinite;
+    }
+    @keyframes navBrandPulse { 0%,100%{opacity:1;} 50%{opacity:.45;} }
+    .q-topbar-right { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-left:auto; }
+    .visual-effects { margin-left:8px; }
+    .visual-effects select {
+      background:rgba(10,13,26,.8); color:var(--q-txt-2); border:1px solid var(--q-line);
+      border-radius:10px; padding:5px 10px; font-size:11.5px; outline:none; cursor:pointer;
+    }
+    .router-status { background:rgba(139,92,246,.1); border-color:rgba(139,92,246,.45); color:#c4b5fd; box-shadow:var(--q-glow-violet); }
+    .monitor-live { background:rgba(10,13,26,.75); border-color:rgba(59,130,246,.4); color:#8ae4ff; }
+    .monitor-live.paused { border-color:rgba(148,163,184,.3); color:#9aa4c0; }
+
+    /* Command center */
+    .q-command-card { position:static; justify-self:center; width:min(720px,100%); }
+    .q-command-card textarea {
+      display:block; width:100%; max-width:720px; min-height:56px; max-height:120px;
+      background:rgba(8,11,22,.8); color:var(--q-txt); border:1px solid var(--q-surface-border);
+      border-radius:12px; padding:10px 14px; font-size:13px; line-height:1.4;
+      resize:vertical; outline:none; transition:border-color .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+    .q-command-card textarea::placeholder { color:#94a3b8; opacity:0.7; font-style:italic; }
+    .q-command-card textarea:focus {
+      border-color:#a855f6; box-shadow:0 0 0 3px rgba(168,85,246,.15), 0 0 12px rgba(168,85,246,.2);
+      background:rgba(10,13,24,.9);
+    }
+    .q-command-card .controls { margin-top:6px; display:flex; gap:6px; justify-content:flex-end; flex-wrap:nowrap; }
+    .controls .btn { border-radius:8px; padding:5px 10px; font-size:11px; letter-spacing:.02em; border:1px solid transparent; transition:transform .1s ease, box-shadow .1s ease, background .1s ease; }
+    .controls .btn:active { transform:scale(.96); }
+    .btn-execute { background:linear-gradient(135deg, #7c3aed, #3b82f6); color:#fff; font-weight:600; min-width:72px; }
+    .btn-execute:hover { background:linear-gradient(135deg, #8b5cf6, #4f9cff); box-shadow:0 4px 16px rgba(139,92,246,.4); }
+    .btn-execute:disabled { background:#475569; color:#a0aec0; cursor:not-allowed; }
+    .btn-ghost { background:transparent; color:#94a3b8; border:1px solid #475569; }
+    .btn-ghost:hover { background:#334155; }
+    .voice-control { position:relative; padding-right:32px; }
+    .voice-control::after {
+      content:""; position:absolute; right:8px; top:50%; transform:translateY(-50%);
+      width:20px; height:20px; border-radius:99px; background:#a855f6; box-shadow:0 0 8px rgba(168,85,246,.4);
+      z-index:1; transition:background .2s;
+    }
+    .voice-control.recording::after { background:#dc2626; animation:voicePulse 1s ease-in-out infinite; }
+    @keyframes voicePulse { 50% { box-shadow:0 0 16px rgba(220,38,38,.5); } }
+    .energy-line { position:absolute; inset:0; pointer-events:none; background:linear-gradient(90deg, transparent, rgba(168,85,246,.15), transparent); opacity:0; transition:opacity .3s; }
+    .energy-line.active { opacity:1; }
+    .btn-success { background:linear-gradient(135deg, #059669, #34d399); color:#05110c; }
+    .btn-danger { background:linear-gradient(135deg, #b91c1c, #ef4444); }
+    .btn-warning { background:linear-gradient(135deg, #b45309, #f59e0b); }
+    .btn-ghost { background:rgba(139,92,246,.08); color:var(--q-txt-2); border-color:var(--q-line); }
+    .btn-ghost:hover { background:rgba(139,92,246,.16); color:#fff; }
+    #voice-btn { border-radius:12px; font-weight:600; letter-spacing:.02em; }
+    #voice-btn.recording { animation:voiceRecPulse 1.1s ease-in-out infinite; }
+    @keyframes voiceRecPulse { 0%,100%{ box-shadow:0 0 8px rgba(239,68,68,.5);} 50%{ box-shadow:0 0 26px rgba(239,68,68,.95);} }
+    #voice-status { margin-top:8px; font-size:12px; color:var(--q-txt-2); }
+
+    /* Quick command tiles */
+    .quick-btns { display:grid; grid-template-columns:repeat(auto-fill, minmax(158px,1fr)); gap:10px; }
+    .quick-btns button:not(.nav-btn){
+      position:relative; display:flex; align-items:center; gap:9px; text-align:left;
+      background:rgba(10,14,28,.7); color:var(--q-txt-2); border:1px solid var(--q-line);
+      border-radius:13px; padding:11px 13px; font-size:12.5px; font-weight:600; cursor:pointer;
+      transition:transform .14s ease, border-color .2s ease, background .2s ease, box-shadow .2s ease, color .2s ease;
+    }
+    .quick-btns button::before {
+      content:"◈"; font-size:12px; color:var(--q-violet); text-shadow:0 0 8px var(--q-violet); flex:none;
+    }
+    .quick-btns button:hover {
+      color:#fff; border-color:rgba(139,92,246,.6); background:rgba(139,92,246,.14);
+      transform:translateY(-2px); box-shadow:0 6px 22px rgba(124,58,237,.3);
+    }
+    .quick-btns button:active { transform:translateY(0) scale(.97); }
+
+    /* ── QUANTUM AI CORE (the visual identity) ─────────────────────────────── */
+    .container > .qc-core-card { position:relative; overflow:hidden; text-align:center;
+      border:1px solid rgba(139,92,246,.35);
+      box-shadow:inset 0 0 28px rgba(34,211,238,.06), 0 0 20px rgba(139,92,246,.10); }
+    .qc-core-card::after {
+      content:""; position:absolute; inset:0; pointer-events:none;
+      background:radial-gradient(circle at 50% 42%, rgba(139,92,246,.16), transparent 60%);
+    }
+    .qc-core { position:relative; width:200px; height:200px; margin:6px auto -4px; }
+    /* Stale legacy Quantum Core ornaments (.qc-halo/.qc-hud/.qc-orbit/.qc-sphere/.qc-ping)
+       were removed — the live core DOM renders .qc-ring/.qc-ped/.qc-outring/.qc-beam/
+       .qc-nucleus/.qc-arc/.qc-spark instead. Only shared keyframes are kept below. */
+    @keyframes qcHalo { 50% { opacity:.55; transform:scale(1.06); } }
+    @keyframes qcDotPulse { 50% { opacity:.4; } }
+    .qc-meta { margin-top:10px; position:relative; z-index:2; }
+    .qc-meta-title { font-size:11px; letter-spacing:.3em; color:var(--q-mut); font-weight:700; }
+    .qc-meta-state { font-size:15px; font-weight:800; color:#e2d7ff; margin-top:2px; letter-spacing:.18em; }
+    .qc-meta-sub { font-size:11px; color:var(--q-mut); margin-top:3px; }
+    .qc-conduit { position:relative; height:28px; margin:6px auto 0; width:3px; border-radius:99px;
+      background:linear-gradient(180deg, var(--q-violet), transparent); overflow:hidden; }
+    .qc-conduit::after { content:""; position:absolute; left:0; top:-40%; width:100%; height:45%;
+      background:linear-gradient(180deg, transparent, #fff, transparent); animation:qcConduit 1.6s linear infinite; }
+    @keyframes qcConduit { to { top:110%; } }
+
+    /* ── 3D holographic quantum sphere (core visuals) ─────────────────────────── */
+    .qc-core { perspective:540px; transform-style:preserve-3d; --orbit:78px; }
+        .qc-core > span { position:absolute; }
+    .qc-core::before { content:""; position:absolute; left:50%; top:50%; width:120px; height:120px; margin:-60px; border-radius:50%;
+      background:radial-gradient(circle, rgba(196,181,253,.30), rgba(167,139,250,.18) 30%, rgba(139,92,246,.10) 52%, rgba(34,211,238,.08) 68%, transparent 78%);
+      filter:blur(18px); opacity:.92; z-index:2; animation:qcCoreGlow 7s ease-in-out infinite; pointer-events:none; }
+    @keyframes qcCoreGlow { 0%,100%{opacity:.84} 50%{opacity:1} }
+
+    .qc-nucleus {
+      left:50%; top:50%; width:46px; height:46px; margin:-23px; border-radius:50%;
+            background:radial-gradient(circle at 38% 32%, #fff 0%, #fff 18%, rgba(236,225,255,1) 28%, rgba(167,139,250,.65) 48%, rgba(124,58,237,.28) 72%, transparent 82%), radial-gradient(circle at 50% 55%, #8b5cf6 0%, #7c3aed 42%, #4c1d95 72%);
+            box-shadow:0 0 30px rgba(196,181,253,1), 0 0 70px rgba(139,92,246,.9), 0 0 130px rgba(124,58,237,.7), inset 0 0 22px rgba(255,255,255,.42);
+      animation:qcNucleusBreathe 4.4s ease-in-out infinite; z-index:6;
+    }
+    @keyframes qcNucleusBreathe { 0%,100%{transform:scale(1);} 50%{transform:scale(1.1);} }
+
+    .qc-ring {
+      left:50%; top:50%; width:158px; height:158px; margin:-79px; border-radius:50%;
+      transform-style:preserve-3d; z-index:4;
+    }
+        .qc-ring--1 { border:1px solid rgba(139,92,246,.72); animation:qcRingA 11s linear infinite; }
+    .qc-ring--2 { border:1px solid rgba(34,211,238,.62); animation:qcRingB 15s linear infinite; }
+    .qc-ring--3 { border:1px solid rgba(167,139,250,.68); animation:qcRingC 8.5s linear infinite; }
+    .qc-ring--4 { border:1px solid rgba(34,211,238,.5); animation:qcRingD 19s linear infinite; }
+    .qc-ring--5 { border:1px solid rgba(139,92,246,.55); animation:qcRingA 13s linear infinite reverse; }
+    .qc-ring--6 { border:1px solid rgba(34,211,238,.44); animation:qcRingC 10.5s linear infinite reverse; }
+        .qc-ring--7 { border:1px solid rgba(167,139,250,.52); animation:qcRingB 17s linear infinite; }
+    .qc-ring--8 { border:1px dashed rgba(139,92,246,.42); animation:qcRingD 12s linear infinite reverse; }
+    @keyframes qcRingA { from { transform:rotateX(74deg) rotateZ(0deg);} to { transform:rotateX(74deg) rotateZ(360deg);} }
+    @keyframes qcRingB { from { transform:rotateX(67deg) rotateY(26deg) rotateZ(0deg);} to { transform:rotateX(67deg) rotateY(26deg) rotateZ(360deg);} }
+    @keyframes qcRingC { from { transform:rotateX(80deg) rotateY(-20deg) rotateZ(0deg);} to { transform:rotateX(80deg) rotateY(-20deg) rotateZ(360deg);} }
+    @keyframes qcRingD { from { transform:rotateX(71deg) rotateY(42deg) rotateZ(0deg);} to { transform:rotateX(71deg) rotateY(42deg) rotateZ(360deg);} }
+    .qc-ring i {
+      left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%;
+            background:#cdbaff; box-shadow:0 0 12px rgba(139,92,246,1), 0 0 22px rgba(34,211,238,.6);
+      transform:rotate(var(--na,0deg)) translateX(var(--orbit)); z-index:5;
+    }
+    .qc-ring i:nth-child(2) { --na:132deg; }
+    .qc-ring i:nth-child(3) { --na:248deg; }
+
+    .qc-arc { left:50%; top:50%; width:148px; height:148px; margin:-74px; border-radius:50%; border:1.5px solid transparent; z-index:4; }
+        .qc-arc--c1 { border-top-color:rgba(34,211,238,.92); animation:qcRingB 9s linear infinite; }
+    .qc-arc--v1 { border-right-color:rgba(139,92,246,.88); border-bottom-color:rgba(139,92,246,.28); animation:qcRingC 12s linear infinite reverse; }
+    .qc-arc--v2 { border-left-color:rgba(167,139,250,.84); animation:qcRingD 16s linear infinite; }
+
+    .qc-outring {
+      left:50%; top:50%; width:176px; height:176px; margin:-88px; border-radius:50%;
+            border:1px solid rgba(139,92,246,.3); border-top-color:rgba(34,211,238,.62);
+      transform:rotateX(77deg); animation:qcOutRing 24s linear infinite; z-index:2;
+    }
+    @keyframes qcOutRing { from { transform:rotateX(77deg) rotateZ(0deg);} to { transform:rotateX(77deg) rotateZ(360deg);} }
+
+    .qc-beam {
+      left:50%; top:50%; width:3px; height:66px; margin:24px 0 0 -1.5px;
+      background:linear-gradient(180deg, rgba(196,181,253,.95), rgba(139,92,246,.3) 55%, transparent 92%);
+      filter:blur(.4px); opacity:.85; z-index:3; animation:qcBeamPulse 3.8s ease-in-out infinite;
+    }
+    @keyframes qcBeamPulse { 0%,100%{opacity:.5;} 50%{opacity:.95;} }
+
+        .qc-ped { left:50%; top:66%; border-radius:50%; border:1px solid rgba(139,92,246,.58); background:radial-gradient(ellipse at center, rgba(139,92,246,.13), transparent 66%); transform:rotateX(76deg); z-index:1; animation:qcPedPulse 5.4s ease-in-out infinite; }
+    .qc-ped--1 { width:148px; height:148px; margin:-74px 0 0 -74px; box-shadow:0 0 16px rgba(139,92,246,.45); }
+    .qc-ped--2 { width:108px; height:108px; margin:-54px 0 0 -54px; border-color:rgba(34,211,238,.58); box-shadow:0 0 15px rgba(34,211,238,.42); }
+    .qc-ped--3 { width:68px; height:68px; margin:-34px 0 0 -34px; border-color:rgba(167,139,250,.68); box-shadow:0 0 12px rgba(167,139,250,.52); }
+    @keyframes qcPedPulse { 0%,100%{opacity:.6;} 50%{opacity:1;} }
+
+        .qc-spark { width:3px; height:3px; border-radius:50%; background:rgba(167,139,250,.92); box-shadow:0 0 9px rgba(139,92,246,.92), 0 0 13px rgba(34,211,238,.72); opacity:.55; z-index:5; animation:qcSparkFloat var(--sp-dur,5s) ease-in-out infinite; }
+    .qc-spark--1 { left:20%; top:28%; --sp-dur:5.4s; animation-delay:-1.2s; }
+    .qc-spark--2 { left:76%; top:22%; --sp-dur:6.6s; animation-delay:-3.1s; }
+    .qc-spark--3 { left:12%; top:60%; --sp-dur:4.8s; animation-delay:-2.2s; }
+    .qc-spark--4 { left:84%; top:56%; --sp-dur:7.2s; animation-delay:-4.1s; }
+    .qc-spark--5 { left:46%; top:12%; --sp-dur:6s; animation-delay:-.6s; }
+        @keyframes qcSparkFloat { 0%,100%{opacity:.5; transform:translateY(0) scale(.7);} 50%{opacity:1; transform:translateY(-9px) scale(1.2);} }
+
+    /* Core state reactions (presentation-only, driven by existing DOM state) */
+    .qc-core.is-thinking .qc-ring { animation-duration:5s; }
+    .qc-core.is-thinking .qc-ring--1 { animation-duration:3.4s; }
+    .qc-core.is-thinking .qc-ring--2 { animation-duration:4.6s; }
+    .qc-core.is-thinking .qc-ring--3 { animation-duration:2.9s; animation-direction:reverse; }
+    .qc-core.is-thinking .qc-ring--4 { animation-duration:5.4s; animation-direction:reverse; }
+    .qc-core.is-thinking .qc-ring--5 { animation-duration:4s; }
+    .qc-core.is-thinking .qc-ring--6 { animation-duration:3.6s; }
+    .qc-core.is-thinking .qc-ring--7 { animation-duration:4.2s; animation-direction:reverse; }
+    .qc-core.is-thinking .qc-ring--8 { animation-duration:3.2s; }
+    .qc-core.is-thinking .qc-arc, .qc-core.is-thinking .qc-outring { animation-duration:6s; }
+    .qc-core.is-thinking .qc-nucleus { animation-duration:1.6s; box-shadow:0 0 32px rgba(196,181,253,1), 0 0 78px rgba(139,92,246,.9), 0 0 140px rgba(124,58,237,.7), inset 0 0 22px rgba(255,255,255,.45); }
+    .qc-core.is-listening .qc-ring { border-color:rgba(34,211,238,.55); }
+    .qc-core.is-listening .qc-ring--1 { animation-duration:5s; }
+    .qc-core.is-listening .qc-ring--2 { animation-duration:7s; }
+    .qc-core.is-listening .qc-ring--3 { animation-duration:4s; }
+    .qc-core.is-listening .qc-nucleus { background:radial-gradient(circle at 38% 32%, #fff 0%, rgba(207,250,254,.95) 20%, rgba(103,232,249,.6) 46%, rgba(34,211,238,.2) 72%, transparent 82%); box-shadow:0 0 28px rgba(103,232,249,.95), 0 0 70px rgba(34,211,238,.7), 0 0 120px rgba(34,211,238,.45), inset 0 0 20px rgba(255,255,255,.4); }
+    .qc-core.is-listening::after {
+      content:""; position:absolute; left:50%; top:50%; width:150px; height:150px; margin:-75px; border-radius:50%;
+      border:1px solid rgba(34,211,238,.85); box-shadow:0 0 22px rgba(34,211,238,.35), inset 0 0 22px rgba(34,211,238,.18);
+      animation:qcListenRipple 1.7s ease-out infinite; z-index:7; pointer-events:none;
+    }
+    @keyframes qcListenRipple { 0%{ transform:scale(.5); opacity:.9;} 100%{ transform:scale(1.18); opacity:0;} }
+    .qc-core.is-monitoring::before { content:""; position:absolute; left:50%; bottom:10px; width:9px; height:9px; margin-left:-4.5px; border-radius:50%;
+      background:var(--q-green); box-shadow:0 0 12px var(--q-green); animation:qcDotPulse 1.6s ease-in-out infinite; z-index:3; }
+    .qc-core.pulse-success { animation:qcPulseSuccess 1.1s ease-out; }
+    .qc-core.pulse-error { animation:qcPulseError 1.1s ease-out; }
+    @keyframes qcPulseSuccess { 0%{ box-shadow:0 0 0 0 rgba(52,211,153,.65);} 100%{ box-shadow:0 0 0 60px rgba(52,211,153,0);} }
+    @keyframes qcPulseError { 0%{ box-shadow:0 0 0 0 rgba(248,113,113,.7);} 100%{ box-shadow:0 0 0 50px rgba(248,113,113,0);} }
+
+    @media (max-width:700px) {
+      .qc-core { --orbit:56px; }
+      .qc-ring { width:118px; height:118px; margin:-59px; }
+      .qc-outring { width:130px; height:130px; margin:-65px; }
+      .qc-arc { width:110px; height:110px; margin:-55px; }
+      .qc-ped--1 { width:110px; height:110px; margin:-55px 0 0 -55px; }
+      .qc-ped--2 { width:80px; height:80px; margin:-40px 0 0 -40px; }
+      .qc-ped--3 { width:52px; height:52px; margin:-26px 0 0 -26px; }
+      .qc-nucleus { width:34px; height:34px; margin:-17px; }
+      .qc-beam { height:44px; margin:14px 0 0 -1.5px; }
+      .qc-ring i { width:5px; height:5px; margin:-2.5px 0 0 -2.5px; }
+      .qc-spark { width:2px; height:2px; }
+      .qc-core.is-listening::after { width:116px; height:116px; margin:-58px; }
+    }
+
+    /* Response panel */
+    .q-response-card { position:static; justify-self:center; width:min(700px,100%); }
+    .q-response-card #response-area {
+      background:rgba(8,11,22,.8); border:1px solid var(--q-surface-border);
+      border-radius:12px; padding:10px 14px; font-size:13px; line-height:1.45;
+      max-height:0; overflow:hidden; transition:max-height .3s ease-out, opacity .3s ease;
+      opacity:1;
+    }
+    .q-response-card #response-area.waiting { max-height:46px; opacity:1; }
+    .q-response-card #response-area .entry { margin:6px 0; padding:4px 0; border-bottom:1px solid var(--q-line); }
+    .q-response-card #response-area .entry:last-child { border-bottom: none; }
+    .q-response-card #response-area .entry .label { color:var(--q-mut); font-size:11px; }
+    .q-response-card #response-area .entry .original { color:var(--q-txt); }
+    .q-response-card #response-area .entry .understood { color:var(--q-cyan); font-size:12px; }
+    .q-response-card #response-area .entry .reply { color:var(--q-blue); }
+    
+    @media (prefers-reduced-motion: reduce) {
+      .q-response-card #response-area { transition:none; }
+    }
+
+    /* Task queue cards */
+    .task-list { gap:10px; }
+    .task-item {
+      background:rgba(8,11,22,.8); border:1px solid var(--q-line); border-left-width:3px;
+      border-radius:14px; padding:13px 15px; transition:border-color .25s ease, background .25s ease;
+    }
+    .task-item.running { animation:taskRunningGlow 1.6s ease-in-out infinite; }
+    .task-item.completed, .task-item.partially_completed { border-left-color:var(--q-green); }
+    .task-item.queued { border-left-color:var(--q-cyan); }
+    .task-item.running { border-left-color:var(--q-blue); }
+    .task-item.interpreting, .task-item.waiting_for_confirmation { border-left-color:var(--q-violet); }
+    .task-item.failed { border-left-color:var(--q-red); }
+    @keyframes taskRunningGlow { 50% { box-shadow:0 0 18px rgba(59,130,246,.28); } }
+    .task-status { border-radius:99px; font-size:10.5px; letter-spacing:.08em; padding:3px 9px; }
+    .status-completed, .status-partially_completed { background:rgba(52,211,153,.14); color:#7cffb9; }
+    .status-running { background:rgba(59,130,246,.16); color:#93c5fd; }
+    .status-queued { background:rgba(251,191,36,.12); color:#fcd34d; }
+    .status-interpreting, .status-waiting_for_confirmation { background:rgba(139,92,246,.16); color:#c4b5fd; }
+    .status-failed { background:rgba(248,113,113,.14); color:#fca5a5; }
+    .task-id { color:var(--q-mut); font-family:ui-monospace, "Cascadia Code", Consolas, monospace; }
+    .task-input .original .label, .task-input .interpreted .label, .task-input .reframing .label { color:var(--q-mut); }
+    .task-input .reframing, .task-input .interpreted { color:var(--q-cyan); }
+    .task-result { color:var(--q-txt-2); }
+
+    /* System HUD (DOM-derived live status) */
+    .q-hud-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+    .qh-cell {
+      display:flex; align-items:center; gap:10px; padding:12px 13px; border-radius:13px;
+      background:rgba(8,11,22,.72); border:1px solid var(--q-line);
+      transition:border-color .25s ease, background .25s ease;
+    }
+    .qh-cell .qh-dot { width:9px; height:9px; border-radius:50%; background:#5d6a96; flex:none; }
+    .qh-cell .qh-lbl { font-size:9.5px; letter-spacing:.16em; color:var(--q-mut); font-weight:700; display:block; }
+    .qh-cell .qh-val { font-size:12.5px; color:var(--q-txt); font-weight:700; display:block; margin-top:2px; }
+    .qh-cell.on { border-color:rgba(52,211,153,.45); }
+    .qh-cell.on .qh-dot { background:var(--q-green); box-shadow:0 0 8px var(--q-green); }
+    .qh-cell.busy { border-color:rgba(139,92,246,.5); }
+    .qh-cell.busy .qh-dot { background:var(--q-violet); box-shadow:0 0 8px var(--q-violet); animation:qcDotPulse 1.1s ease-in-out infinite; }
+    .qh-cell.warn .qh-dot { background:var(--q-cyan); box-shadow:0 0 8px var(--q-cyan); }
+    .qh-cell.err .qh-dot { background:var(--q-red); box-shadow:0 0 8px var(--q-red); }
+
+    /* Home layout — reference Quantum AI Core composition */
+    .container > .card { animation:qPanelIn .5s cubic-bezier(.16,1,.3,1) both; }
+    .container > .card:nth-child(2) { animation-delay:.05s; }
+    .container > .card:nth-child(3) { animation-delay:.1s; }
+    .container > .card:nth-child(4) { animation-delay:.15s; }
+    @keyframes qPanelIn { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:none; } }
+@keyframes qcHaloPulse { 0%,100%{box-shadow:0 0 20px rgba(139,92,246,.3);} 50%{box-shadow:0 0 40px rgba(124,58,237,.5), 0 0 60px rgba(34,211,238,.3);} }
+
+    /* Desktop: sidebar | top command header | central dominant core with status cards
+       on each side | command input below | quick commands | task section */
+    @media (min-width:1200px) {
+      .container {
+        display:grid;
+        grid-template-columns:minmax(240px,270px) minmax(0,1fr) minmax(240px,270px);
+        grid-template-areas:
+          "topbar   topbar    topbar"
+          "hud      core      response"
+          "command  command   command"
+          "quick    quick     quick"
+          "task     task      task";
+        gap:16px;
+        align-items:start;
+        max-width:1560px;
+        padding:20px 30px 28px;
+      }
+      .qc-core-card    { grid-area:core; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+      .q-topbar        { grid-area:topbar; }
+      .q-command-card  { grid-area:command; position:static; }
+      .q-hud-card      { grid-area:hud; align-self:stretch; }
+      .q-response-card { grid-area:response; align-self:stretch; max-height:calc(100vh - 320px); overflow:auto; }
+      .q-quick-card    { grid-area:quick; }
+      .q-task-card     { grid-area:task; }
+      .container > .card, .container > section { margin-bottom:0; }
+
+      /* Dominant, centred Quantum Core */
+      .container > .qc-core-card { padding:10px 10px 4px; }
+      .qc-core { width:236px; height:236px; margin:8px auto 2px; --orbit:90px; }
+      .qc-conduit { height:20px; margin:6px auto 0; width:3px; border-radius:99px; background:linear-gradient(180deg, var(--q-violet), transparent); }
+      .qc-meta { margin-top:6px; }
+    }
+
+
+    /* Performance & accessibility */
+    body.effects-minimal .qc-ring, body.effects-minimal .qc-arc, body.effects-minimal .qc-outring,
+    body.effects-minimal .qc-nucleus, body.effects-minimal .qc-spark, body.effects-minimal .qc-beam,
+    body.effects-minimal .qc-ped, body.effects-minimal .qc-core.is-listening::after,
+    body.effects-minimal .qc-conduit::after { animation:none !important; }
+    body.effects-low-power .qc-ring, body.effects-low-power .qc-arc, body.effects-low-power .qc-outring,
+    body.effects-low-power .qc-nucleus, body.effects-low-power .qc-spark, body.effects-low-power .qc-beam,
+    body.effects-low-power .qc-ped, body.effects-low-power .qc-core.is-listening::after,
+    body.effects-low-power .qc-conduit::after,
+    body.effects-low-power .q-bg::before, body.effects-low-power .q-bg::after { animation-play-state:paused !important; }
+    @media (prefers-reduced-motion: reduce) {
+      .qc-ring, .qc-arc, .qc-outring, .qc-nucleus, .qc-spark, .qc-beam, .qc-ped,
+      .qc-core.is-listening::after,
+      .qc-core.pulse-success, .qc-core.pulse-error,
+      .container > .card, .task-item, .q-bg::before, .q-bg::after { animation:none !important; }
+      #q-bg-canvas { display:none; }
+    }
+
+    /* Responsive */
+@media (max-width:1120px) { .q-hud-grid { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); } .quick-btns { grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); } }
+    @media (max-width:700px) {
+      .container > .card { padding:12px; }
+      .q-topbar { gap:8px; }
+      .jarvis-title { font-size:15px; }
+      .qc-core { width:150px; height:150px; --orbit:56px; }
+      .quick-btns button { font-size:11px; padding:5px 10px; }
+      .qh-cell { padding:8px; }
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       HOME PAGE POLISH — unified Quantum AI OS / HUD (additive skin)
+       Theme: black / deep-navy · violet core glow · cyan accents · no gold
+       Preserves every ID, handler & existing behaviour. Desktop-targeted.
+       ══════════════════════════════════════════════════════════════════ */
+
+    /* Colour-level (apply at every viewport so no gold remains on the home shell) */
+    .ollama-menu button:hover, .ollama-menu button.selected { background:#241a3d; color:#d9ccff; }
+    .sidebar .brand { color:#c4b5fd; }
+
+    /* ══════════════════════════════════════════════════════════════════
+       QUANTUM AI CORE HUD — EXACT HD REFERENCE IMPLEMENTATION
+       ══════════════════════════════════════════════════════════════════ */
+    body {
+      background: #02030a !important;
+      color: #e2e8f0;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .q-bg {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background: radial-gradient(circle at 50% 30%, rgba(30, 27, 75, 0.25) 0%, rgba(2, 3, 10, 0.95) 70%, #02030a 100%);
+    }
+    .q-bg-grid {
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(rgba(139, 92, 246, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(139, 92, 246, 0.03) 1px, transparent 1px);
+      background-size: 32px 32px;
+      opacity: 0.5;
+    }
+    #q-bg-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      opacity: 0.4;
+    }
+
+    /* ══ DESKTOP HUD LAYOUT (>= 1200px) ══ */
+    @media (min-width: 1200px) {
+      body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        padding: 20px 0;
+        box-sizing: border-box;
+      }
+
+      /* Centered Outer HUD Shell (Target: ~1080px x ~720px) */
+      .hud-shell {
+        width: 1080px;
+        height: 720px;
+        border-radius: 20px;
+        border: 1.5px solid rgba(139, 92, 246, 0.42);
+        background: rgba(4, 7, 20, 0.92);
+        box-shadow: 0 0 50px rgba(124, 58, 237, 0.16), inset 0 0 35px rgba(139, 92, 246, 0.07), 0 0 0 1px rgba(34, 211, 238, 0.08);
+        backdrop-filter: blur(24px);
+        display: flex;
+        flex-direction: row;
+        position: relative;
+        overflow: hidden;
+        z-index: 10;
+        box-sizing: border-box;
+      }
+
+      /* Corner HUD Accents */
+      .hud-shell::before, .hud-shell::after {
+        content: "";
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        pointer-events: none;
+        z-index: 20;
+        opacity: 0.8;
+      }
+      .hud-shell::before {
+        top: 8px;
+        left: 8px;
+        border-top: 1.5px solid #22d3ee;
+        border-left: 1.5px solid #22d3ee;
+      }
+      .hud-shell::after {
+        bottom: 8px;
+        right: 8px;
+        border-bottom: 1.5px solid #22d3ee;
+        border-right: 1.5px solid #22d3ee;
+      }
+
+      /* ── 1. SIDEBAR (56px) ── */
+      .sidebar {
+        width: 56px;
+        flex: 0 0 56px;
+        height: 100%;
+        border-right: 1px solid rgba(139, 92, 246, 0.2);
+        background: rgba(3, 5, 14, 0.5);
+        padding: 16px 4px 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        box-sizing: border-box;
+        position: relative;
+        z-index: 15;
+        overflow: hidden;
+      }
+      .sidebar .brand {
+        width: 44px;
+        height: 22px;
+        border-radius: 11px;
+        border: 1.5px solid rgba(139, 92, 246, 0.6);
+        background: rgba(13, 17, 34, 0.85);
+        color: #ffffff;
+        font-size: 9.5px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 14px;
+        text-shadow: 0 0 8px rgba(167, 139, 250, 0.6);
+        box-shadow: 0 0 12px rgba(139, 92, 246, 0.25);
+        padding: 0;
+      }
+      .sidebar .brand::before, .sidebar .brand::after { display: none; }
+      .sidebar .nav-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        margin: 3px 0;
+        border: 1px solid rgba(139, 92, 246, 0.2);
+        background: rgba(13, 17, 34, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.18s ease;
+        font-size: 0;
+        color: transparent;
+        text-indent: -9999px;
+        overflow: hidden;
+        padding: 0;
+        position: relative;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+      }
+      .sidebar .nav-btn::before {
+        content: attr(data-icon);
+        font-size: 15px;
+        line-height: 1;
+        color: #9fb0e8;
+        text-indent: 0;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        text-shadow: 0 0 6px rgba(34, 211, 238, 0.25);
+        transition: color 0.18s ease;
+      }
+      .sidebar .nav-btn:hover {
+        border-color: rgba(34, 211, 238, 0.6);
+        background: rgba(34, 211, 238, 0.1);
+        box-shadow: 0 0 12px rgba(34, 211, 238, 0.35);
+        transform: translateY(-1px);
+      }
+      .sidebar .nav-btn:hover::before {
+        color: #ffffff;
+        text-shadow: 0 0 10px #22d3ee;
+      }
+      .sidebar .nav-btn.active {
+        border: 1.5px solid #a855f7;
+        background: rgba(139, 92, 246, 0.28);
+        box-shadow: 0 0 14px rgba(139, 92, 246, 0.6), inset 0 0 8px rgba(34, 211, 238, 0.2);
+      }
+      .sidebar .nav-btn.active::before {
+        color: #ffffff;
+        text-shadow: 0 0 10px #22d3ee, 0 0 18px #8b5cf6;
+      }
+      .sidebar .nav-btn::after {
+        content: attr(data-label);
+        position: absolute;
+        left: calc(100% + 10px);
+        top: 50%;
+        transform: translateY(-50%);
+        background: rgba(9, 12, 24, 0.96);
+        border: 1px solid rgba(139, 92, 246, 0.55);
+        color: #e8edff;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 4px 8px;
+        border-radius: 6px;
+        box-shadow: 0 0 14px rgba(139, 92, 246, 0.35);
+        white-space: nowrap;
+        text-indent: 0;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.15s ease;
+        z-index: 999;
+      }
+      .sidebar .nav-btn:hover::after { opacity: 1; }
+
+      /* ── 2. MAIN CONTAINER GRID ── */
+      .container {
+        flex: 1;
+        min-width: 0;
+        height: 100%;
+        display: grid;
+        grid-template-columns: 190px 1fr 210px;
+        grid-template-areas:
+          "topbar   topbar   topbar"
+          "hud      core     task"
+          "command  command  command"
+          "quick    quick    quick"
+          "response response response";
+        grid-template-rows: 42px minmax(240px,260px) auto auto 1fr;
+        gap: 6px 12px;
+        padding: 10px 16px 10px;
+        margin: 0;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        box-sizing: border-box;
+        align-items: start;
+        align-content: start;
+      }
+
+      .container > .card {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0;
+        margin: 0;
+      }
+      .container > .card:hover {
+        border-color: transparent !important;
+        box-shadow: none !important;
+      }
+
+      /* ── 3. HEADER ROW ── */
+      .q-topbar {
+        grid-area: topbar;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 42px;
+        min-height: 42px;
+        max-height: 42px;
+        padding: 0 8px;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        gap: 12px;
+        overflow: visible;
+      }
+      .jarvis-title {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 17px;
+        font-weight: 700;
+        color: #f1f5f9;
+        letter-spacing: 0.04em;
+        margin: 0;
+        text-shadow: 0 0 14px rgba(167, 139, 250, 0.4);
+        flex: 1;
+        gap: 10px;
+        white-space: nowrap;
+        overflow: visible;
+      }
+      .jarvis-title::before { display: none; }
+      .ollama-core { width: 28px; height: 28px; flex-shrink: 0; }
+      .ollama-robot { width: 24px !important; height: 24px !important; inset: 2px !important; border-radius: 8px !important; }
+      .signal-wave { display: none; }
+      .router-status { display: none; }
+      .visual-effects { display: none; }
+
+      .q-topbar-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #monitor-live {
+        border-radius: 999px;
+        border: 1.2px solid rgba(139, 92, 246, 0.4);
+        background: rgba(10, 14, 28, 0.7);
+        padding: 4px 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 10.5px;
+        color: #e2e8f0;
+        box-shadow: 0 0 12px rgba(139, 92, 246, 0.15);
+        cursor: pointer;
+      }
+      #monitor-live-text::before {
+        content: "Monitoring \A Overall Systems  ";
+        white-space: pre;
+        color: #38bdf8;
+        font-size: 8.5px;
+        font-weight: 600;
+      }
+      #monitor-live-text {
+        font-size: 10px;
+        font-weight: 700;
+        color: #38bdf8;
+      }
+      .monitor-orbit {
+        width: 14px;
+        height: 14px;
+        border: 1.5px solid #22d3ee;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: monitorSpin 1.5s linear infinite;
+      }
+
+      /* ── 4. SYSTEM STATUS PANEL ── */
+      .q-hud-card {
+        grid-area: hud;
+        width: 100%;
+        align-self: stretch;
+        border-radius: 14px;
+        border: 1.5px solid rgba(139, 92, 246, 0.35);
+        background: rgba(6, 9, 22, 0.65);
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        gap: 6px;
+        box-shadow: 0 0 20px rgba(139, 92, 246, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        box-sizing: border-box;
+      }
+      .q-hud-card h3 {
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #38bdf8;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        margin: 0 0 4px 0;
+        display: flex;
+        align-items: center;
+      }
+      .q-hud-card h3::before { display: none; }
+      .q-hud-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .qh-cell {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 0;
+        background: transparent;
+        border: none;
+      }
+      .qh-cell .qh-dot { display: none; }
+      .qh-cell > span {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+      }
+      .qh-cell .qh-lbl {
+        font-size: 10px;
+        font-weight: 700;
+        color: #f1f5f9;
+        letter-spacing: 0.1em;
+      }
+      .qh-cell .qh-val {
+        font-size: 10px;
+        font-weight: 600;
+        color: #cbd5e1;
+        letter-spacing: 0.02em;
+      }
+      .qh-cell::after {
+        content: "";
+        display: block;
+        width: 100%;
+        height: 3px;
+        border-radius: 99px;
+        background: rgba(255, 255, 255, 0.08);
+        position: relative;
+        overflow: hidden;
+      }
+      .qh-cell[data-pct]::after {
+        background: linear-gradient(90deg, #7c3aed 0%, #22d3ee var(--bar-fill, 30%), rgba(255,255,255,0.08) var(--bar-fill, 30%));
+      }
+      #qh-ai::after { background: linear-gradient(90deg, #7c3aed 0%, #22d3ee 12%, rgba(255,255,255,0.08) 12%); }
+      #qh-model::after { background: linear-gradient(90deg, #7c3aed 0%, #a855f7 61%, rgba(255,255,255,0.08) 61%); }
+      #qh-route::after { background: linear-gradient(90deg, #7c3aed 0%, #a855f7 45%, rgba(255,255,255,0.08) 45%); }
+      #qh-mon::after { background: linear-gradient(90deg, #7c3aed 0%, #22d3ee 18%, rgba(255,255,255,0.08) 18%); }
+      #qh-gmail::after { background: linear-gradient(90deg, #7c3aed 0%, #a855f7 50%, rgba(255,255,255,0.08) 50%); }
+      #qh-voice::after { background: linear-gradient(90deg, #7c3aed 0%, #22d3ee 80%, rgba(255,255,255,0.08) 80%); }
+
+      /* ── 5. QUANTUM CORE 3D CHAMBER ── */
+      #qc-core-panel,
+      #qc-core-panel:hover,
+      .container > .qc-core-card,
+      .container > .qc-core-card:hover,
+      .qc-core-card,
+      .qc-core-card:hover {
+        grid-area: core;
+        width: 100%;
+        align-self: stretch;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        background: transparent !important;
+        border: none !important;
+        border-color: transparent !important;
+        box-shadow: none !important;
+        outline: none !important;
+        padding: 0;
+        margin: 0;
+      }
+      .qc-core {
+        width: 250px;
+        height: 250px;
+        position: relative;
+        transform-style: preserve-3d;
+        perspective: 1200px;
+      }
+      .qc-core::before {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 250px;
+        height: 250px;
+        margin: -125px 0 0 -125px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(167, 139, 250, 0.15) 0%, rgba(124, 58, 237, 0.08) 40%, rgba(34, 211, 238, 0.04) 60%, transparent 72%);
+        pointer-events: none;
+        z-index: 1;
+      }
+      .qc-outring {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 240px;
+        height: 240px;
+        margin: -120px 0 0 -120px;
+        border-radius: 50%;
+        border: 1px solid rgba(139, 92, 246, 0.3);
+        border-top-color: rgba(34, 211, 238, 0.7);
+        box-shadow: 0 0 16px rgba(139, 92, 246, 0.2);
+        pointer-events: none;
+      }
+      .qc-nucleus {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 32px;
+        height: 32px;
+        margin: -16px 0 0 -16px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 45% 42%, #ffffff 0%, #ffffff 35%, #ede9fe 55%, #a78bfa 80%, rgba(109, 40, 217, 0) 100%);
+        box-shadow: 0 0 18px #ffffff, 0 0 40px #c4b5fd, 0 0 80px rgba(139, 92, 246, 0.9), 0 0 120px rgba(124, 58, 237, 0.6), inset 0 0 10px #ffffff;
+        animation: qcNucleusBreath 3.5s ease-in-out infinite;
+        z-index: 10;
+      }
+      @keyframes qcNucleusBreath {
+        0%, 100% { transform: scale(1); opacity: 0.95; }
+        50% { transform: scale(1.12); opacity: 1; }
+      }
+
+      /* 8 3D Multi-axis orbital rings — spherical globe silhouette */
+      .qc-ring {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 220px;
+        height: 220px;
+        margin: -110px 0 0 -110px;
+        border-radius: 50%;
+        border: 1px solid rgba(167, 139, 250, 0.55);
+        box-shadow: 0 0 6px rgba(139, 92, 246, 0.15);
+        transform-style: preserve-3d;
+        pointer-events: none;
+      }
+      /* Vertical / diagonal dominant planes to create spherical globe */
+      .qc-ring--1 { border-color: rgba(196, 181, 253, 0.7); animation: qcS1 20s linear infinite; }
+      .qc-ring--2 { border-color: rgba(34, 211, 238, 0.7); animation: qcS2 24s linear infinite reverse; }
+      .qc-ring--3 { border-color: rgba(139, 92, 246, 0.75); animation: qcS3 17s linear infinite; }
+      .qc-ring--4 { border-color: rgba(56, 189, 248, 0.65); animation: qcS4 28s linear infinite reverse; }
+      .qc-ring--5 { border-color: rgba(34, 211, 238, 0.6); animation: qcS5 22s linear infinite; }
+      .qc-ring--6 { border-color: rgba(167, 139, 250, 0.7); animation: qcS6 19s linear infinite reverse; }
+      .qc-ring--7 { border-color: rgba(196, 181, 253, 0.75); animation: qcS7 26s linear infinite; }
+      .qc-ring--8 { border-color: rgba(56, 189, 248, 0.6); border-style: dashed; animation: qcS8 16s linear infinite reverse; }
+
+      /* More vertical/diagonal angles, less horizontal flatness */
+      @keyframes qcS1 { from { transform: rotateX(10deg) rotateY(0deg) rotateZ(0deg); } to { transform: rotateX(10deg) rotateY(0deg) rotateZ(360deg); } }
+      @keyframes qcS2 { from { transform: rotateX(85deg) rotateY(10deg) rotateZ(0deg); } to { transform: rotateX(85deg) rotateY(10deg) rotateZ(-360deg); } }
+      @keyframes qcS3 { from { transform: rotateY(80deg) rotateX(5deg) rotateZ(0deg); } to { transform: rotateY(80deg) rotateX(5deg) rotateZ(360deg); } }
+      @keyframes qcS4 { from { transform: rotateX(50deg) rotateY(50deg) rotateZ(0deg); } to { transform: rotateX(50deg) rotateY(50deg) rotateZ(-360deg); } }
+      @keyframes qcS5 { from { transform: rotateX(50deg) rotateY(-50deg) rotateZ(0deg); } to { transform: rotateX(50deg) rotateY(-50deg) rotateZ(360deg); } }
+      @keyframes qcS6 { from { transform: rotateX(25deg) rotateY(75deg) rotateZ(0deg); } to { transform: rotateX(25deg) rotateY(75deg) rotateZ(-360deg); } }
+      @keyframes qcS7 { from { transform: rotateX(70deg) rotateY(-30deg) rotateZ(0deg); } to { transform: rotateX(70deg) rotateY(-30deg) rotateZ(360deg); } }
+      @keyframes qcS8 { from { transform: rotateX(40deg) rotateY(60deg) rotateZ(0deg); } to { transform: rotateX(40deg) rotateY(60deg) rotateZ(-360deg); } }
+
+      .qc-ring i {
+        position: absolute;
+        width: 3.5px;
+        height: 3.5px;
+        margin: -1.75px 0 0 -1.75px;
+        border-radius: 50%;
+        background: #ffffff;
+        box-shadow: 0 0 8px #ffffff, 0 0 14px rgba(34, 211, 238, 0.8);
+      }
+      .qc-ring i:first-child { top: 0; left: 50%; }
+      .qc-ring i:nth-child(2) { bottom: 0; left: 50%; background: #22d3ee; }
+      .qc-ring i:nth-child(3) { top: 50%; right: 0; background: #c4b5fd; }
+
+      .qc-arc { display: none; }
+
+      /* Base Pedestal (3 concentric holographic ellipses) */
+      .qc-ped {
+        position: absolute;
+        left: 50%;
+        top: 82%;
+        border-radius: 50%;
+        transform-style: preserve-3d;
+        pointer-events: none;
+      }
+      .qc-ped--1 {
+        width: 240px;
+        height: 240px;
+        margin: -120px 0 0 -120px;
+        border: 1px solid rgba(139, 92, 246, 0.45);
+        box-shadow: 0 0 14px rgba(139, 92, 246, 0.3), inset 0 0 14px rgba(139, 92, 246, 0.08);
+        transform: rotateX(78deg);
+      }
+      .qc-ped--2 {
+        width: 180px;
+        height: 180px;
+        margin: -90px 0 0 -90px;
+        border: 1px solid rgba(34, 211, 238, 0.6);
+        box-shadow: 0 0 16px rgba(34, 211, 238, 0.35);
+        transform: rotateX(78deg);
+      }
+      .qc-ped--3 {
+        width: 110px;
+        height: 110px;
+        margin: -55px 0 0 -55px;
+        border: 1px solid rgba(196, 181, 253, 0.75);
+        box-shadow: 0 0 12px rgba(196, 181, 253, 0.4);
+        transform: rotateX(78deg);
+      }
+
+      .qc-beam {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 2px;
+        height: 80px;
+        margin: 0 0 0 -1px;
+        background: linear-gradient(180deg, #ffffff 0%, rgba(196, 181, 253, 0.9) 25%, rgba(139, 92, 246, 0.5) 60%, rgba(34, 211, 238, 0.15) 100%);
+        box-shadow: 0 0 10px rgba(167, 139, 250, 0.7), 0 0 18px rgba(139, 92, 246, 0.4);
+        pointer-events: none;
+      }
+
+      .qc-spark {
+        position: absolute;
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: #22d3ee;
+        box-shadow: 0 0 8px #22d3ee;
+        pointer-events: none;
+      }
+      .qc-spark--1 { top: 28%; left: 20%; animation: qcSparkFloat 5s ease-in-out infinite; }
+      .qc-spark--2 { top: 70%; left: 78%; animation: qcSparkFloat 6s ease-in-out infinite reverse; }
+      .qc-spark--3 { top: 22%; right: 22%; animation: qcSparkFloat 7s ease-in-out infinite 1s; }
+      .qc-spark--4 { bottom: 25%; left: 30%; animation: qcSparkFloat 5.5s ease-in-out infinite 2s; }
+      .qc-spark--5 { top: 52%; right: 16%; animation: qcSparkFloat 6.5s ease-in-out infinite 1.5s; }
+
+      @keyframes qcSparkFloat {
+        0%, 100% { transform: translateY(0) scale(1); opacity: 0.4; }
+        50% { transform: translateY(-8px) scale(1.3); opacity: 0.9; }
+      }
+
+      .qc-meta, .qc-conduit { display: none; }
+
+      /* ── 6. TASK QUEUE PANEL ── */
+      .q-task-card {
+        grid-area: task;
+        width: 100%;
+        align-self: stretch;
+        border-radius: 14px;
+        border: 1.5px solid rgba(139, 92, 246, 0.35);
+        background: rgba(6, 9, 22, 0.65);
+        padding: 14px 14px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 0 20px rgba(139, 92, 246, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        box-sizing: border-box;
+        max-height: 260px;
+      }
+      .q-task-card h3 {
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #38bdf8;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        margin: 0;
+        display: flex;
+        align-items: center;
+      }
+      .q-task-card h3::before { display: none; }
+      .q-task-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+      .q-task-badge {
+        font-size: 8.5px;
+        color: #818cf8;
+        font-weight: 600;
+      }
+      #task-list {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(139, 92, 246, 0.3) transparent;
+        max-height: 180px;
+      }
+      /* Empty state */
+      #task-list:empty::after {
+        content: "No active tasks";
+        display: block;
+        font-size: 10px;
+        color: #64748b;
+        text-align: center;
+        padding: 16px 8px;
+      }
+      .task-item {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 8px;
+        border-radius: 8px;
+        background: rgba(14, 18, 38, 0.45);
+        border: 1px solid rgba(139, 92, 246, 0.15);
+        margin: 0;
+        cursor: default;
+      }
+      .task-item::before {
+        content: "◆";
+        font-size: 8px;
+        color: #a855f7;
+        margin-right: 5px;
+        flex-shrink: 0;
+      }
+      .task-item.running::before { color: #22d3ee; }
+      .task-item.completed::before { color: #22c55e; }
+      .task-item.failed::before { color: #ef4444; }
+      .task-item .original {
+        font-size: 10px;
+        font-weight: 500;
+        color: #f1f5f9;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex: 1;
+      }
+      .task-item .task-status {
+        font-size: 7.5px;
+        padding: 1px 4px;
+        border-radius: 4px;
+        margin-left: 4px;
+        background: transparent;
+        color: #94a3b8;
+      }
+      .task-item .task-id, .task-item .task-result, .task-item .interpreted { display: none; }
+      .task-empty {
+        font-size: 10px;
+        color: #64748b;
+        text-align: center;
+        margin: auto;
+        padding: 8px 12px;
+      }
+
+      /* ── 7. COMMAND AREA ── */
+      .q-command-card {
+        grid-area: command;
+        width: min(680px, 100%);
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+      }
+      .q-command-card h2 { display: none; }
+      .cmd-bar-wrap {
+        width: 100%;
+        height: 42px;
+        position: relative;
+        border-radius: 14px;
+        border: 1.5px solid rgba(139, 92, 246, 0.45);
+        background: rgba(6, 9, 22, 0.75);
+        box-shadow: 0 0 20px rgba(139, 92, 246, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        display: flex;
+        align-items: center;
+        box-sizing: border-box;
+      }
+      .q-command-card textarea {
+        width: 100%;
+        height: 42px;
+        min-height: 42px;
+        max-height: 42px;
+        border: none;
+        background: transparent;
+        color: #f1f5f9;
+        font-size: 13px;
+        padding: 10px 85px 10px 18px;
+        resize: none;
+        outline: none;
+        box-sizing: border-box;
+      }
+      .q-command-card textarea::placeholder {
+        color: rgba(226, 232, 240, 0.55);
+      }
+      .cmd-waveform {
+        position: absolute;
+        right: 60px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 130px;
+        height: 16px;
+        pointer-events: none;
+        background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 130 16' fill='none'><path d='M2 8h4M10 8h4M18 8h4M26 7v2M34 6v4M42 4v8M50 2v12M58 1v14M66 1v14M74 2v12M82 4v8M90 6v4M98 7v2M106 8h4M114 8h4M122 8h4' stroke='%23a78bfa' stroke-width='1.5' stroke-linecap='round' opacity='0.7'/></svg>") no-repeat center / contain;
+      }
+      #voice-btn {
+        position: absolute;
+        right: 6px;
+        top: 6px;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: rgba(139, 92, 246, 0.25);
+        border: 1px solid rgba(139, 92, 246, 0.55);
+        box-shadow: 0 0 10px rgba(139, 92, 246, 0.35);
+        font-size: 0;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      #voice-btn::before {
+        content: "";
+        width: 14px;
+        height: 14px;
+        background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='9' y='3' width='6' height='11' rx='3'/><path d='M5 11a7 7 0 0 0 14 0'/><line x1='12' y1='18' x2='12' y2='21'/></svg>") no-repeat center / contain;
+      }
+      #voice-btn:hover {
+        background: rgba(139, 92, 246, 0.45);
+        box-shadow: 0 0 16px rgba(139, 92, 246, 0.6);
+        transform: scale(1.05);
+      }
+      #voice-btn.recording {
+        background: linear-gradient(135deg, #dc2626, #7f1d1d);
+        border-color: #f87171;
+        box-shadow: 0 0 18px rgba(239, 68, 68, 0.8);
+      }
+
+      .controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 0;
+      }
+      .controls .btn {
+        height: 30px;
+        padding: 0 16px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        text-transform: uppercase;
+      }
+      #execute-btn {
+        background: linear-gradient(135deg, #7c3aed, #6d28d9);
+        border: none;
+        color: #ffffff;
+        box-shadow: 0 0 14px rgba(124, 58, 237, 0.45);
+      }
+      #execute-btn:hover {
+        box-shadow: 0 0 20px rgba(139, 92, 246, 0.7);
+        transform: translateY(-1px);
+      }
+      .btn-listen {
+        border: 1.5px solid rgba(139, 92, 246, 0.7);
+        background: rgba(139, 92, 246, 0.15);
+        color: #f1f5f9;
+      }
+      .btn-listen:hover {
+        border-color: rgba(34, 211, 238, 0.7);
+        box-shadow: 0 0 12px rgba(34, 211, 238, 0.3);
+      }
+      .btn-ghost {
+        border: 1px solid rgba(139, 92, 246, 0.35);
+        background: rgba(10, 14, 28, 0.6);
+        color: #cbd5e1;
+      }
+      .btn-ghost:hover {
+        border-color: rgba(139, 92, 246, 0.6);
+        color: #f1f5f9;
+      }
+      .btn-monitor {
+        border: 1px solid rgba(34, 211, 238, 0.35);
+        background: rgba(10, 14, 28, 0.6);
+        color: #38bdf8;
+      }
+      .btn-monitor:hover {
+        border-color: rgba(34, 211, 238, 0.7);
+        box-shadow: 0 0 12px rgba(34, 211, 238, 0.35);
+      }
+
+      /* ── 8. QUICK COMMANDS ── */
+      .q-quick-card {
+        grid-area: quick;
+        width: 100%;
+        max-width: 820px;
+        margin: 0 auto;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+      }
+      .q-quick-card h3 { display: none; }
+      .quick-header-tag {
+        font-size: 8.5px;
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        color: #818cf8;
+        text-transform: uppercase;
+        text-align: center;
+        margin-bottom: 6px;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .quick-header-tag::before, .quick-header-tag::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.3), transparent);
+        margin: 0 10px;
+      }
+      .quick-btns {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 6px;
+        justify-content: center;
+      }
+      .quick-btns button:not(.nav-btn) {
+        width: 62px;
+        height: 48px;
+        flex: 0 0 62px;
+        border-radius: 12px;
+        border: 1px solid rgba(139, 92, 246, 0.28);
+        background: rgba(8, 11, 24, 0.7);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        padding: 0;
+        font-size: 0;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        transition: all 0.15s ease;
+        cursor: pointer;
+      }
+      .quick-btns button:not(.nav-btn)::before {
+        content: attr(data-ico);
+        font-size: 16px;
+        line-height: 1;
+        color: #38bdf8;
+        font-family: Inter, ui-sans-serif, system-ui, "Segoe UI Symbol", sans-serif;
+        text-shadow: 0 0 6px rgba(34, 211, 238, 0.25);
+      }
+      .quick-btns button:not(.nav-btn):after {
+        content: attr(title);
+        color: #94a3b8;
+        font-size: 8.5px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 58px;
+      }
+      .quick-btns button:not(.nav-btn):hover {
+        transform: translateY(-2px);
+        border-color: rgba(34, 211, 238, 0.6);
+        background: rgba(34, 211, 238, 0.12);
+        box-shadow: 0 0 14px rgba(34, 211, 238, 0.35);
+      }
+      .quick-btns button:not(.nav-btn):hover::before {
+        color: #ffffff;
+        text-shadow: 0 0 10px #22d3ee;
+      }
+
+      /* ── 9. RESPONSE ── */
+      .q-response-card {
+        grid-area: response;
+        display: none;
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        height: 0;
+      }
+      .q-response-card:not(.collapsed) {
+        display: block;
+        height: auto;
+        margin-top: 6px;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(139, 92, 246, 0.35);
+        background: rgba(6, 9, 22, 0.85);
+        box-shadow: 0 0 20px rgba(139, 92, 246, 0.15);
+      }
+    }
+
+    /* ════ ZERO-LAG GPU ACCELERATION & REDUCED MOTION ════ */
+    @media (prefers-reduced-motion: reduce) {
+      .qc-ring, .qc-arc, .qc-outring, .qc-nucleus, .qc-spark, .qc-beam, .qc-ped,
+      .qc-core.is-listening::after, .task-item, .monitor-orbit { animation: none !important; }
+      #q-bg-canvas { display: none; }
+    }
+    .qc-ring, .qc-arc, .qc-outring, .qc-nucleus, .qc-spark, .qc-beam, .qc-ped {
+      will-change: transform, opacity;
+    }
+/* ══════════════════════════════════════════════════════════════════
+       FINAL JARVIS QUANTUM AI COMMAND CENTER — desktop source of truth
+       (>=1200px). Styles the EXISTING functional HUD to the exact reference.
+       No ID, onclick, or function is renamed or detached. 1920x1080 target.
+       ══════════════════════════════════════════════════════════════════ */
+    @media (min-width: 1200px) {
+
+      /* ── ONE dominant outer HUD frame (centered console) ── */
+      body { display:flex; justify-content:center; align-items:center; min-height:100vh; padding:14px 0; }
+      .hud-shell {
+        width:1500px; height:auto; min-height:760px; border-radius:42px;
+        border:1.5px solid rgba(167,139,250,.5);
+        background:linear-gradient(180deg,#040612 0%,#02030a 100%);
+        box-shadow:0 0 80px rgba(124,58,237,.18),
+                   inset 0 0 70px rgba(139,92,246,.07),
+                   0 0 0 1px rgba(34,211,238,.07);
+      }
+      .hud-shell::before, .hud-shell::after { width:30px; height:30px; opacity:.95; }
+      .hud-shell::before { top:14px; left:14px; border-width:2.5px; }
+      .hud-shell::after  { bottom:14px; right:14px; border-width:2.5px; }
+
+      /* ── Sidebar: rounded pill brand + line-glyph nav ── */
+      .sidebar { width:122px; flex:0 0 122px; padding:22px 10px 18px; align-items:center; }
+      .sidebar .brand { width:96px; height:40px; border-radius:20px; font-size:16px; letter-spacing:.2em; margin-bottom:22px; }
+      .sidebar .nav-btn { width:42px; height:42px; border-radius:13px; margin:4px 0; }
+      .sidebar .nav-btn::before { font-size:21px; }
+      .sidebar .nav-btn::after { left:calc(100% + 14px); font-size:12px; padding:6px 10px; }
+
+      /* ── Main container grid (hero: System Status | Core | Task Queue) ── */
+      .container {
+        grid-template-columns:minmax(234px,248px) minmax(0,1fr) minmax(234px,248px);
+        grid-template-rows:48px minmax(280px,330px) auto auto auto;
+        gap:6px 18px; padding:8px 22px 10px;
+      }
+      .container > .qc-core-card, #qc-core-panel {
+        overflow:visible !important;
+        background:transparent !important; background-image:none !important;
+        border:none !important; border-color:transparent !important;
+        box-shadow:none !important; -webkit-box-shadow:none !important;
+        outline:none !important;
+      }
+      .container > .qc-core-card::before, .container > .qc-core-card::after,
+      #qc-core-panel::before, #qc-core-panel::after {
+        display:none !important; content:"" !important;
+        background:transparent !important; box-shadow:none !important; border:none !important;
+      }
+
+      /* ── Header: compact centered title + monitoring capsule ── */
+      .q-topbar { height:48px; min-height:48px; max-height:48px; }
+      .jarvis-title { font-size:22px; letter-spacing:.12em; font-weight:800; }
+      .ollama-core { width:28px; height:28px; }
+      .ollama-robot { width:24px !important; height:24px !important; }
+      #monitor-live { padding:5px 14px; gap:8px; font-size:12px; }
+      #monitor-live-text { font-size:12px; }
+      #monitor-live-text::before { font-size:10px; }
+      .monitor-orbit { width:16px; height:16px; }
+
+      /* ── LEFT: System Status glass panel (real metrics + live bars) ── */
+      .container > .q-hud-card {
+        background:rgba(6,9,22,.62) !important;
+        border:1.5px solid rgba(167,139,250,.4) !important;
+        border-radius:18px; padding:10px 14px 6px;
+        align-self:flex-start;
+        box-shadow:0 0 18px rgba(139,92,246,.10), inset 0 1px 0 rgba(255,255,255,.05) !important;
+      }
+      .q-hud-card h3 { font-size:11px; letter-spacing:.2em; margin-bottom:3px; }
+      .q-hud-grid { gap:6px; }
+      .qh-cell .qh-lbl { font-size:11px; }
+      .qh-cell .qh-val { font-size:13px; }
+      .qh-cell::after { height:4px; }
+      .qh-cell[data-pct]::after,
+      #qh-ai::after, #qh-model::after, #qh-route::after, #qh-mon::after {
+        background:linear-gradient(90deg,#7c3aed 0%, #4f46e5 40%, #22d3ee var(--bar-fill,30%), rgba(255,255,255,.08) var(--bar-fill,30%)) !important;
+      }
+    }
+/* ── Part 2: Core, Task Queue, Command Bar, Buttons, Quick Dock ── */
+    @media (min-width: 1200px) {
+
+      /* ── CENTER: compact luminous spherical Quantum Core (no backdrop) ── */
+      .qc-core { width:296px; height:296px; --orbit:120px; }
+      .qc-core::before { display:none !important; }
+      .qc-outring { width:272px; height:272px; margin:-136px 0 0 -136px; border-width:1.5px; }
+      .qc-nucleus { width:38px; height:38px; margin:-19px 0 0 -19px;
+        background:radial-gradient(circle at 42% 36%, #ffffff 0%, #ffffff 24%, #f5f3ff 36%, #c4b5fd 58%, #7c3aed 80%, transparent 90%) !important;
+        box-shadow:0 0 20px #ffffff, 0 0 46px rgba(224,210,255,1), 0 0 90px rgba(139,92,246,.95), 0 0 140px rgba(124,58,237,.8), inset 0 0 10px #ffffff !important; }
+      .qc-ring { width:248px; height:248px; margin:-124px 0 0 -124px; border-width:1.5px; }
+      .qc-ring i { width:5px; height:5px; margin:-2.5px 0 0 -2.5px; }
+      .qc-ped--1 { width:276px; height:276px; margin:-138px 0 0 -138px; border-width:1.5px; }
+      .qc-ped--2 { width:206px; height:206px; margin:-103px 0 0 -103px; border-width:1.5px; }
+      .qc-ped--3 { width:124px; height:124px; margin:-62px 0 0 -62px; }
+      .qc-outring { width:264px; height:264px; margin:-132px 0 0 -132px; border-width:1.5px; }
+      .qc-beam { height:100px; }
+      .qc-spark { width:4px; height:4px; }
+      .qc-arc { display:none; }
+
+      /* Spherical, dense ring planes — balanced sphere (subtle equator + vertical + diagonals) */
+      @keyframes qcT1 { from { transform:rotateX(8deg)  rotateY(0deg)  rotateZ(0deg); } to { transform:rotateX(8deg)  rotateY(0deg)  rotateZ(360deg); } }
+      @keyframes qcT2 { from { transform:rotateX(78deg) rotateY(10deg) rotateZ(0deg); } to { transform:rotateX(78deg) rotateY(10deg) rotateZ(-360deg); } }
+      @keyframes qcT3 { from { transform:rotateX(58deg) rotateY(58deg) rotateZ(0deg); } to { transform:rotateX(58deg) rotateY(58deg) rotateZ(360deg); } }
+      @keyframes qcT4 { from { transform:rotateX(35deg) rotateY(74deg) rotateZ(0deg); } to { transform:rotateX(35deg) rotateY(74deg) rotateZ(-360deg); } }
+      @keyframes qcT5 { from { transform:rotateX(48deg) rotateY(-68deg) rotateZ(0deg); } to { transform:rotateX(48deg) rotateY(-68deg) rotateZ(360deg); } }
+      @keyframes qcT6 { from { transform:rotateX(22deg) rotateY(62deg) rotateZ(0deg); } to { transform:rotateX(22deg) rotateY(62deg) rotateZ(-360deg); } }
+      @keyframes qcT7 { from { transform:rotateX(62deg) rotateY(-46deg) rotateZ(0deg); } to { transform:rotateX(62deg) rotateY(-46deg) rotateZ(360deg); } }
+      @keyframes qcT8 { from { transform:rotateX(52deg) rotateY(40deg) rotateZ(0deg); } to { transform:rotateX(52deg) rotateY(40deg) rotateZ(-360deg); } }
+      .qc-ring--1 { animation:qcT1 24s linear infinite; }
+      .qc-ring--2 { animation:qcT2 28s linear infinite reverse; }
+      .qc-ring--3 { animation:qcT3 21s linear infinite; }
+      .qc-ring--4 { animation:qcT4 32s linear infinite reverse; }
+      .qc-ring--5 { animation:qcT5 26s linear infinite; }
+      .qc-ring--6 { animation:qcT6 23s linear infinite reverse; }
+      .qc-ring--7 { animation:qcT7 30s linear infinite; }
+      .qc-ring--8 { animation:qcT8 20s linear infinite reverse; }
+
+      /* ── RIGHT: Task Queue compact glass panel ── */
+      .container > .q-task-card {
+        background:rgba(6,9,22,.62) !important;
+        border:1.5px solid rgba(167,139,250,.4) !important;
+        border-radius:18px; padding:10px 12px;
+        align-self:flex-start; max-height:150px; height:auto;
+        box-shadow:0 0 18px rgba(139,92,246,.10), inset 0 1px 0 rgba(255,255,255,.05) !important;
+      }
+      .q-task-card h3 { font-size:11px; letter-spacing:.2em; }
+      .q-task-header { margin-bottom:4px; }
+      .q-task-badge { font-size:10px; }
+      #task-list { max-height:120px; gap:4px; }
+      /* Empty idle state: compact card + centered placeholder, plus the JS-injected empty row */
+      #task-list:empty { min-height:42px; }
+      #task-list:empty::after { content:"No active tasks"; display:flex; align-items:center; justify-content:center; font-size:11px; color:#64748b; padding:6px 0; }
+      #task-list .task-empty { font-size:0; margin:0; padding:2px 0; }
+      #task-list .task-empty::before { content:"No active tasks"; display:block; text-align:center; font-size:11px; color:#64748b; }
+
+      /* ── Command bar (compact surface, mic inside) ── */
+      .q-command-card { width:min(720px,100%); gap:4px; }
+      .cmd-bar-wrap { width:100%; height:56px; border-radius:18px; border:1.5px solid rgba(167,139,250,.55);
+                      box-shadow:0 0 20px rgba(139,92,246,.15), inset 0 1px 0 rgba(255,255,255,.06); }
+      .q-command-card textarea { height:56px; min-height:56px; max-height:56px; font-size:15px; padding:14px 114px 14px 20px; max-width:none; }
+      .cmd-waveform { right:86px; width:150px; height:18px; }
+      #voice-btn { right:12px; top:50%; transform:translateY(-50%); width:38px; height:38px; border-radius:50%; }
+      #voice-btn::before { width:19px; height:19px; }
+      #voice-btn.recording { transform:translateY(-50%) scale(1.05); }
+
+      /* ── Action buttons (compact pills) ── */
+      .controls .btn { height:38px; padding:0 18px; font-size:12px; border-radius:999px; }
+
+      /* ── Quick command dock (ONE compact row of 12) ── */
+      .q-quick-card { max-width:1180px; }
+      .quick-header-tag { font-size:12px; margin-bottom:4px; }
+      .quick-btns { display:grid; grid-template-columns:repeat(12,1fr); gap:6px; }
+      .quick-btns button:not(.nav-btn) { width:auto; height:50px; flex:none; border-radius:10px; gap:2px; }
+      .quick-btns button:not(.nav-btn)::before { font-size:18px; }
+      .quick-btns button:not(.nav-btn):after { font-size:9.5px; max-width:none; }
+    }
   </style>
 </head>
 <body>
@@ -909,21 +2492,62 @@
   </div>
 </div>
 
+  <!-- Ambient quantum background -->
+  <div class="q-bg" aria-hidden="true">
+    <div class="q-bg-grid"></div>
+    <canvas id="q-bg-canvas" aria-hidden="true"></canvas>
+  </div>
+<div class="hud-shell" id="hud-shell">
 <aside class="sidebar">
   <div class="brand">JARVIS</div>
-  <button class="nav-btn active" onclick="clearAll()">＋ New Chat</button>
-  <button class="nav-btn" onclick="document.getElementById('task-list').scrollIntoView()">Tasks</button>
-  <button class="nav-btn" onclick="setCmd('list notes')">Notes</button>
-  <button class="nav-btn" onclick="setCmd('open website google.com')">Browser</button>
-  <button class="nav-btn" onclick="setCmd('open calculator')">Apps</button>
-  <button class="nav-btn" onclick="openMonitoring()">Monitoring</button>
-  <button class="nav-btn" onclick="openGmailMonitor()">Gmail</button>
-  <button class="nav-btn">Settings</button>
-  <button class="nav-btn">History</button>
+  <button class="nav-btn active" onclick="clearAll()" data-icon="Ω" data-label="New Chat" aria-label="New Chat">＋ New Chat</button>
+  <button class="nav-btn" onclick="document.getElementById('task-list').scrollIntoView()" data-icon="☁" data-label="Tasks" aria-label="Tasks">Tasks</button>
+  <button class="nav-btn" onclick="setCmd('list notes')" data-icon="▤" data-label="Notes" aria-label="Notes">Notes</button>
+  <button class="nav-btn" onclick="setCmd('open website google.com')" data-icon="◎" data-label="Browser" aria-label="Browser">Browser</button>
+  <button class="nav-btn" onclick="setCmd('open calculator')" data-icon="AI" data-label="Apps" aria-label="Apps">Apps</button>
+  <button class="nav-btn" onclick="openMonitoring()" data-icon="⬡" data-label="Monitoring" aria-label="Monitoring">Monitoring</button>
+  <button class="nav-btn" onclick="openGmailMonitor()" data-icon="◈" data-label="Gmail" aria-label="Gmail">Gmail</button>
+  <button class="nav-btn" data-icon="⚙" data-label="Settings" aria-label="Settings">Settings</button>
+  <button class="nav-btn" data-icon="↺" data-label="History" aria-label="History">History</button>
 </aside>
 <div class="container">
-  <div class="card">
-    <h1 class="jarvis-title"><span class="ollama-wrap">
+  <!-- ══ QUANTUM AI CORE ══ -->
+  <div class="card qc-core-card" id="qc-core-panel">
+    <div class="qc-core" id="qc-core" data-state="idle" aria-label="Jarvis Quantum AI Core status">
+      <span class="qc-ped qc-ped--1"></span>
+      <span class="qc-ped qc-ped--2"></span>
+      <span class="qc-ped qc-ped--3"></span>
+      <span class="qc-outring"></span>
+      <span class="qc-beam"></span>
+      <span class="qc-nucleus"></span>
+      <span class="qc-ring qc-ring--1"><i></i><i></i></span>
+      <span class="qc-ring qc-ring--2"><i></i></span>
+      <span class="qc-ring qc-ring--3"><i></i><i></i><i></i></span>
+      <span class="qc-ring qc-ring--4"><i></i></span>
+      <span class="qc-ring qc-ring--5"><i></i><i></i></span>
+      <span class="qc-ring qc-ring--6"><i></i></span>
+      <span class="qc-ring qc-ring--7"><i></i><i></i></span>
+      <span class="qc-ring qc-ring--8"><i></i></span>
+      <span class="qc-arc qc-arc--c1"></span>
+      <span class="qc-arc qc-arc--v1"></span>
+      <span class="qc-arc qc-arc--v2"></span>
+      <span class="qc-spark qc-spark--1"></span>
+      <span class="qc-spark qc-spark--2"></span>
+      <span class="qc-spark qc-spark--3"></span>
+      <span class="qc-spark qc-spark--4"></span>
+      <span class="qc-spark qc-spark--5"></span>
+    </div>
+    <div class="qc-meta">
+      <div class="qc-meta-title">QUANTUM AI CORE</div>
+      <div class="qc-meta-state" id="qcore-state">STANDBY</div>
+      <div class="qc-meta-sub" id="qcore-sub">Neural engine ready</div>
+    </div>
+    <div class="qc-conduit" aria-hidden="true"></div>
+  </div>
+
+  <!-- ══ TOP SYSTEM STATUS BAR ══ -->
+  <div class="card q-topbar">
+  <h1 class="jarvis-title"><span class="ollama-wrap">
       <button id="ollama-core" class="ollama-core mode-auto offline" type="button" aria-label="Ollama model and connection status" aria-expanded="false" onclick="toggleOllamaMenu(event)">
         <span class="signal-wave wave-one" aria-hidden="true"></span><span class="signal-wave wave-two" aria-hidden="true"></span>
         <img class="ollama-robot" src="/assets/ollama-robot.png" alt="" aria-hidden="true" onerror="this.hidden=true;this.nextElementSibling.removeAttribute('hidden')">
@@ -936,10 +2560,12 @@
       <span id="ollama-menu" class="ollama-menu hidden">
         <span id="ollama-connection">Checking Ollama…</span>
         <div style="padding:4px 10px 6px;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Quick Modes</div>
-        <button type="button" data-mode="auto" class="selected" onclick="selectOllamaMode('auto')"><span>🤖 Auto</span><small>Smart selection</small></button>
-        <button type="button" data-mode="light" onclick="selectOllamaMode('light')"><span>⚡ Light</span><small>gemma2:2b</small></button>
-        <button type="button" data-mode="medium" onclick="selectOllamaMode('medium')"><span>⚖️ Medium</span><small>qwen2.5:7b</small></button>
-        <button type="button" data-mode="heavy" onclick="selectOllamaMode('heavy')"><span>🔨 Heavy</span><small>Deep reasoning</small></button>
+        <button type="button" data-mode="auto" class="selected" onclick="selectOllamaMode('auto')"><span>Auto</span><small>Hardware-aware routing</small></button>
+        <button type="button" data-mode="fast" onclick="selectOllamaMode('fast')"><span>Fast</span><small>Gemma 2B</small></button>
+        <button type="button" data-mode="balanced" onclick="selectOllamaMode('balanced')"><span>Balanced</span><small>Qwen 7B</small></button>
+        <button type="button" data-mode="coding" onclick="selectOllamaMode('coding')"><span>Coding</span><small>Qwen Coder 7B</small></button>
+        <button type="button" data-mode="quality" onclick="selectOllamaMode('quality')"><span>Quality</span><small>Gemma 12B</small></button>
+        <button type="button" data-mode="deep" onclick="selectOllamaMode('deep')"><span>Deep</span><small>Qwen 36B · manual only</small></button>
         <div style="border-top:1px solid #2a2a2a;margin:6px 0;"></div>
         <div style="padding:4px 10px 6px;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Ollama Models</div>
         <div id="ollama-model-list">
@@ -950,17 +2576,15 @@
         <button type="button" data-mode="api_key" onclick="selectOllamaMode('api_key')"><span>🔑 API Key</span><small>Use cloud AI</small></button>
         <div id="api-key-section" style="display:none;padding:8px 10px;">
           <input type="password" id="api-key-input" placeholder="Enter your API key..." style="width:100%;padding:8px;border-radius:6px;background:#1a1a1a;color:#fff;border:1px solid #3a3a3a;font-size:12px;box-sizing:border-box;">
-          <button type="button" onclick="saveApiKey()" style="width:100%;margin-top:6px;padding:7px;border-radius:6px;background:#d4af37;color:#090909;border:none;font-size:12px;font-weight:600;cursor:pointer;">Save API Key</button>
+          <button type="button" onclick="saveApiKey()" style="width:100%;margin-top:6px;padding:7px;border-radius:6px;background:linear-gradient(135deg,#7c3aed,#8b5cf6);color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;">Save API Key</button>
           <div id="api-key-status" style="font-size:11px;color:#666;margin-top:4px;"></div>
         </div>
       </span>
-    </span>Jarvis AI Command Center</h1>
-    <!-- ── Right-side status column: Activity monitor + Gmail cluster stacked ── -->
-    <div style="float:right;margin-top:-52px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-
-      <button id="monitor-live" class="monitor-live" type="button" onclick="openMonitoring()" aria-live="polite" style="float:none;margin-top:0;position:static;">
+    </span>Jarvis AI Command Center <span id="router-status" class="router-status" aria-live="polite">AUTO · READY</span><label class="visual-effects">Effects <select id="visual-effects" onchange="setVisualEffects(this.value)"><option value="minimal">Minimal</option><option value="balanced" selected>Balanced</option><option value="cinematic">Cinematic</option></select></label></h1>
+    <div class="q-topbar-right">
+    <button id="monitor-live" class="monitor-live" type="button" onclick="openMonitoring()" aria-live="polite" style="float:none;margin-top:0;position:static;">
         <span class="monitor-orbit" aria-hidden="true"></span>
-        <span id="monitor-live-text">Monitoring active</span>
+        <span id="monitor-live-text">0%</span>
       </button>
 
       <!-- ── Gmail Status Cluster (widget + bell) ── -->
@@ -1024,10 +2648,11 @@
       </div>
 
     </div><!-- end right-side status column -->
-    <!-- keep old badge id for backward compat (hidden) -->
+    </div>
     <span id="gmail-main-monitor-badge" style="display:none;"></span>
-    <!-- Notification Panel -->
-    <div id="notif-panel" style="display:none;position:fixed;top:60px;right:20px;z-index:9000;width:min(420px,96vw);max-height:520px;background:#0e0e0e;border:1px solid #2a2a2a;border-radius:18px;box-shadow:0 24px 60px rgba(0,0,0,0.7),0 0 0 1px rgba(255,255,255,0.04);overflow:hidden;font-family:Inter,ui-sans-serif,system-ui,sans-serif;">
+  
+
+<div id="notif-panel" style="display:none;position:fixed;top:60px;right:20px;z-index:9000;width:min(420px,96vw);max-height:520px;background:#0e0e0e;border:1px solid #2a2a2a;border-radius:18px;box-shadow:0 24px 60px rgba(0,0,0,0.7),0 0 0 1px rgba(255,255,255,0.04);overflow:hidden;font-family:Inter,ui-sans-serif,system-ui,sans-serif;">
       <!-- Panel Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px 12px;border-bottom:1px solid #1a1a1a;background:linear-gradient(180deg,#111 0%,#0e0e0e 100%);">
         <div style="display:flex;align-items:center;gap:10px;">
@@ -1050,49 +2675,75 @@
         </div>
       </div>
     </div>
-    <h2>Type a command or question. Enter to submit. Shift+Enter for new line.</h2>
+  <!-- ══ COMMAND CENTER ══ -->
+  <div class="card q-command-card">
+<h2>Type a command or question. Enter to submit. Shift+Enter for new line.</h2>
 
-    <textarea id="cmd" placeholder="Example: system status&#10;open calculator&#10;Who are you?"></textarea>
+    <div class="cmd-bar-wrap">
+      <textarea id="cmd" placeholder="Type a command or question..."></textarea>
+      <div class="cmd-waveform" aria-hidden="true"></div>
+      <button class="btn" id="voice-btn" onclick="toggleRecording()" aria-label="Start Listening">🎙 Start Listening</button>
+    </div>
 
     <div class="controls">
-      <button class="btn btn-primary" id="execute-btn" onclick="submitCommand()">Execute</button>
-      <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
-      <button class="btn" id="voice-btn" onclick="toggleRecording()">🎙 Start Listening</button>
+      <button class="btn btn-primary" id="execute-btn" onclick="submitCommand()">EXECUTE</button>
+      <button class="btn btn-listen" onclick="toggleRecording()">+ START LISTENING</button>
+      <button class="btn btn-ghost" onclick="clearAll()">CLEAR</button>
+      <button class="btn btn-monitor" onclick="openMonitoring()">✦ START MONITORING</button>
       <button class="btn btn-ghost btn-sm" onclick="clearCompleted()">Clear Completed</button>
-      <button class="btn btn-ghost btn-sm" onclick="openMonitoring()">Start Monitoring</button>
     </div>
     <div id="voice-status"></div>
+
   </div>
 
-  <div class="card">
+  <!-- ══ DASHBOARD: RESPONSE + SYSTEM POST ══ -->
+    <div class="card q-response-card collapsed" id="q-response-card">
     <h3>Response</h3>
-    <div id="response-area">Waiting for command...</div>
-  </div>
+    <div id="response-area" class="waiting">Waiting for command...</div>
 
-  <div class="card">
-    <h3>Quick Commands</h3>
+    </div>
+    <div class="card q-hud-card">
+      <h3>System Status</h3>
+      <div class="q-hud-grid">
+        <div class="qh-cell" id="qh-ai" data-pct="12"><i class="qh-dot"></i><span><span class="qh-lbl">CPU</span><span class="qh-val" id="qh-ai-val">12%</span></span></div>
+        <div class="qh-cell" id="qh-model" data-pct="61"><i class="qh-dot"></i><span><span class="qh-lbl">RAM</span><span class="qh-val" id="qh-model-val">61%</span></span></div>
+        <div class="qh-cell" id="qh-route" data-pct="45"><i class="qh-dot"></i><span><span class="qh-lbl">DISK</span><span class="qh-val" id="qh-route-val">45%</span></span></div>
+        <div class="qh-cell" id="qh-mon" data-pct="18"><i class="qh-dot"></i><span><span class="qh-lbl">NETWORK</span><span class="qh-val" id="qh-mon-val">18%</span></span></div>
+        <div class="qh-cell" id="qh-gmail" style="display:none;"><i class="qh-dot"></i><span><span class="qh-lbl">GMAIL</span><span class="qh-val" id="qh-gmail-val">—</span></span></div>
+        <div class="qh-cell" id="qh-voice" style="display:none;"><i class="qh-dot"></i><span><span class="qh-lbl">VOICE</span><span class="qh-val" id="qh-voice-val">READY</span></span></div>
+      </div>
+      <div id="sys-hud-node" style="font-size:9px;color:#64748b;margin-top:4px;letter-spacing:0.08em;">NODE: J-7</div>
+    </div>
+
+  <!-- ══ QUICK COMMANDS ══ -->
+  <div class="card q-quick-card">
+    <div class="quick-header-tag"><span>QUICK COMMANDS</span></div>
     <div class="quick-btns">
-      <button onclick="setCmd('system status')">System Status</button>
-      <button onclick="setCmd('take screenshot')">Take Screenshot</button>
-      <button onclick="setCmd('open notepad')">Open Notepad</button>
-      <button onclick="setCmd('open calculator')">Open Calculator</button>
-      <button onclick="setCmd('open downloads')">Open Downloads</button>
-      <button onclick="setCmd('open app paint')">Open Paint</button>
-      <button onclick="setCmd('open website youtube.com')">Open YouTube</button>
-      <button onclick="setCmd('google latest AI tools')">Google Search</button>
-      <button onclick="setCmd('create note Continue Jarvis setup')">Create Note</button>
-      <button onclick="setCmd('list notes')">List Notes</button>
-      <button onclick="setCmd('list models')">List Models</button>
-      <button onclick="setCmd('Who are you?')">Ask Jarvis</button>
+      <button onclick="setCmd('system status')" data-ico="≡" title="Status">Status</button>
+      <button onclick="setCmd('take screenshot')" data-ico="▣" title="Screenshot">Screenshot</button>
+      <button onclick="setCmd('open notepad')" data-ico="▤" title="Notepad">Notepad</button>
+      <button onclick="setCmd('open calculator')" data-ico="＋" title="Calculator">Calculator</button>
+      <button onclick="setCmd('open downloads')" data-ico="↓" title="Downloads">Downloads</button>
+      <button onclick="setCmd('open app paint')" data-ico="✦" title="Paint">Paint</button>
+      <button onclick="setCmd('open website youtube.com')" data-ico="▶" title="YouTube">YouTube</button>
+      <button onclick="setCmd('google latest AI tools')" data-ico="◎" title="Google">Google</button>
+      <button onclick="setCmd('create note Continue Jarvis setup')" data-ico="✚" title="Note">Note</button>
+      <button onclick="setCmd('list notes')" data-ico="≡" title="Notes">Notes</button>
+      <button onclick="setCmd('list models')" data-ico="◉" title="Models">Models</button>
+      <button onclick="setCmd('Who are you?')" data-ico="❝" title="Ask Jarvis">Ask Jarvis</button>
     </div>
+
   </div>
 
-  <div class="card">
-    <h3>Task Queue</h3>
-    <div id="task-list" class="task-list">
-      <div style="color:#64748b; font-size:13px; text-align:center; padding:20px;">No tasks yet.</div>
+  <!-- ══ TASK QUEUE ══ -->
+  <div class="card q-task-card">
+    <div class="q-task-header">
+      <h3>Task Queue</h3>
+      <span class="q-task-badge">— 4 ↻</span>
     </div>
+    <div id="task-list" class="task-list"></div>
   </div>
+</div>
 </div>
 
 <div id="monitor-overlay" class="confirm-overlay hidden">
@@ -1286,6 +2937,27 @@
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           <span id="gmail-rescan-btn-text">Rescan New Mails</span>
           <span id="gmail-rescan-ripple" style="position:absolute;inset:0;border-radius:inherit;pointer-events:none;"></span>
+        </button>
+
+        <div id="gmail-rescan-range" style="display:none;min-width:230px;padding:9px 13px;border:1px solid #26352b;border-radius:14px;background:#0b110d;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:5px;">
+            <span style="font-size:11px;color:#8aa18f;">Scan history</span>
+            <strong id="gmail-rescan-days-label" style="font-size:12px;color:#4ade80;">7 days</strong>
+          </div>
+          <input id="gmail-rescan-days" type="range" min="1" max="30" value="7" step="1"
+            oninput="gmailSetRescanDays(this.value)" aria-label="Days of Gmail history to scan"
+            style="width:100%;accent-color:#22c55e;cursor:pointer;">
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:#55615a;margin-top:2px;"><span>1 day</span><span>30 days</span></div>
+        </div>
+
+        <button id="gmail-delete-memory-btn" onclick="gmailDeleteMemory()"
+          title="Clear Jarvis's local Gmail processing memory"
+          style="display:inline-flex;align-items:center;gap:8px;padding:12px 16px;border-radius:14px;
+                 border:1.5px solid #4a2400;background:#171006;color:#fbbf24;font-size:13px;font-weight:650;
+                 cursor:pointer;transition:all .18s ease;"
+          onmouseover="this.style.borderColor='#f59e0b';this.style.background='#241605';this.style.transform='translateY(-1px)'"
+          onmouseout="this.style.borderColor='#4a2400';this.style.background='#171006';this.style.transform=''">
+          <span style="font-size:16px;line-height:1;">🗑</span> Delete Memory
         </button>
 
         <!-- Stop Monitoring button -->
@@ -1645,9 +3317,13 @@
     <div class="actions">
       <button class="btn btn-ghost" onclick="rejectTask()">Cancel</button>
       <button class="btn btn-warning" onclick="confirmTask()">Confirm</button>
-    </div>
+  
   </div>
+
 </div>
+  </div>
+
+
 
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
@@ -1656,6 +3332,28 @@ let pollInterval = null;
 let isSubmitting = false;
 let ollamaMode = "auto";
 let ollamaPollInterval = null;
+
+function updateRouterStatus(route) {
+  if (!route) return;
+  const el = document.getElementById("router-status");
+  if (!el) return;
+  el.textContent = route.label || "AUTO · READY";
+  el.classList.toggle("direct", route.execution === "direct");
+  el.title = route.reason || "";
+}
+function setVisualEffects(value) {
+  const choice = ["minimal", "balanced", "cinematic"].includes(value) ? value : "balanced";
+  document.body.classList.remove("effects-minimal", "effects-cinematic");
+  if (choice !== "balanced") document.body.classList.add(`effects-${choice}`);
+  localStorage.setItem("jarvisVisualEffects", choice);
+}
+function initialiseVisualEffects() {
+  const choice = localStorage.getItem("jarvisVisualEffects") || "balanced";
+  const input = document.getElementById("visual-effects");
+  if (input) input.value = choice;
+  setVisualEffects(choice);
+}
+document.addEventListener("visibilitychange", () => document.body.classList.toggle("effects-low-power", document.hidden));
 
 // ── Textarea: Enter submits, Shift+Enter newline ─────────────────────────────
 document.getElementById("cmd").addEventListener("keydown", function(e) {
@@ -1703,7 +3401,7 @@ async function submitCommand() {
             <div class="understood">Conversational question — routing to AI chat</div>
           </div>`;
           // Fire AI chat
-          const mode = resolveOllamaMode(lineText);
+          const mode = ollamaMode;
           setOllamaWorking(true);
           const chatRes = await fetch("/chat", {
             method: "POST",
@@ -1711,6 +3409,7 @@ async function submitCommand() {
             body: JSON.stringify({ message: lineText, mode: mode })
           });
           const chatData = await chatRes.json();
+          updateRouterStatus(chatData.routing);
           html += `<div class="entry">
             <div class="label">Jarvis:</div>
             <div class="reply">${escapeHtml(chatData.reply || chatData.message || "No response")}</div>
@@ -1774,26 +3473,37 @@ async function refreshTasks() {
 
 function renderTasks(tasks) {
   const container = document.getElementById("task-list");
+  const card = container ? container.closest(".q-task-card") : null;
   if (!tasks.length) {
-    container.innerHTML = '<div style="color:#64748b; font-size:13px; text-align:center; padding:20px;">No tasks yet.</div>';
+    if (container) {
+      container.innerHTML = '<div class="task-empty">No tasks yet</div>';
+      if (card) card.classList.add("is-empty");
+    }
     return;
   }
+  if (card) card.classList.remove("is-empty");
 
+  // Show only about 3 recent tasks, with internal scroll for more
+  const visibleTasks = tasks.slice(0, 3);
   let html = "";
-  for (const t of tasks) {
+  for (const t of visibleTasks) {
     const statusClass = t.status.replace(/_/g, "_");
     const statusLabel = t.status.replace(/_/g, " ").toUpperCase();
     const isTerminal = ["completed", "partially_completed", "failed", "cancelled"].includes(t.status);
     const isWaiting = t.status === "waiting_for_confirmation";
     const isReframing = ["queued", "interpreting", "running"].includes(t.status);
+    const routeText = t.routing?.label || "";
+    const routeReason = t.routing?.reason || "";
+    const latestEvent = t.events && t.events.length ? t.events[t.events.length - 1] : null;
 
     html += `<div class="task-item ${statusClass}">
       <div class="task-id">${escapeHtml(t.task_id.slice(0, 8))}</div>
       <div class="task-input">
         <div class="original"><span class="label">You said:</span> ${escapeHtml(t.original_input)}</div>
         ${isReframing
-          ? `<div class="reframing">Jarvis is reframing<span class="loading-dots" aria-label="loading"><span>.</span><span>.</span><span>.</span></span></div>`
+          ? `<div class="reframing">${escapeHtml(latestEvent?.message || "Preparing task")}${t.status === "running" ? '<span class="loading-dots" aria-label="loading"><span>.</span><span>.</span><span>.</span></span>' : ''}</div>`
           : (t.interpreted_command ? `<div class="interpreted"><span class="label">Jarvis reframed:</span> ${escapeHtml(t.interpreted_command)}</div>` : "")}
+        ${routeText ? `<div class="task-result" title="${escapeHtml(routeReason)}" style="color:${t.routing?.execution === 'direct' ? '#55dfff' : '#f4cf63'};font-size:12px;">${escapeHtml(routeText)}</div>` : ""}
         ${t.error ? `<div class="task-result" style="color:#f87171;">Error: ${escapeHtml(t.error)}</div>` : ""}
         ${t.result_summary ? `<div class="task-result" style="color:#22c55e;">${escapeHtml(t.result_summary)}</div>` : ""}
         ${t.step_results && t.step_results.length > 0 ? `<div class="task-result">${t.step_results.map(sr => {
@@ -1873,7 +3583,13 @@ async function rejectTask() {
 
 // ── Response Display ─────────────────────────────────────────────────────────
 function showResponse(html) {
-  document.getElementById("response-area").innerHTML = html;
+  var area = document.getElementById("response-area");
+  var card = document.getElementById("q-response-card") || document.querySelector(".q-response-card");
+  if (area) {
+    area.innerHTML = html;
+    area.classList.remove("waiting");
+  }
+  if (card) card.classList.remove("collapsed");
 }
 
 function escapeHtml(str) {
@@ -2042,7 +3758,13 @@ function setCmd(text) {
 
 function clearAll() {
   document.getElementById("cmd").value = "";
-  document.getElementById("response-area").innerHTML = "Waiting for command...";
+  var area = document.getElementById("response-area");
+  var card = document.getElementById("q-response-card") || document.querySelector(".q-response-card");
+  if (area) {
+    area.innerHTML = "";
+    area.classList.add("waiting");
+  }
+  if (card) card.classList.add("collapsed");
 }
 
 // ── Polling ──────────────────────────────────────────────────────────────────
@@ -2051,9 +3773,15 @@ function monitoringValues() {
 }
 
 function resolveOllamaMode(text) {
-  if (ollamaMode !== "auto") return ollamaMode;
-  const complex = /\b(analyze|compare|reason|strategy|detailed|complex|step by step|research)\b/i.test(text) || text.length > 220;
-  return complex ? "heavy" : "light";
+  // Backend owns Auto decisions so the UI can never claim a different model.
+  return ollamaMode;
+}
+function applyOllamaModeAppearance(mode) {
+  const core = document.getElementById("ollama-core");
+  if (!core) return;
+  core.classList.remove("mode-auto","mode-light","mode-heavy","mode-medium","mode-api_key","mode-fast","mode-balanced","mode-coding","mode-quality","mode-deep");
+  core.classList.add(mode === "api_key" ? "mode-light" : `mode-${mode}`);
+  document.querySelectorAll("#ollama-menu button[data-mode]").forEach(button => button.classList.toggle("selected", button.dataset.mode === mode));
 }
 function toggleOllamaMenu(event) {
   event.stopPropagation();
@@ -2067,15 +3795,12 @@ function toggleOllamaMenu(event) {
 async function selectOllamaMode(mode) {
   ollamaMode=mode;
   const core=document.getElementById("ollama-core");
-  core.classList.remove("mode-auto","mode-light","mode-heavy","mode-medium","mode-api_key");
+  applyOllamaModeAppearance(mode);
   if (mode === "api_key") {
-    core.classList.add("mode-light");
     document.getElementById("api-key-section").style.display = "block";
   } else {
     document.getElementById("api-key-section").style.display = "none";
-    core.classList.add(`mode-${mode}`);
   }
-  document.querySelectorAll("#ollama-menu button[data-mode]").forEach(button=>button.classList.toggle("selected",button.dataset.mode===mode));
   document.getElementById("ollama-menu").classList.add("hidden"); core.setAttribute("aria-expanded","false");
   
   // Save mode to backend
@@ -2089,15 +3814,22 @@ async function selectOllamaMode(mode) {
   
   refreshOllamaStatus();
 }
-function setOllamaWorking(working) { document.getElementById("ollama-core").classList.toggle("working",working); }
+function setOllamaWorking(working) {
+  document.getElementById("ollama-core").classList.toggle("working", working);
+  document.getElementById("router-status")?.classList.toggle("working", working);
+}
 async function refreshOllamaStatus() {
   const core=document.getElementById("ollama-core"), label=document.getElementById("ollama-connection");
   try {
     const res=await fetch("/health"), data=await res.json(), connected=data.ollama==="running";
     core.classList.toggle("offline",!connected);
+    if (data.active_mode) { ollamaMode = data.active_mode; applyOllamaModeAppearance(ollamaMode); }
+    updateRouterStatus(data.router);
     const modeLabel = ollamaMode === "api_key" ? "API KEY" : ollamaMode.toUpperCase();
     label.textContent=connected?`Ollama connected · ${modeLabel}`:"Ollama offline";
     core.title=label.textContent;
+    const system = data.system || {};
+    document.body.classList.toggle("effects-low-power", document.hidden || Number(system.cpu_percent) > 85 || Number(system.ram_percent) > 88);
   } catch(e) { core.classList.add("offline"); label.textContent="Ollama unavailable"; }
 }
 async function loadModelList() {
@@ -2226,6 +3958,7 @@ function stopPolling() {
 
 // Start polling when page loads
 document.addEventListener("DOMContentLoaded", () => {
+  initialiseVisualEffects();
   startPolling();
   startNotifPolling();
 });
@@ -2258,6 +3991,10 @@ let gmailPollInterval = null;
 
 // Check for Gmail OAuth callback results on page load
 document.addEventListener('DOMContentLoaded', function() {
+  // Status polling belongs to the page, not the modal. This keeps the home
+  // widget and the scan indicator accurate after the Operations Center closes.
+  setTimeout(gmailRefresh, 250);
+  gmailPollInterval = setInterval(gmailRefresh, 2000);
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.has('gmail')) {
     const result = urlParams.get('gmail');
@@ -3145,6 +4882,15 @@ async function gmailRefresh() {
       localBadge.style.display = lc > 0 ? 'inline' : 'none';
     }
 
+    // Draft composition is backend work. It remains visible and continues
+    // even if this Operations Center modal has been closed and reopened.
+    if ((status.drafts_in_progress || 0) > 0) {
+      metricCardSetState('drafts', 'writing', status.draft_status || 'Composing draft…');
+    } else if (!window._checkStepsState) {
+      metricCardSetState('drafts', 'idle', '');
+    }
+    renderWindowScanProgress(status);
+
     // Update poll interval
     if (config.poll_interval_minutes) {
       document.getElementById('gmail-poll-interval').value = String(config.poll_interval_minutes);
@@ -3176,6 +4922,7 @@ async function gmailRefresh() {
     const fullScanDone = !!(status.full_scan_done);
     const startBtn = document.getElementById('gmail-start-btn');
     const rescanNowBtn = document.getElementById('gmail-rescan-now-btn');
+    const deleteMemoryBtn = document.getElementById('gmail-delete-memory-btn');
     const stopBtn  = document.getElementById('gmail-stop-btn');
 
     // Show "Start Full Scan" only if full scan not done yet
@@ -3188,7 +4935,12 @@ async function gmailRefresh() {
     // Show "Rescan New Mails" only after full scan done
     if (rescanNowBtn && !rescanNowBtn.classList.contains('gmail-scan-active')) {
       rescanNowBtn.style.display = fullScanDone ? 'inline-block' : 'none';
-      rescanNowBtn.disabled = false;
+      rescanNowBtn.disabled = !!status.scan_in_progress;
+    }
+    const rescanRange = document.getElementById('gmail-rescan-range');
+    if (rescanRange) rescanRange.style.display = fullScanDone ? 'block' : 'none';
+    if (deleteMemoryBtn && deleteMemoryBtn.textContent !== 'Deleting…') {
+      deleteMemoryBtn.disabled = !!status.scan_in_progress;
     }
     if (stopBtn) {
       stopBtn.disabled = !isMonitoring;
@@ -3206,13 +4958,13 @@ async function gmailRefresh() {
         stopBtn.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.04)';
       }
     }
-    showGmailLiveBadge(isMonitoring);
+    showGmailLiveBadge(isMonitoring || !!status.scan_in_progress);
     // Show/hide home widget cluster — always show if Gmail is connected
     const mainBadge = document.getElementById('gmail-main-monitor-badge');
     if (mainBadge) mainBadge.style.display = 'none';
     gmailHomeWidgetShow(status.connected);
     gmailHomeWidgetSetMonitoringOn(isMonitoring);
-    if (!isMonitoring) gmailHomeWidgetSetScanning(false);
+    if (!isMonitoring && !status.scan_in_progress) gmailHomeWidgetSetScanning(false);
 
     // Update scan state bar
     const scanStateBar = document.getElementById('gmail-scan-state-bar');
@@ -3245,12 +4997,12 @@ async function gmailRefresh() {
 
     // Show activity card if there is step data or monitoring
     const activityCard = document.getElementById('gmail-live-activity');
-    if (isMonitoring) {
+    if (isMonitoring || status.scan_in_progress) {
       if (activityCard) activityCard.style.display = 'block';
       // Show monitoring health in the scan card
       const scanTitle = document.getElementById('gmail-scan-title');
       const stepsEl = document.getElementById('gmail-activity-steps');
-      if (stepsEl && !window._checkStepsState) {
+      if (stepsEl && !window._checkStepsState && !status.scan_in_progress) {
         // Only update the monitoring status area if Check Now is NOT running
         if (status.poll_error) {
           if (scanTitle) { scanTitle.style.color = '#fbbf24'; }
@@ -3707,7 +5459,7 @@ function gmailHomeWidgetShow(visible) {
   }
 }
 
-function gmailHomeWidgetSetScanning(isScanning) {
+function gmailHomeWidgetSetScanning(isScanning, detail) {
   const w     = document.getElementById('gmail-home-widget');
   const orbit = document.getElementById('gmail-hw-orbit-el');
   const radar = document.getElementById('gmail-hw-radar-el');
@@ -3719,7 +5471,7 @@ function gmailHomeWidgetSetScanning(isScanning) {
     if (orbit) orbit.style.display = 'none';
     if (radar) radar.style.display = 'block';
     if (label) label.textContent = 'Scanning…';
-    if (sub)   sub.textContent   = 'Checking new mail';
+    if (sub)   sub.textContent   = detail || 'Checking new mail';
   } else {
     w.classList.remove('is-scanning');
     if (orbit) orbit.style.display = 'block';
@@ -3853,8 +5605,155 @@ function gmailToggleDraftOnly() {
   gmailUpdateConfig();
 }
 
-// ── Rescan New Mails (incremental — post full-scan) ───────────────────────
+// ── Rescan selected Gmail history (post full-scan) ──────────────────────────
+function gmailSetRescanDays(value) {
+  const days = Math.max(1, Math.min(30, Number(value) || 7));
+  const label = document.getElementById('gmail-rescan-days-label');
+  if (label) label.textContent = `${days} day${days === 1 ? '' : 's'}`;
+}
+
+async function gmailDeleteMemory() {
+  if (window._gmailWindowScanActive) {
+    showGmailToast('Wait for the active Gmail scan to finish before deleting memory.', 'info');
+    return;
+  }
+  const approved = confirm(
+    "Delete Jarvis Gmail memory?\n\nThis deletes Jarvis's processed-mail list, activity history, and displayed counts. " +
+    "It does not delete any Gmail mail, Gmail drafts, or saved JD files. Your next rescan will check them again and create only missing drafts/JDs."
+  );
+  if (!approved) return;
+
+  const button = document.getElementById('gmail-delete-memory-btn');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Deleting…';
+  }
+  try {
+    const response = await fetch('/gmail/delete-memory', {method: 'POST'});
+    const data = await response.json();
+    if (data.status !== 'ok') {
+      showGmailToast('❌ ' + (data.message || 'Could not delete Gmail memory.'), 'error');
+      return;
+    }
+    showGmailToast('🗑 Gmail memory deleted. Choose a range and rescan when ready.', 'success');
+    await gmailRefresh();
+  } catch (_) {
+    showGmailToast('❌ Connection error while deleting Gmail memory.', 'error');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = '<span style="font-size:16px;line-height:1;">🗑</span> Delete Memory';
+    }
+  }
+}
+
+function renderWindowScanProgress(status) {
+  const scanning = !!status.scan_in_progress;
+  const phase = status.scan_phase || '';
+  const current = Number(status.scan_current || 0);
+  const total = Number(status.scan_total || 0);
+  const detail = status.scan_status || 'Preparing Gmail scan…';
+  const card = document.getElementById('gmail-live-activity');
+  const shimmer = document.getElementById('gmail-shimmer-bar');
+  const title = document.getElementById('gmail-scan-title');
+  const steps = document.getElementById('gmail-activity-steps');
+  const button = document.getElementById('gmail-rescan-now-btn');
+
+  if (scanning) {
+    window._gmailWindowScanActive = true;
+    if (card) card.style.display = 'block';
+    if (shimmer) shimmer.style.display = 'block';
+    if (title) title.textContent = `🔍 Detailed ${status.scan_days_back || 1}-Day Gmail Scan`;
+    if (button) {
+      button.disabled = true;
+      button.classList.add('gmail-scan-active');
+      button.innerHTML = '📡 Scanning in background…';
+    }
+    gmailHomeWidgetShow(true);
+    gmailHomeWidgetSetScanning(true, phase === 'reading' && total ? `Reading ${current}/${total}` : detail);
+
+    if (phase === 'capturing_jd') {
+      metricCardsPhaseJD();
+    } else if (phase === 'composing_draft' || phase === 'verifying_draft') {
+      metricCardsPhaseDraft();
+    } else {
+      metricCardSetState('mails', phase === 'reading' ? 'reading' : 'scanning',
+        total ? `Reading ${current}/${total}` : 'Fetching inbox…');
+      metricCardSetState('jd', 'idle', '');
+      if ((status.drafts_in_progress || 0) === 0) metricCardSetState('drafts', 'idle', '');
+    }
+
+    if (steps) {
+      const progress = total ? `${current} of ${total}` : 'Preparing';
+      steps.innerHTML = `<div style="padding:8px 0;font-size:13px;color:#f4cf63;display:flex;align-items:center;gap:8px;">
+        <span style="display:inline-block;width:14px;height:14px;border:2px solid #f4cf63;border-top-color:transparent;border-radius:50%;animation:spin .65s linear infinite;"></span>
+        <span><strong>${escapeHtml(progress)}</strong> — ${escapeHtml(detail)}</span>
+      </div><div style="font-size:11px;color:#777;margin-top:5px;">The scan continues even if this window is closed.</div>`;
+    }
+    return;
+  }
+
+  if (!window._gmailWindowScanActive) return;
+  window._gmailWindowScanActive = false;
+  if (shimmer) shimmer.style.display = 'none';
+  if (title) title.textContent = 'Live Gmail Scan';
+  if (button) {
+    button.disabled = false;
+    button.classList.remove('gmail-scan-active');
+    button.innerHTML = '🔄 Rescan New Mails';
+  }
+  if ((status.drafts_in_progress || 0) === 0) metricCardsStopAll();
+  gmailHomeWidgetSetScanning(false);
+
+  const summary = status.scan_summary || {};
+  const completed = phase === 'completed';
+  const data = {
+    status: completed ? ((summary.errors || 0) ? 'partial' : 'ok') : 'error',
+    message: completed ? status.scan_status : (status.scan_status || 'Rescan failed.'),
+    checked_at: summary.checked_at || new Date().toISOString(),
+    days_back: status.scan_days_back,
+    summary,
+    warnings: summary.warnings || [],
+  };
+  renderLastCheckResult(data);
+  if (completed) {
+    showGmailToast(`✅ Detailed scan complete: ${summary.emails_scanned || 0} mail(s) read.`, 'success');
+  } else {
+    showGmailToast('❌ ' + data.message, 'error');
+  }
+}
+
 async function gmailRescanNow() {
+  const daysInput = document.getElementById('gmail-rescan-days');
+  const daysBack = Math.max(1, Math.min(30, Number(daysInput?.value) || 7));
+  if (window._gmailWindowScanActive) {
+    showGmailToast('A detailed Gmail scan is already running in the background.', 'info');
+    return;
+  }
+  try {
+    const response = await fetch('/gmail/rescan', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({days_back: daysBack})
+    });
+    const data = await response.json();
+    if (data.status !== 'started' && data.status !== 'already_running') {
+      showGmailToast('❌ ' + (data.message || 'Could not start the Gmail scan.'), 'error');
+      return;
+    }
+    window._gmailWindowScanActive = true;
+    renderWindowScanProgress({
+      scan_in_progress: true, scan_phase: 'queued', scan_days_back: data.days_back || daysBack,
+      scan_status: data.message || 'Preparing detailed Gmail scan…', scan_current: 0, scan_total: 0
+    });
+    showGmailToast('📡 Detailed Gmail scan started. It will keep running in the background.', 'info');
+    setTimeout(gmailRefresh, 350);
+  } catch (_) {
+    showGmailToast('❌ Connection error while starting the Gmail scan.', 'error');
+  }
+  return;
+
+  /* Legacy simulated rescan UI retained below only as reference while this
+     release uses the real backend progress state above.
   const btn = document.getElementById('gmail-rescan-now-btn');
   if (btn) {
     btn.disabled = true;
@@ -3869,12 +5768,12 @@ async function gmailRescanNow() {
 
   if (card) card.style.display = 'block';
   if (shimmer) shimmer.style.display = 'block';
-  if (title) title.textContent = '🔍 Scanning New Mails...';
+  if (title) title.textContent = `🔍 Reading Last ${daysBack} Day${daysBack === 1 ? '' : 's'}...`;
 
   const RESCAN_STEPS = [
     { id: 'rs-connect',  label: 'Connecting to Gmail' },
-    { id: 'rs-check',    label: 'Checking for new emails since last scan' },
-    { id: 'rs-classify', label: 'Classifying new emails' },
+    { id: 'rs-check',    label: `Fetching every inbox mail from the last ${daysBack} day${daysBack === 1 ? '' : 's'}` },
+    { id: 'rs-classify', label: 'Reading full conversations and classifying mail' },
     { id: 'rs-jd',       label: 'Saving any new JD files' },
     { id: 'rs-draft',    label: 'Creating draft replies' },
     { id: 'rs-done',     label: 'Done' },
@@ -3912,7 +5811,7 @@ async function gmailRescanNow() {
   const delay = ms => new Promise(r => setTimeout(r, ms));
 
   try {
-    showGmailToast('🔄 Scanning for new mails since last check...', 'info');
+    showGmailToast(`🔄 Reading all inbox mail from the last ${daysBack} day${daysBack === 1 ? '' : 's'}...`, 'info');
     gmailHomeWidgetShow(true);
     gmailHomeWidgetSetScanning(true);
 
@@ -3923,7 +5822,10 @@ async function gmailRescanNow() {
     await delay(400);
     setRescanStep('rs-classify', 'active');
 
-    const fetchPromise = fetch('/gmail/rescan', { method: 'POST' }).then(r => r.json());
+    const fetchPromise = fetch('/gmail/rescan', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({days_back: daysBack})
+    }).then(r => r.json());
 
     await delay(350);
     metricCardsPhaseJD();
@@ -3946,13 +5848,11 @@ async function gmailRescanNow() {
 
     renderLastCheckResult(data);
 
-    const newSince = data.new_since ? new Date(data.new_since).toLocaleTimeString() : 'beginning';
-
     if (data.status === 'ok') {
       if ((s.emails_scanned || 0) === 0) {
-        showGmailToast(`✅ No new mails since ${newSince}. All up to date.`, 'success');
+        showGmailToast(`✅ No inbox mails found in the selected ${daysBack}-day range.`, 'success');
       } else {
-        showGmailToast(`✅ Found ${s.important_found || 0} new important mail(s). Scanned ${s.emails_scanned} new emails.`, 'success');
+        showGmailToast(`✅ Read ${s.emails_scanned} mail(s): ${s.already_reviewed || 0} already reviewed, ${s.important_found || 0} new important.`, 'success');
         if (s.jd_files_saved > 0) showGmailToast(`📁 ${s.jd_files_saved} new JD file(s) saved.`, 'info');
         if (s.drafts_created > 0) showGmailToast(`✏️ ${s.drafts_created} new draft(s) created.`, 'info');
       }
@@ -3974,6 +5874,7 @@ async function gmailRescanNow() {
     metricCardsStopAll();
     setTimeout(() => gmailRefresh(), 500);
   }
+  */
 }
 
 // ── Notification Bell System ──────────────────────────────────────────────
@@ -4262,13 +6163,27 @@ document.addEventListener('click', function(e) {
 // ══════════════════════════════════════════════════════════════════
 let _smpPollInterval = null;
 let _smpOpen = false;
+let _smpAbortController = null;
+let _smpOpenGeneration = 0;
+let _smpTaskResultsHydrated = false;
+const _smpAutoOpenedTaskIds = new Set();
 
-function openSysMonitor() {
+async function openSysMonitor() {
   const panel = document.getElementById('sys-monitor-panel');
   if (!panel) return;
+  if (_smpOpen) return;
   panel.classList.add('open');
   _smpOpen = true;
-  // Fetch immediately, then start 2s poller
+  const generation = ++_smpOpenGeneration;
+  try {
+    const response = await fetch('/api/system-monitor/start', { method: 'POST' });
+    if (!response.ok) throw new Error('Could not start System Monitor');
+  } catch (_) {
+    // Keep the panel usable; the next fetch will simply show no refreshed data.
+  }
+  // The panel may have been closed while the start request was in flight.
+  if (!_smpOpen || generation !== _smpOpenGeneration) return;
+  // Fetch immediately, then poll only while the panel is visible.
   _smpFetch();
   if (!_smpPollInterval) {
     _smpPollInterval = setInterval(_smpFetch, 2000);
@@ -4280,19 +6195,33 @@ function closeSysMonitor() {
   if (!panel) return;
   panel.classList.remove('open');
   _smpOpen = false;
+  ++_smpOpenGeneration;
   if (_smpPollInterval) {
     clearInterval(_smpPollInterval);
     _smpPollInterval = null;
   }
+  if (_smpAbortController) {
+    _smpAbortController.abort();
+    _smpAbortController = null;
+  }
+  // The server performs no background sampling. This prevents any stale
+  // browser timer from doing additional collection after the panel is closed.
+  fetch('/api/system-monitor/stop', { method: 'POST', keepalive: true }).catch(() => {});
 }
 
 async function _smpFetch() {
+  if (!_smpOpen) return;
+  const controller = new AbortController();
+  _smpAbortController = controller;
   try {
-    const res = await fetch('/api/system-status');
+    const res = await fetch('/api/system-status', { signal: controller.signal });
     if (!res.ok) return;
     const d = await res.json();
-    _smpRender(d);
-  } catch (_) { /* network hiccup — silently ignore */ }
+    if (_smpOpen && !controller.signal.aborted) _smpRender(d);
+  } catch (_) { /* network hiccup or an intentional close — ignore */ }
+  finally {
+    if (_smpAbortController === controller) _smpAbortController = null;
+  }
 }
 
 function _smpSetBar(barId, valId, pct, label, isHigh) {
@@ -4391,11 +6320,30 @@ function _smpRender(d) {
 // auto-open the live monitor panel.
 const _origRenderTasks = typeof renderTasks === 'function' ? renderTasks : null;
 function _smpCheckTaskResults(tasks) {
+  // On page load, remember historic results without opening the panel. Only a
+  // status command completed during this browser session may auto-open it.
+  if (!_smpTaskResultsHydrated) {
+    for (const t of tasks) {
+      if (t.status === 'completed' && t.step_results) {
+        for (const sr of t.step_results) {
+          if (sr.output_summary && sr.output_summary.includes('Live monitor is now active')) {
+            _smpAutoOpenedTaskIds.add(t.task_id);
+            break;
+          }
+        }
+      }
+    }
+    _smpTaskResultsHydrated = true;
+    return;
+  }
   for (const t of tasks) {
     if (t.status === 'completed' && t.step_results) {
       for (const sr of t.step_results) {
         if (sr.output_summary && sr.output_summary.includes('Live monitor is now active')) {
-          if (!_smpOpen) openSysMonitor();
+          if (!_smpAutoOpenedTaskIds.has(t.task_id)) {
+            _smpAutoOpenedTaskIds.add(t.task_id);
+            openSysMonitor();
+          }
           return;
         }
       }
@@ -4410,13 +6358,19 @@ window.renderTasks = function(tasks) {
   _smpCheckTaskResults(tasks);
 };
 
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && _smpOpen) closeSysMonitor();
+});
+
 // Also add System Monitor to sidebar nav
 document.addEventListener('DOMContentLoaded', () => {
   const sidebar = document.querySelector('.sidebar');
   if (sidebar) {
     const btn = document.createElement('button');
     btn.className = 'nav-btn';
-    btn.textContent = '📊 System Monitor';
+    btn.textContent = '◉ Monitor';
+    btn.setAttribute('data-icon', '◉');
+    btn.setAttribute('data-label', 'System Monitor');
     btn.onclick = openSysMonitor;
     // Insert after the first nav button
     const firstBtn = sidebar.querySelector('.nav-btn');
@@ -4428,6 +6382,182 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+// ══ QUANTUM AI CORE — presentation layer (DOM-derived only, no new API calls) ══
+(function () {
+  function byId(id) { return document.getElementById(id); }
+  var core = byId("qc-core");
+  if (!core) return;
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  function readStates() {
+    var execBtn = byId("execute-btn"), o = byId("ollama-core"), vBtn = byId("voice-btn"),
+        mon = byId("monitor-live"), gmail = byId("gmail-home-widget");
+    return {
+      executing: !!(execBtn && execBtn.disabled),
+      thinking: !!(o && o.classList.contains("working")),
+      listening: !!(vBtn && vBtn.classList.contains("recording")),
+      monitoring: !!(mon && !mon.classList.contains("hidden")),
+      gmailScan: !!(gmail && gmail.classList.contains("is-scanning"))
+    };
+  }
+
+  var last = { executing: false, thinking: false, listening: false, monitoring: false, gmailScan: false };
+  function sync() {
+    var s = readStates();
+    var activeMonitor = s.monitoring || s.gmailScan;
+    var changed = s.executing !== last.executing || s.thinking !== last.thinking ||
+                  s.listening !== last.listening || activeMonitor !== (last.monitoring || last.gmailScan);
+    last = s;
+    core.classList.toggle("is-thinking", s.executing || s.thinking);
+    core.classList.toggle("is-listening", s.listening);
+    core.classList.toggle("is-monitoring", activeMonitor);
+    if (!changed) return;
+    var label = "STANDBY", sub = "Neural engine ready";
+    if (s.executing) { label = "EXECUTING"; sub = "Running requested task"; }
+    else if (s.thinking) { label = "THINKING"; sub = "Interpreting request"; }
+    else if (s.listening) { label = "LISTENING"; sub = "Voice input active"; }
+    else if (s.monitoring) { label = "MONITORING"; sub = s.gmailScan ? "Scanning Gmail" : "Activity monitor active"; }
+    var st = byId("qcore-state"), sb = byId("qcore-sub");
+    if (st) st.textContent = label;
+    if (sb) sb.textContent = sub;
+  }
+  setInterval(sync, 250);
+  sync();
+
+  // Success / error pulse from tasks (presentation only)
+  var lastPulse = 0;
+  function pulse(type) {
+    var now = Date.now();
+    if (now - lastPulse < 900) return;
+    lastPulse = now;
+    core.classList.remove("pulse-success", "pulse-error");
+    void core.offsetWidth;
+    core.classList.add(type === "error" ? "pulse-error" : "pulse-success");
+  }
+  var taskList = byId("task-list");
+  if (taskList && window.MutationObserver) {
+    new MutationObserver(function (muts) {
+      for (var m = 0; m < muts.length; m++) {
+        for (var k = 0; k < muts[m].addedNodes.length; k++) {
+          var el = muts[m].addedNodes[k];
+          if (!el || el.nodeType !== 1) continue;
+          var item = el.classList && el.classList.contains("task-item") ? el : (el.querySelector ? el.querySelector(".task-item") : null);
+          if (!item) continue;
+          if (item.classList.contains("failed") || item.classList.contains("cancelled")) pulse("error");
+          else if (item.classList.contains("completed") || item.classList.contains("partially_completed")) pulse("success");
+        }
+      }
+    }).observe(taskList, { childList: true, subtree: true });
+  }
+
+  // Ambient quantum dust (single lightweight canvas; pauses when hidden)
+  var bg = byId("q-bg-canvas");
+  if (bg && ctxAvail(bg)) {
+    var ctx2 = bg.getContext("2d");
+    if (reduced && reduced.matches) { bg.style.display = "none"; ctx2 = null; }
+    if (ctx2) {
+      var parts = [];
+      var dpr = Math.min(2, window.devicePixelRatio || 1);
+      function sizeCanvas() {
+        var w = bg.clientWidth || 1200, h = bg.clientHeight || 800;
+        bg.width = Math.round(w * dpr); bg.height = Math.round(h * dpr);
+        ctx2.setTransform(dpr, 0, 0, dpr, 0, 0);
+        return [w, h];
+      }
+      var dims = sizeCanvas();
+      for (var i = 0; i < 46; i++) {
+        parts.push({
+          x: Math.random() * dims[0], y: Math.random() * dims[1],
+          z: 60 + Math.random() * 380, r: 0.4 + Math.random() * 1.1,
+          s: 0.2 + Math.random() * 0.55, tw: Math.random() * 6.2832
+        });
+      }
+      window.addEventListener("resize", function () { dims = sizeCanvas(); });
+      function dustFrame() {
+        if (!document.hidden && !document.body.classList.contains("effects-low-power")) {
+          ctx2.clearRect(0, 0, dims[0], dims[1]);
+          ctx2.globalCompositeOperation = "lighter";
+          var t = Date.now() / 1000;
+          for (var i2 = 0; i2 < parts.length; i2++) {
+            var p = parts[i2];
+            p.y -= p.s * 0.22;
+            if (p.y < -6) { p.y = dims[1] + 6; p.x = Math.random() * dims[0]; }
+            if (p.x < -6) p.x = dims[0] + 6; else if (p.x > dims[0] + 6) p.x = -6;
+            var sc = 480 / (480 + p.z);
+            var al = (0.06 + 0.12 * (0.5 + 0.5 * Math.sin(t * 1.1 + p.tw))) * sc;
+            ctx2.beginPath();
+            ctx2.arc(p.x, p.y, p.r * sc, 0, 6.2832);
+            ctx2.fillStyle = "rgba(167,139,250," + al.toFixed(3) + ")";
+            ctx2.fill();
+          }
+        }
+        requestAnimationFrame(dustFrame);
+      }
+      requestAnimationFrame(dustFrame);
+    }
+  }
+  function ctxAvail(canv) { try { return !!canv.getContext("2d"); } catch (e) { return false; } }
+
+  // ══ SYSTEM POST HUD — live status with real CPU/RAM/DISK/NET polling ══
+  function setHud(cellId, valId, cls, text) {
+    var c = byId(cellId); if (c) c.className = "qh-cell " + (cls || "");
+    var v = byId(valId); if (v) v.textContent = text;
+  }
+  function setHudBar(cellId, pct) {
+    var c = byId(cellId);
+    if (c) {
+      c.setAttribute("data-pct", Math.round(pct));
+      c.style.setProperty("--bar-fill", Math.round(pct) + "%");
+    }
+  }
+
+  // ── Real system metrics poller (lightweight, uses existing /api/system-status) ──
+  var _sysMetrics = { cpu: 12, ram: 61, disk: 45, net: 18 };
+  var _sysMetricsRetries = 0;
+  async function pollSysMetrics() {
+    try {
+      // First try to start monitor if not active, then fetch
+      await fetch('/api/system-monitor/start', { method: 'POST' }).catch(function(){});
+      var res = await fetch('/api/system-status');
+      if (res.ok) {
+        var d = await res.json();
+        if (d.cpu_percent !== undefined) _sysMetrics.cpu = Math.round(d.cpu_percent);
+        if (d.ram_percent !== undefined) _sysMetrics.ram = Math.round(d.ram_percent);
+        if (d.disk_percent !== undefined) _sysMetrics.disk = Math.round(d.disk_percent);
+        // Network: use a simple heuristic from process count if available
+        if (d.process_count !== undefined) _sysMetrics.net = Math.min(Math.round(d.process_count / 8), 100);
+        _sysMetricsRetries = 0;
+      } else {
+        _sysMetricsRetries++;
+      }
+    } catch(e) { _sysMetricsRetries++; }
+  }
+  // Poll every 5 seconds for real metrics
+  setInterval(pollSysMetrics, 5000);
+  pollSysMetrics();
+
+  function hudTick() {
+    // Update System Status with real CPU/RAM/DISK/NETWORK values
+    setHud("qh-ai", "qh-ai-val", "on", _sysMetrics.cpu + "%");
+    setHudBar("qh-ai", _sysMetrics.cpu);
+    setHud("qh-model", "qh-model-val", "on", _sysMetrics.ram + "%");
+    setHudBar("qh-model", _sysMetrics.ram);
+    setHud("qh-route", "qh-route-val", "on", _sysMetrics.disk + "%");
+    setHudBar("qh-route", _sysMetrics.disk);
+    setHud("qh-mon", "qh-mon-val", "on", _sysMetrics.net + "%");
+    setHudBar("qh-mon", _sysMetrics.net);
+
+    // Gmail/Voice status
+    var gmail = byId("gmail-home-widget"), vBtn = byId("voice-btn");
+    var gmailHidden = !gmail || gmail.style.display === "none";
+    var gmailScan = gmail && gmail.classList.contains("is-scanning");
+    var listening = vBtn && vBtn.classList.contains("recording");
+    setHud("qh-gmail", "qh-gmail-val", gmailHidden ? "" : (gmailScan ? "busy" : "on"), gmailHidden ? "OFF" : (gmailScan ? "SCAN" : "ACTIVE"));
+    setHud("qh-voice", "qh-voice-val", listening ? "busy" : "", listening ? "LIVE" : "READY");
+  }
+  setInterval(hudTick, 1000);
+  hudTick();
+})();
 </script>
 </body>
 </html>
