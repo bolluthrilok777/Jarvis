@@ -127,3 +127,15 @@ class GmailMonitorState(BaseModel):
     account_email: Optional[str] = None
     monitoring_active: bool = False
     auto_send_enabled: bool = False
+    drafts_in_progress: int = 0
+    draft_status: str = ""
+    draft_subject: str = ""
+    # Manual history rescans are independent background jobs.  These fields
+    # let the UI reconnect to a job after the Operations Center is closed.
+    scan_in_progress: bool = False
+    scan_phase: str = ""
+    scan_status: str = ""
+    scan_days_back: int = 0
+    scan_current: int = 0
+    scan_total: int = 0
+    scan_summary: dict[str, Any] = Field(default_factory=dict)
