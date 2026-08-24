@@ -32,3 +32,30 @@ notes/gmail_drafts/
 
 # Separate project with its own git repo and remote
 TelegramForward/
+
+# Local development artifacts (diagnostics, logs, scratch patches, backups)
+_v*.py
+_fx_*.py
+_patch_*.py
+_diag*.py
+_verify*.py
+_stability_check*.py
+_diag*.txt
+_core_dom*.txt
+_srv_*.txt
+_*.log
+_*.txt
+_optimus_*.log
+_optimus_*.txt
+_optimus_*_out.log
+_optimus_*_err.log
+_optimus_*_out.txt
+_optimus_*_err.txt
+_live_server_*.log
+_local_server_*.log
+homepage_live_tasks.png
+scratch_rendered_hud.png
+uvicorn_*.txt
+ui_before_*.html
+.vscode/
+
