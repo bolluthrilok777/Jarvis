@@ -87,7 +87,7 @@ class DraftContent(BaseModel):
 
 
 class GmailMessagePreview(BaseModel):
-    """Privacy-minimized email preview for classification."""
+    """Email metadata plus private, in-memory context for local classification."""
 
     message_id: str = ""
     thread_id: str = ""
@@ -97,6 +97,8 @@ class GmailMessagePreview(BaseModel):
     date: str = ""
     attachment_filenames: list[str] = Field(default_factory=list)
     body_preview: str = ""
+    full_body: str = ""
+    thread_context: str = ""
 
     @field_validator("body_preview", mode="before")
     @classmethod

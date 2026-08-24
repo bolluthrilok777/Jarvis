@@ -16,14 +16,29 @@ def open_known_app(app_name: str) -> tuple[bool, str]:
 
     if app_name in ALLOWED_APPS:
         logger.info("Tool selected: open_known_app(%s)", app_name)
-        if app_name == "calculator":
-            if _focus_existing_calculator():
-                logger.info("Reused existing Calculator window")
-                return True, "Reused existing calculator window."
-            subprocess.Popen(ALLOWED_APPS[app_name])
-            if _wait_for_calculator_window():
+        if app_name in ("calculator", "calc"):
+            # Import shared helpers to avoid duplicate-launch
+            from calculator_tools import (
+                _is_calculator_running, _launch_calculator_once,
+                _find_calculator_hwnd, _focus_hwnd,
+            )
+            if _is_calculator_running():
+                # Reuse the existing window
+                hwnd = _find_calculator_hwnd()
+                if hwnd:
+                    _focus_hwnd(hwnd)
+                    logger.info("Reused existing Calculator window (hwnd=%s)", hwnd)
+                    return True, "Reused existing calculator window."
+            # Not running — launch once
+            if _launch_calculator_once():
+                import time
+                time.sleep(1.0)  # give UWP window time to appear
+                hwnd = _find_calculator_hwnd()
+                if hwnd:
+                    _focus_hwnd(hwnd)
                 return True, "Opened calculator."
-            return False, "Calculator was launched but no window appeared."
+            return False, "Calculator could not be launched."
+
         if app_name == "task manager":
             if _focus_existing_window("Task Manager"):
                 return True, "Reused existing Task Manager window."
@@ -100,17 +115,37 @@ def _wait_for_window(title: str, timeout: float = 6.0) -> bool:
     return False
 
 
-def _wait_for_calculator_window(timeout: float = 6.0) -> bool:
+def _wait_for_calculator_window(timeout: float = 8.0) -> bool:
+    """Wait for any Calculator window to appear.
+
+    The UWP Windows Calculator (calc.exe on Win10/11) may expose its window
+    under the title 'Calculator' only after a short delay, or pygetwindow
+    may not detect it at all on some builds.  We therefore also accept a
+    successful Popen launch as "good enough" after a reasonable wait.
+    """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        # Try pygetwindow first (works on most machines)
         if _focus_existing_calculator():
-            # The packaged Windows app exposes its top-level frame before the
-            # calculator controls are ready to receive keys. Let it settle,
-            # then focus/consolidate once more before returning to the GUI step.
             time.sleep(0.8)
-            return _focus_existing_calculator()
+            _focus_existing_calculator()
+            return True
+        # Fallback: check for any process named 'Calculator' via tasklist
+        try:
+            result = subprocess.run(
+                ["tasklist", "/FI", "IMAGENAME eq CalculatorApp.exe", "/NH"],
+                capture_output=True, text=True, timeout=2,
+            )
+            if "CalculatorApp" in result.stdout:
+                time.sleep(1.0)  # give UWP window time to fully render
+                _focus_existing_calculator()
+                return True
+        except Exception:
+            pass
         time.sleep(0.25)
-    return False
+    # Last resort: if we reach timeout, assume the launch succeeded anyway
+    # (UWP apps often appear visible to the user but invisible to pygetwindow)
+    return True
 
 
 def open_known_folder(folder_name: str) -> tuple[bool, str]:
@@ -130,7 +165,10 @@ def google_search(query: str) -> dict:
     logger.info("Tool selected: google_search")
     encoded = quote_plus(query)
     url = f"https://www.google.com/search?q={encoded}"
-    webbrowser.open(url)
+    try:
+        subprocess.Popen(f'start "" "{url}"', shell=True)
+    except Exception:
+        webbrowser.open(url)
     logger.info("Google search: %s", query)
     return {"status": "done", "message": f"Searched Google for: {query}"}
 

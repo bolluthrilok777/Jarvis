@@ -20,6 +20,7 @@ from typing import Any, Optional
 import requests
 
 from jarvis_core.gmail_models import GmailMessagePreview
+from jarvis_core.timezone_utils import jarvis_timezone
 
 logger = logging.getLogger("jarvis.gmail_service")
 
@@ -1099,13 +1100,96 @@ def list_messages_for_period(period: str = "today", max_results: int = 500) -> l
     return previews
 
 
+def list_messages_for_days(days_back: int, max_results: int = 500) -> list[GmailMessagePreview]:
+    """Fetch all inbox messages from an explicit 1–30 day window."""
+    days = max(1, min(int(days_back), 30))
+    service = _build_service()
+    if service is None:
+        raise RuntimeError("Gmail service is unavailable. Reconnect Gmail and try again.")
+    start = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y/%m/%d")
+    query = f"in:inbox after:{start}"
+    messages: list[dict] = []
+    page_token: Optional[str] = None
+    try:
+        while len(messages) < max_results:
+            response = service.users().messages().list(
+                userId="me", q=query, maxResults=min(100, max_results - len(messages)),
+                pageToken=page_token,
+            ).execute()
+            messages.extend(response.get("messages", []))
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+    except Exception as exc:
+        logger.error("Failed to list Gmail messages for %d-day rescan: %s", days, exc)
+        raise RuntimeError(f"Unable to read Gmail messages for the selected {days}-day period.") from exc
+
+    return [preview for message in messages
+            if (preview := _get_message_preview(service, message.get("id", "")))]
+
+
+def list_messages_for_date_range(
+    start_date,
+    end_date,
+    max_results: int = 1500,
+) -> list[GmailMessagePreview]:
+    """Fetch inbox messages for an inclusive local-calendar date range.
+
+    Epoch boundaries are used so Gmail receives the same timezone-aware range
+    that Jarvis shows to the user.  Failures are raised to the caller instead
+    of being converted to an empty inbox, because an empty result and an API
+    failure must never be reported as the same thing.
+    """
+    from datetime import date as _date, time as _time
+
+    if not isinstance(start_date, _date) or not isinstance(end_date, _date):
+        raise ValueError("start_date and end_date must be calendar dates")
+    if end_date < start_date:
+        raise ValueError("end_date must not be before start_date")
+
+    service = _build_service()
+    if service is None:
+        raise RuntimeError("Gmail service is unavailable. Reconnect Gmail and try again.")
+
+    local_tz = jarvis_timezone()
+    start_dt = datetime.combine(start_date, _time.min, tzinfo=local_tz)
+    end_exclusive = datetime.combine(end_date + timedelta(days=1), _time.min, tzinfo=local_tz)
+    # Gmail's after operator is strict, so subtract one second to include local
+    # midnight exactly. before remains the exclusive next-day boundary.
+    query = f"in:inbox after:{int(start_dt.timestamp()) - 1} before:{int(end_exclusive.timestamp())}"
+
+    messages: list[dict] = []
+    page_token: Optional[str] = None
+    try:
+        while len(messages) < max_results:
+            response = service.users().messages().list(
+                userId="me",
+                q=query,
+                maxResults=min(100, max_results - len(messages)),
+                pageToken=page_token,
+            ).execute()
+            messages.extend(response.get("messages", []))
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+    except Exception as exc:
+        logger.error("Failed to list Gmail messages for requested date range: %s", str(exc)[:120])
+        raise RuntimeError("Unable to read Gmail messages for the requested date range.") from exc
+
+    return [
+        preview
+        for message in messages
+        if (preview := _get_message_preview(service, message.get("id", "")))
+    ]
+
+
 def _get_message_preview(service: Any, message_id: str) -> Optional[GmailMessagePreview]:
-    """Get a privacy-minimized preview of a single message."""
+    """Get message metadata plus local full text for context-aware drafting."""
     try:
         msg = (
             service.users()
             .messages()
-            .get(userId="me", id=message_id, format="metadata")
+            .get(userId="me", id=message_id, format="full")
             .execute()
         )
 
@@ -1118,8 +1202,10 @@ def _get_message_preview(service: Any, message_id: str) -> Optional[GmailMessage
         # Get attachment filenames
         attachment_names = _get_attachment_filenames(msg)
 
-        # Get a short body preview (privacy-minimized)
+        # The short preview is used for compact UI/log data. Full text remains
+        # in memory only and is supplied to the local Ollama decision step.
         body_preview = _get_body_preview(msg, max_chars=500)
+        full_body = _get_body_preview(msg, max_chars=16000)
 
         thread_id = msg.get("threadId", "")
         return GmailMessagePreview(
@@ -1131,6 +1217,7 @@ def _get_message_preview(service: Any, message_id: str) -> Optional[GmailMessage
             date=date,
             attachment_filenames=attachment_names,
             body_preview=body_preview,
+            full_body=full_body,
         )
 
     except Exception as e:
@@ -1175,23 +1262,58 @@ def _get_body_preview(msg: dict, max_chars: int = 500) -> str:
     """Get a short body preview from a message (privacy-minimized)."""
     try:
         payload = msg.get("payload", {})
-        parts = payload.get("parts", [])
-
-        # Try to get plain text body
-        for part in parts:
+        def find_text(part: dict) -> str:
             if part.get("mimeType") == "text/plain":
                 data = part.get("body", {}).get("data", "")
                 if data:
-                    decoded = base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
-                    # Remove excessive whitespace
-                    decoded = re.sub(r"\s+", " ", decoded).strip()
-                    return decoded[:max_chars]
+                    return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+            for child in part.get("parts", []):
+                text = find_text(child)
+                if text:
+                    return text
+            return ""
+
+        decoded = find_text(payload)
+        if decoded:
+            decoded = re.sub(r"\s+", " ", decoded).strip()
+            return decoded[:max_chars]
 
         # Fall back to snippet
         return msg.get("snippet", "")[:max_chars]
 
     except Exception:
         return msg.get("snippet", "")[:max_chars]
+
+
+def get_thread_context(thread_id: str, max_chars: int = 24000) -> str:
+    """Return the complete readable conversation for local AI reasoning.
+
+    This data is not put in event logs or returned by the UI. It is used only
+    by the local classifier/draft composer so the latest mail is interpreted
+    in the context of the thread.
+    """
+    if not thread_id:
+        return ""
+    service = _build_service()
+    if service is None:
+        return ""
+    try:
+        thread = service.users().threads().get(userId="me", id=thread_id, format="full").execute()
+        messages = thread.get("messages", [])
+        chunks: list[str] = []
+        for index, message in enumerate(messages, start=1):
+            headers = _parse_headers(message.get("payload", {}).get("headers", []))
+            body = _get_body_preview(message, max_chars=12000)
+            chunks.append(
+                f"Message {index}\nFrom: {headers.get('From', '')}\n"
+                f"Date: {headers.get('Date', '')}\nSubject: {headers.get('Subject', '')}\n\n{body}"
+            )
+        # Keep the newest messages if an unusually long thread exceeds limit.
+        context = "\n\n---\n\n".join(chunks)
+        return context[-max_chars:]
+    except Exception as exc:
+        logger.warning("Could not retrieve Gmail thread context: %s", str(exc)[:120])
+        return ""
 
 
 def download_attachment(
@@ -1401,7 +1523,9 @@ def list_gmail_drafts(max_results: int = 50) -> list[dict]:
                     if h.get("name") and h.get("value")
                 }
                 safe_drafts.append({
-                    "id": draft_id[:16],  # Truncated — not a secret but keeps it short
+                    # Draft IDs are opaque identifiers, not credentials. Actions
+                    # must keep the exact ID so Gmail operates on the selected draft.
+                    "id": draft_id,
                     "subject": headers.get("subject", "")[:200],
                     "to": headers.get("to", "")[:100],
                     "date": headers.get("date", "")[:50],
@@ -1409,11 +1533,117 @@ def list_gmail_drafts(max_results: int = 50) -> list[dict]:
                 })
             except Exception:
                 # If we can't fetch details, still include the ID
-                safe_drafts.append({"id": draft_id[:16], "subject": "", "to": "", "date": ""})
+                safe_drafts.append({"id": draft_id, "subject": "", "to": "", "date": ""})
         return safe_drafts
     except Exception as e:
         logger.warning("Failed to list Gmail drafts: %s", str(e)[:80])
         return []
+
+
+def _decode_gmail_body(payload: dict) -> str:
+    """Decode the first useful text body from a Gmail MIME payload."""
+    body = payload.get("body", {}) if isinstance(payload, dict) else {}
+    encoded = body.get("data", "") if isinstance(body, dict) else ""
+    mime_type = str(payload.get("mimeType", "")) if isinstance(payload, dict) else ""
+    if encoded and mime_type in {"text/plain", "text/html", ""}:
+        try:
+            padded = encoded + "=" * (-len(encoded) % 4)
+            decoded = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8", errors="replace")
+            if mime_type == "text/html":
+                decoded = re.sub(r"<[^>]+>", " ", decoded)
+                decoded = re.sub(r"\s+", " ", decoded)
+            return decoded.strip()
+        except Exception:
+            return ""
+    for part in payload.get("parts", []) if isinstance(payload, dict) else []:
+        decoded = _decode_gmail_body(part)
+        if decoded:
+            return decoded
+    return ""
+
+
+def get_gmail_draft(draft_id: str) -> Optional[dict]:
+    """Return one existing Gmail draft with its exact ID and safe content."""
+    draft_id = str(draft_id or "").strip()
+    if not draft_id or not re.fullmatch(r"[A-Za-z0-9_-]+", draft_id):
+        return None
+    service = _build_service()
+    if service is None:
+        return None
+    try:
+        detail = service.users().drafts().get(
+            userId="me", id=draft_id, format="full"
+        ).execute()
+        message = detail.get("message", {})
+        headers = {
+            str(item.get("name", "")).lower(): str(item.get("value", ""))
+            for item in message.get("payload", {}).get("headers", [])
+            if item.get("name")
+        }
+        return {
+            "id": str(detail.get("id") or draft_id),
+            "message_id": str(message.get("id", "")),
+            "thread_id": str(message.get("threadId", "")),
+            "to": headers.get("to", "")[:500],
+            "subject": headers.get("subject", "")[:500],
+            "date": headers.get("date", "")[:100],
+            "body": _decode_gmail_body(message.get("payload", {})),
+        }
+    except Exception as exc:
+        logger.warning("Could not load Gmail draft %s: %s", draft_id[:8], str(exc)[:100])
+        return None
+
+
+def send_gmail_draft(draft_id: str) -> dict:
+    """Send an existing Gmail draft by exact ID after external confirmation."""
+    draft_id = str(draft_id or "").strip()
+    if not draft_id or not re.fullmatch(r"[A-Za-z0-9_-]+", draft_id):
+        return {"status": "error", "message": "Invalid Gmail draft identifier."}
+    service = _build_service()
+    if service is None:
+        return {"status": "error", "message": "Gmail is unavailable. Reconnect Gmail and try again."}
+    try:
+        # Fetch first so a stale, deleted, or guessed ID can never be sent.
+        existing = service.users().drafts().get(
+            userId="me", id=draft_id, format="metadata"
+        ).execute()
+        if str(existing.get("id", "")) != draft_id:
+            return {"status": "error", "message": "The Gmail draft no longer exists."}
+        sent = service.users().drafts().send(
+            userId="me", body={"id": draft_id}
+        ).execute()
+        if not sent.get("id"):
+            return {"status": "error", "message": "Gmail did not confirm that the draft was sent."}
+        logger.info("Existing Gmail draft sent successfully (draft id prefix=%s)", draft_id[:8])
+        return {
+            "status": "done",
+            "message": "Gmail draft sent successfully.",
+            "message_id": str(sent.get("id", "")),
+            "thread_id": str(sent.get("threadId", "")),
+        }
+    except Exception as exc:
+        logger.error("Failed to send existing Gmail draft %s: %s", draft_id[:8], str(exc)[:100])
+        return {"status": "error", "message": "Gmail could not send the existing draft."}
+
+
+def gmail_draft_exists(to: str, subject: str) -> bool:
+    """Return True when Gmail already has a matching draft.
+
+    Restoring Jarvis's local processing memory must not generate a second
+    Gmail draft for a reply that is already available in the Gmail account.
+    """
+    def normalize(value: str) -> str:
+        return " ".join((value or "").lower().replace("re:", "").split())
+
+    wanted_to = normalize(to)
+    wanted_subject = normalize(subject)
+    if not wanted_to or not wanted_subject:
+        return False
+    return any(
+        normalize(draft.get("to", "")) == wanted_to
+        and normalize(draft.get("subject", "")) == wanted_subject
+        for draft in list_gmail_drafts(max_results=500)
+    )
 
 
 def get_draft_scope_available() -> bool:

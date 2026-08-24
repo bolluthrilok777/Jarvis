@@ -35,6 +35,9 @@ def _build_prompt(normalized: str, raw: str) -> str:
         f"Available skills (with required parameters):\n{skill_list}\n\n"
         f"Use only those skills. Calculator expressions must contain only numbers and + - * /. "
         f"For multi-step math, emit steps in dependency order using resolved numeric inputs. "
+        f"For a Notepad request that includes writing and saving, emit notepad.open, notepad.type, "
+        f"then notepad.save. Preserve the exact text, requested folder, and requested filename; "
+        f"use a permitted folder name such as desktop, documents, downloads, notes, or jarvis. "
         f"Never invent applications or parameters. Ask for clarification only when intent is genuinely ambiguous.\n\n"
         f'Respond ONLY with a valid JSON object — no explanation, no markdown:\n'
         f'{{\n'
@@ -69,7 +72,7 @@ def plan(normalized: str, raw: str) -> Union[ActionPlan, dict]:
     logger.info("Ollama planner: calling ask_ollama for command: %s", normalized[:80])
 
     try:
-        content, model, error = ask_ollama(prompt, "heavy")
+        content, model, error = ask_ollama(prompt, purpose="planner")
     except Exception as exc:
         logger.error("Ollama planner: ask_ollama raised: %s", exc)
         return {"status": "error", "message": "Ollama service unavailable."}
@@ -79,20 +82,36 @@ def plan(normalized: str, raw: str) -> Union[ActionPlan, dict]:
         return {"status": "error", "message": "Planner response was invalid. Please rephrase your command."}
 
     # ── Parse JSON ────────────────────────────────────────────────────────────
-    # Strip markdown code fences if the model wrapped the JSON
-    raw_content = content.strip()
-    if raw_content.startswith("```"):
-        raw_content = re.sub(r"^```[a-zA-Z]*\n?", "", raw_content)
-        raw_content = raw_content.rstrip("`").strip()
+    # A malformed structured plan is a real validation failure.  In Auto mode
+    # only, retry it once with Gemma 12B; the router records that escalation.
+    def parse_json(reply: str) -> dict:
+        raw_content = reply.strip()
+        if raw_content.startswith("```"):
+            raw_content = re.sub(r"^```[a-zA-Z]*\n?", "", raw_content)
+            raw_content = raw_content.rstrip("`").strip()
+        return json.loads(raw_content)
 
     try:
-        data = json.loads(raw_content)
+        data = parse_json(content)
     except (json.JSONDecodeError, ValueError) as exc:
-        logger.warning("Ollama planner: JSON parse failed: %s | raw=%s", exc, raw_content[:200])
-        return {
-            "status": "error",
-            "message": "Planner response was invalid. Please rephrase your command.",
-        }
+        logger.warning("Ollama planner: JSON parse failed; retrying validation: %s", exc)
+        retry, retry_model, retry_error = ask_ollama(
+            prompt, purpose="planner", validation_failed=True
+        )
+        if retry_error:
+            return {
+                "status": "error",
+                "message": "Planner response was invalid. Please rephrase your command.",
+            }
+        try:
+            data = parse_json(retry)
+            logger.info("Ollama planner: structured-plan validation succeeded after %s escalation", retry_model)
+        except (json.JSONDecodeError, ValueError) as retry_exc:
+            logger.warning("Ollama planner: escalation JSON parse failed: %s", retry_exc)
+            return {
+                "status": "error",
+                "message": "Planner response was invalid. Please rephrase your command.",
+            }
 
     # ── Strip unknown skill IDs ────────────────────────────────────────────────
     known_skills = set(registry.list_skills())

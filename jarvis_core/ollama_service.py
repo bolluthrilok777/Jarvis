@@ -7,24 +7,44 @@ from jarvis_core.config import (
     AVAILABLE_OLLAMA_MODELS, FREE_API_KEY_ENABLED, FREE_API_KEY_URL,
     FREE_API_KEY_MODEL, ACTIVE_MODE,
 )
+from jarvis_core.model_router import MODEL_PROFILES, router
 
 logger = logging.getLogger("jarvis.ollama")
 
 # In-memory store for the API key (set via UI)
 _api_key = None
-# In-memory store for the current active mode
+# Kept for backwards compatibility with older callers.  The persisted router
+# owns the authoritative selected mode.
 _current_mode = ACTIVE_MODE
 
 
 def get_active_mode() -> str:
     """Get the currently active mode."""
-    return _current_mode
+    if _current_mode == "api_key" or _current_mode in get_installed_ollama_models():
+        return _current_mode
+    return router.get_mode()
 
 
 def set_active_mode(mode: str) -> None:
     """Set the currently active mode."""
     global _current_mode
-    _current_mode = mode
+    aliases = {"light": "fast", "medium": "balanced", "heavy": "balanced"}
+    normalized = aliases.get((mode or "").lower(), (mode or "").lower())
+    if normalized == "api_key":
+        _current_mode = normalized
+        logger.info("Active mode set to API key")
+        return
+    # Retain specific-model support for API compatibility.  The UI only offers
+    # safe profiles, but callers of the previous endpoint may pass an installed
+    # model id directly.
+    if normalized not in {"auto", *MODEL_PROFILES}:
+        installed = get_installed_ollama_models()
+        if normalized not in installed:
+            raise ValueError(f"Unsupported model mode: {mode}")
+        _current_mode = normalized
+        logger.info("Active direct model set to: %s", normalized)
+        return
+    _current_mode = router.set_mode(normalized)
     logger.info("Active mode set to: %s", mode)
 
 
@@ -52,17 +72,17 @@ def select_model(mode: str = None) -> str:
     - "api_key": Use the API key model (not Ollama)
     """
     if mode is None:
-        mode = _current_mode
+        mode = get_active_mode()
     
     mode_lower = mode.lower()
     
+    aliases = {"light": "fast", "medium": "balanced", "heavy": "balanced", "reasoning": "balanced"}
+    mode_lower = aliases.get(mode_lower, mode_lower)
     if mode_lower == "auto":
         # Auto mode will be resolved at query time based on input
         return "auto"
-    elif mode_lower == "light":
-        return LIGHT_MODEL
-    elif mode_lower in ("medium", "heavy", "deep", "reasoning"):
-        return HEAVY_MODEL
+    elif mode_lower in MODEL_PROFILES:
+        return MODEL_PROFILES[mode_lower]["model"]
     elif mode_lower == "api_key":
         return FREE_API_KEY_MODEL
     else:
@@ -76,15 +96,11 @@ def select_model(mode: str = None) -> str:
 
 
 def resolve_auto_mode(message: str) -> str:
-    """Smart selection: use heavy model for complex queries, light for simple ones."""
-    complex_patterns = r'\b(analyze|compare|reason|strategy|detailed|complex|step by step|research|explain|summarize|write|code|program|debug|refactor|architecture|design|plan)\b'
-    import re
-    if re.search(complex_patterns, message, re.IGNORECASE) or len(message) > 220:
-        return HEAVY_MODEL
-    return LIGHT_MODEL
+    """Return the Auto router's actual model for legacy callers."""
+    return router.decide(message, "auto").model or LIGHT_MODEL
 
 
-def ask_ollama(message: str, mode: str = None) -> tuple:
+def ask_ollama(message: str, mode: str = None, *, purpose: str = "chat", validation_failed: bool = False) -> tuple:
     """
     Send a message to Ollama and return (content, model, error).
 
@@ -94,18 +110,26 @@ def ask_ollama(message: str, mode: str = None) -> tuple:
         - error:   dict | None — error dict if something went wrong, else None
     """
     if mode is None:
-        mode = _current_mode
+        mode = get_active_mode()
     
     # If API key mode, route to API key handler
     if mode.lower() == "api_key":
         return ask_api_key(message)
     
-    # Resolve model
-    selected = select_model(mode)
-    
-    # If auto mode, resolve based on input
-    if selected == "auto":
-        selected = resolve_auto_mode(message)
+    # Specific installed model IDs remain supported for automation/API
+    # compatibility.  All profile/Auto choices go through the router.
+    raw_mode = (mode or "auto").lower()
+    if raw_mode in get_installed_ollama_models():
+        selected = raw_mode
+        router.record_manual_model(selected, purpose)
+    else:
+        aliases = {"light": "fast", "medium": "balanced", "heavy": "balanced", "reasoning": "balanced"}
+        routed_mode = aliases.get(raw_mode, raw_mode)
+        if routed_mode not in {"auto", *MODEL_PROFILES}:
+            logger.warning("Unknown mode '%s'; using Auto routing", mode)
+            routed_mode = "auto"
+        decision = router.decide(message, routed_mode, purpose=purpose, validation_failed=validation_failed)
+        selected = decision.model
     
     payload = {
         "model": selected,

@@ -77,8 +77,19 @@ _CONV_EXACT: frozenset[str] = frozenset({
     "help me",
 })
 
+# A greeting is conversational only when the entire user message is a greeting.
+# Keeping this anchored prevents action requests such as "Hello Jarvis, open
+# calculator" from bypassing the normal intent, risk, and tool safety gates.
+_GREETING_ONLY_RE = re.compile(
+    r"^\s*(?:"
+    r"(?:hello|hi|hey|hiya|greetings)(?:\s*,?\s+(?:there|jarvis))?"
+    r"|good\s+(?:morning|afternoon|evening)(?:\s*,?\s+jarvis)?"
+    r")[\s!,.?]*$",
+    re.IGNORECASE,
+)
 
-def classify(normalized: str) -> str:
+
+def classify(normalized: str, original_input: str | None = None) -> str:
     """
     Classify normalized text as 'conversational_query' or 'executable_command'.
 
@@ -87,9 +98,7 @@ def classify(normalized: str) -> str:
         'executable_command'    — route to OllamaPlanner
     """
     text = normalized.strip().lower()
-
-    if not text:
-        return "executable_command"
+    original = original_input if original_input is not None else normalized
 
     # Hard-coded executable overrides — checked FIRST before any conversational
     # patterns so phrases like "what is system status" are never mis-routed.
@@ -104,6 +113,16 @@ def classify(normalized: str) -> str:
     })
     words = text.split()
     if any(w in _MATH_WORDS for w in words):
+        return "executable_command"
+
+    # Inspect the original text because normalization intentionally removes
+    # fillers such as "hey" and "hey Jarvis" from action commands. An anchored
+    # full-message match recovers standalone greetings without changing the
+    # classification of any explicit action request.
+    if _GREETING_ONLY_RE.fullmatch(original):
+        return "conversational_query"
+
+    if not text:
         return "executable_command"
 
     # Exact matches

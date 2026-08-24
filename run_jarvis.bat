@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableDelayedExpansion
 title Jarvis Local Agent
-cd /d C:\Jarvis
+cd /d "%~dp0"
 
 echo ============================================
 echo  Jarvis Local Agent - Starting Up

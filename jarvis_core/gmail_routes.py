@@ -19,12 +19,14 @@ from jarvis_core.gmail_models import GmailConfig
 from jarvis_core.gmail_monitor import (
     check_now,
     clear_processed_ids,
+    delete_mail_memory,
     get_config,
     get_events_today,
     get_state,
     load_config,
     run_full_scan,
     run_incremental_scan,
+    start_window_rescan,
     start_monitor,
     stop_monitor,
     update_config,
@@ -83,6 +85,11 @@ class SendDraftRequest(BaseModel):
     confirm_send: bool = False
 
 
+class RescanRequest(BaseModel):
+    """Selected history window for a manual Gmail rescan."""
+    days_back: int = 7
+
+
 class CredentialsUploadRequest(BaseModel):
     """Request body for uploading credentials JSON."""
     json_data: str = ""
@@ -115,6 +122,22 @@ def gmail_status():
     if not error_message and creds_error and not connected:
         error_message = creds_error
 
+    token_health = validate_token_health()
+    token_revoked = is_token_revoked()
+    last_scan_at = get_last_scan_timestamp() or ""
+    from jarvis_core.gmail_reporting import build_authoritative_gmail_status
+
+    authoritative = build_authoritative_gmail_status(
+        state=state,
+        connected=connected,
+        credentials_configured=creds_configured,
+        token_configured=tok_configured,
+        credentials_error=creds_error or "",
+        token_health=token_health,
+        token_revoked=token_revoked,
+        last_scan_at=last_scan_at,
+    )
+
     return {
         "status": "ok",
         "connected": connected,
@@ -129,7 +152,7 @@ def gmail_status():
         "jd_files_saved_today": state.jd_files_saved_today,
         "drafts_created_today": state.drafts_created_today,
         "local_drafts_today": state.local_drafts_today,
-        "error_message": error_message,
+        "error_message": error_message or authoritative["safe_error"],
         "poll_interval_minutes": state.poll_interval_minutes,
         "draft_only": state.draft_only,
         "auto_send_enabled": state.auto_send_enabled,
@@ -143,15 +166,25 @@ def gmail_status():
         "scan_current": state.scan_current,
         "scan_total": state.scan_total,
         "scan_summary": state.scan_summary,
-        "poll_healthy": state.running and not state.error_message.startswith("Monitoring poll failed"),
+        "poll_healthy": authoritative["healthy"],
+        # Preserve the UI's established poll-specific field contract. Other
+        # scan/auth failures are exposed through error_message/safe_error.
         "poll_error": state.error_message if state.error_message.startswith("Monitoring poll failed") else "",
         "last_poll_at": state.last_poll_at or "",
         "last_poll_success_at": state.last_poll_success_at or "",
         "routing": model_router.get_last(),
-        "token_health": validate_token_health(),
-        "token_revoked": is_token_revoked(),
-        "last_scan_at": get_last_scan_timestamp() or "",
+        "token_health": token_health,
+        "token_revoked": token_revoked,
+        "last_scan_at": last_scan_at,
         "full_scan_done": is_full_scan_done(),
+        # Shared source of truth also consumed by command and Telegram paths.
+        "operational_status": authoritative["operational_status"],
+        "healthy": authoritative["healthy"],
+        "status_message": authoritative["message"],
+        "safe_error": authoritative["safe_error"],
+        "latest_scan_phase": authoritative["latest_scan_phase"],
+        "latest_scan_status": authoritative["latest_scan_status"],
+        "last_successful_scan": authoritative["last_successful_scan"],
     }
 
 
@@ -173,12 +206,12 @@ def gmail_stop():
 
 
 @router.post("/rescan")
-def gmail_rescan():
-    """Run an incremental scan — only emails since the last recorded scan.
+def gmail_rescan(req: RescanRequest = RescanRequest()):
+    """Read every mailbox item in the selected 1–30 day history window.
 
     This is the primary button for manual scanning after the initial full scan.
-    It does NOT clear processed IDs. It only processes new/unprocessed emails.
-    Returns structured JSON identical to check-now.
+    It runs as a persistent background job, so closing the Operations Center
+    never cancels Gmail reading, JD capture, or draft composition.
     Never raises HTTPException - always returns JSON.
     """
     if not is_connected():
@@ -194,41 +227,8 @@ def gmail_rescan():
             "error_code": "gmail_not_connected"
         }
 
-    from jarvis_core.gmail_monitor import _scan_running
-    _scan_running.set()
-    try:
-        scan_result = run_incremental_scan(source="manual_rescan")
-    except RuntimeError as e:
-        return {
-            "status": "error",
-            "message": str(e),
-            "error_code": "gmail_api_error"
-        }
-    except Exception as e:
-        logger.error("Rescan unexpected error: %s", str(e)[:100])
-        return {
-            "status": "error",
-            "message": f"Unexpected error: {str(e)[:100]}",
-            "error_code": "unexpected_error"
-        }
-    finally:
-        _scan_running.clear()
-
-    checked_at = datetime.now().isoformat()
-    return {
-        "status": "ok" if scan_result["errors"] == 0 else "partial",
-        "message": "Rescan completed",
-        "checked_at": checked_at,
-        "new_since": scan_result.get("new_since", ""),
-        "summary": {
-            "emails_scanned": scan_result["emails_scanned"],
-            "important_found": scan_result.get("important_found", 0),
-            "jd_files_saved": scan_result.get("jd_files_saved", 0),
-            "drafts_created": scan_result.get("drafts_created", 0),
-            "errors": scan_result["errors"],
-        },
-        "warnings": scan_result.get("warnings", []),
-    }
+    days = max(1, min(req.days_back, 30))
+    return start_window_rescan(days)
 
 
 @router.post("/check-now")
@@ -608,6 +608,22 @@ def gmail_clear_processed():
     """
     result = clear_processed_ids()
     return result
+
+
+@router.post("/delete-memory")
+def gmail_delete_memory():
+    """Clear only Jarvis's local Gmail-processing memory.
+
+    This never deletes Gmail mail/drafts or saved JD files. The next rescan
+    rechecks everything and creates only outputs that are missing.
+    """
+    return delete_mail_memory()
+
+
+@router.post("/restore-memory")
+def gmail_restore_memory_legacy():
+    """Backward-compatible alias for earlier client versions."""
+    return delete_mail_memory()
 
 
 def _count_events_for_period(period: str = "today") -> dict:

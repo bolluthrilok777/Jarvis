@@ -83,6 +83,23 @@ def test_ollama_robot_image_is_served():
     assert response.headers["content-type"] == "image/png"
 
 
+def test_live_system_monitor_must_be_explicitly_started():
+    """Closing the panel disables expensive live metric collection."""
+    from jarvis_core.system_tools import stop_live_monitor
+
+    stop_live_monitor()
+    assert client.get("/api/system-status").status_code == 409
+
+    with patch("jarvis_core.system_tools.get_system_status", return_value={"cpu_percent": 12.5}):
+        assert client.post("/api/system-monitor/start").json()["active"] is True
+        response = client.get("/api/system-status")
+        assert response.status_code == 200
+        assert response.json()["cpu_percent"] == 12.5
+
+    assert client.post("/api/system-monitor/stop").json()["active"] is False
+    assert client.get("/api/system-status").status_code == 409
+
+
 # Test 7: POST /agent with mocked Ollama returns reply
 def test_agent_returns_reply():
     # "Who are you" goes to AI fallback

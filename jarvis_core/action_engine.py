@@ -17,7 +17,7 @@ logger = logging.getLogger("jarvis.engine")
 
 class ActionEngine:
 
-    def run(self, req: CommandRequest) -> dict:
+    def run(self, req: CommandRequest, *, confirmed: bool = False) -> dict:
         from jarvis_core.config import (
             ACTION_ENGINE_ENABLED, DANGEROUS_WORDS, CONFIDENCE_THRESHOLD,
             ENGINE_MAX_STEPS, ENGINE_USE_OLLAMA_FALLBACK,
@@ -30,7 +30,7 @@ class ActionEngine:
         cmd_lower = raw.lower()
 
         # 1. DANGEROUS_WORDS pre-filter
-        if any(word in cmd_lower for word in DANGEROUS_WORDS):
+        if not confirmed and any(word in cmd_lower for word in DANGEROUS_WORDS):
             import uuid, time as _t
             from jarvis_core.command_dispatcher import pending_actions
             action_id = str(uuid.uuid4())
@@ -52,12 +52,16 @@ class ActionEngine:
         if isinstance(normalized, dict):
             return normalized
         from jarvis_core.intent_classifier import classify
-        if classify(normalized) == "conversational_query":
+        if classify(normalized, raw) == "conversational_query":
             return {"status": "no_match", "message": "Conversational request."}
 
         # 3. Rule match
         from jarvis_core.rule_matcher import matcher
         plan: Optional[ActionPlan] = matcher.match(normalized, raw)
+        direct_execution = plan is not None
+        if direct_execution:
+            from jarvis_core.model_router import router
+            router.record_direct("task", "Matched a verified Jarvis tool rule.")
 
         # 4. Ollama fallback
         if plan is None:
@@ -80,8 +84,15 @@ class ActionEngine:
         if len(plan.steps) > ENGINE_MAX_STEPS:
             return {"status": "error", "message": "Plan exceeds maximum allowed steps."}
 
+        # Model plans can name a valid skill with an unsupported app/folder.
+        # Reject that plan before execution so a user gets a clarification, not
+        # a misleading partially-completed task card.
+        parameter_error = self._validate_plan_parameters(plan)
+        if parameter_error:
+            return {"status": "clarification_needed", "message": parameter_error}
+
         # 7. Execute
-        report = self.execute(plan)
+        report = self.execute(plan, confirmed=confirmed)
 
         conf_id = getattr(report, "_confirmation_required", None)
         if conf_id:
@@ -92,15 +103,36 @@ class ActionEngine:
             }
 
         result_dict = report.model_dump()
-        result_dict["status"] = "done" if report.all_succeeded else "partial"
+        successful_steps = sum(1 for item in report.results if item.success)
+        result_dict["status"] = (
+            "done" if report.all_succeeded else "partial" if successful_steps else "failed"
+        )
+        from jarvis_core.model_router import router
+        result_dict["routing"] = router.get_last()
         return result_dict
 
-    def execute(self, plan: ActionPlan) -> ExecutionReport:
+    def _validate_plan_parameters(self, plan: ActionPlan) -> Optional[str]:
+        """Reject unsupported app/folder parameters before invoking a tool."""
+        from jarvis_core.config import ALLOWED_APPS, ALLOWED_FOLDERS
+
+        for step in plan.steps:
+            if step.skill_id == "app.open":
+                app_name = str(step.parameters.get("app_name", "")).strip().lower()
+                if app_name not in ALLOWED_APPS:
+                    supported = "Notepad, Calculator, Paint, Chrome, Edge, Task Manager"
+                    return f"I don't recognise '{app_name or 'that'}' as a supported app. Try: {supported}."
+            if step.skill_id in {"folder.open", "file.search"}:
+                folder = str(step.parameters.get("folder_name", step.parameters.get("folder", ""))).strip().lower()
+                if folder not in ALLOWED_FOLDERS:
+                    return "I can search only Desktop, Documents, Downloads, Pictures, Notes, or Jarvis. Please choose one."
+        return None
+
+    def execute(self, plan: ActionPlan, *, confirmed: bool = False) -> ExecutionReport:
         from jarvis_core.skill_registry import registry, SkillNotFoundError
         results: list[ActionResult] = []
 
         for step in plan.steps:
-            if step.requires_confirmation:
+            if step.requires_confirmation and not confirmed:
                 import uuid, time as _t
                 from jarvis_core.command_dispatcher import pending_actions
                 action_id = str(uuid.uuid4())
@@ -173,6 +205,8 @@ class ActionEngine:
             return True
 
         if sid == "calculator.calculate":
+            if step.parameters.get("use_gui") and not out.get("gui_ok"):
+                return False
             result = out.get("result") or out.get("value")
             try:
                 return result is not None and math.isfinite(float(result))
@@ -207,9 +241,13 @@ class ActionEngine:
         all_ok = all(r.success for r in results)
         succeeded = sum(1 for r in results if r.success)
         total = len(plan.steps)
+        if succeeded == 0:
+            summary = "Task failed before any step completed."
+        else:
+            summary = f"{succeeded}/{total} steps completed successfully."
         return ExecutionReport(
             plan=plan, results=results,
-            summary=f"{succeeded}/{total} steps completed successfully.",
+            summary=summary,
             all_succeeded=all_ok,
         )
 

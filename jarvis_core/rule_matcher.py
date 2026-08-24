@@ -126,13 +126,107 @@ def _internal_calculator_plan(match, raw: str, norm: str) -> Optional[ActionPlan
     ], raw, norm)
 
 
+def _notepad_write_and_save_plan(match, raw: str, norm: str) -> ActionPlan:
+    """Plan a complete Notepad document workflow without losing its save details."""
+    folder_name = _normalize_folder_name(match.group("folder"))
+    file_name = match.group("file_name").strip().strip('"')
+    text = match.group("text").strip()
+    return _plan([
+        _step("notepad.open", {}, "Open Notepad"),
+        _step("notepad.type", {"text": text}, "Type text"),
+        _step(
+            "notepad.save",
+            {"folder_name": folder_name, "file_name": file_name},
+            f"Save as {file_name} in {folder_name.title()}",
+        ),
+    ], raw, norm)
+
+
 # ── Rule table ────────────────────────────────────────────────────────────────
 # Each rule is (compiled_pattern, match_handler).
 # match_handler(m, raw, norm) -> ActionPlan
 # Rules are tried in order; first match wins.
 
+# Map of simple spoken site names to their URLs
+_SITE_ALIASES: dict[str, str] = {
+    "youtube":    "https://www.youtube.com",
+    "google":     "https://www.google.com",
+    "github":     "https://www.github.com",
+    "gmail":      "https://mail.google.com",
+    "facebook":   "https://www.facebook.com",
+    "twitter":    "https://www.twitter.com",
+    "x":          "https://www.x.com",
+    "instagram":  "https://www.instagram.com",
+    "linkedin":   "https://www.linkedin.com",
+    "reddit":     "https://www.reddit.com",
+    "netflix":    "https://www.netflix.com",
+    "chatgpt":    "https://chat.openai.com",
+    "whatsapp":   "https://web.whatsapp.com",
+}
+
+
 def _build_rules():
     rules = []
+
+    # Gmail commands are deterministic Jarvis skills. This prevents status or
+    # send requests from falling into the generic planner while keeping Web UI
+    # and Telegram on the same command/task pipeline.
+    rules.append((
+        re.compile(r"^gmail\s+(?:status|report|refresh|rescan)(?:\s+.+)?$", re.IGNORECASE),
+        lambda m, raw, norm: _plan([
+            _step("gmail.report", {"request": raw.strip()}, "Build Gmail report"),
+        ], raw, norm),
+    ))
+    rules.append((
+        re.compile(
+            r"^gmail\s+details\s+(important|jd|drafts|needs_review|errors)\s+"
+            r"(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})$",
+            re.IGNORECASE,
+        ),
+        lambda m, raw, norm: _plan([
+            _step("gmail.details", {
+                "category": m.group(1).lower(),
+                "start_date": m.group(2),
+                "end_date": m.group(3),
+            }, f"View Gmail {m.group(1).lower()} details"),
+        ], raw, norm),
+    ))
+    rules.append((
+        re.compile(r"^gmail\s+draft\s+view\s+([A-Za-z0-9_-]+)$", re.IGNORECASE),
+        lambda m, raw, norm: _plan([
+            _step("gmail.draft.view", {"draft_id": m.group(1)}, "View Gmail draft"),
+        ], raw, norm),
+    ))
+    rules.append((
+        re.compile(r"^gmail\s+draft\s+keep\s+([A-Za-z0-9_-]+)$", re.IGNORECASE),
+        lambda m, raw, norm: _plan([
+            _step("gmail.draft.keep", {"draft_id": m.group(1)}, "Keep Gmail draft"),
+        ], raw, norm),
+    ))
+    rules.append((
+        re.compile(r"^gmail\s+draft\s+send\s+([A-Za-z0-9_-]+)$", re.IGNORECASE),
+        lambda m, raw, norm: _plan([
+            _step(
+                "gmail.draft.send",
+                {"draft_id": m.group(1)},
+                "Send existing Gmail draft",
+                confirm=True,
+            ),
+        ], raw, norm),
+    ))
+
+    # ── 0a. Bare "open <known-site>" (e.g. "open youtube", "open gmail") ─────
+    _sites_re = "|".join(re.escape(k) for k in _SITE_ALIASES)
+    rules.append((
+        re.compile(
+            rf"^(?:open|go\s+to|launch|start)\s+({_sites_re})(?:\s+(?:website|site|page|browser))?$",
+            re.IGNORECASE,
+        ),
+        lambda m, raw, norm: _plan([
+            _step("browser.open", {"url": _SITE_ALIASES[m.group(1).lower().strip()]},
+                  f"Open {m.group(1).strip()}"),
+        ], raw, norm),
+    ))
 
     rules.append((
         re.compile(
@@ -180,7 +274,34 @@ def _build_rules():
         _combined_calculator_plan,
     ))
 
-    # ── 2. Open notepad AND type ───────────────────────────────────────────────
+    # ── 2. Open Notepad, type, and save ───────────────────────────────────────
+    # This must precede the generic type/write rule so the save instruction is
+    # executed instead of being inserted into the document as plain text.
+    rules.append((
+        re.compile(
+            r"^open\s+(?:the\s+)?(?:notepad|note\s+pad)\s+and\s+(?:type|write)\s+"
+            r"(?P<text>.+?)\s+(?:and\s+)?save(?:\s+(?:it|this|the\s+(?:file|note|document)))?\s+"
+            r"(?:in|to|on)\s+(?:the\s+)?(?P<folder>desktop|documents?|downloads?|pictures?|jarvis|notes?|screenshots?)"
+            r"(?:\s+folder)?\s+(?:with\s+)?(?:the\s+)?name(?:\s+of|\s+as)?\s+(?P<file_name>.+?)$",
+            re.IGNORECASE,
+        ),
+        _notepad_write_and_save_plan,
+    ))
+
+    # Alternate natural phrasing: "save it as meeting notes to Documents".
+    rules.append((
+        re.compile(
+            r"^open\s+(?:the\s+)?(?:notepad|note\s+pad)\s+and\s+(?:type|write)\s+"
+            r"(?P<text>.+?)\s+(?:and\s+)?save(?:\s+(?:it|this|the\s+(?:file|note|document)))?\s+"
+            r"(?:as|named|with\s+(?:the\s+)?name(?:\s+of|\s+as)?)\s+(?P<file_name>.+?)\s+"
+            r"(?:in|to|on)\s+(?:the\s+)?(?P<folder>desktop|documents?|downloads?|pictures?|jarvis|notes?|screenshots?)"
+            r"(?:\s+folder)?$",
+            re.IGNORECASE,
+        ),
+        _notepad_write_and_save_plan,
+    ))
+
+    # ── 3. Open notepad AND type ───────────────────────────────────────────────
     rules.append((
         re.compile(
             r"^open\s+(?:notepad|note\s+pad)\s+and\s+(?:type|write)\s+(.+)$",
@@ -217,9 +338,10 @@ def _build_rules():
     ))
 
     # ── 5. Open folder AND find files ─────────────────────────────────────────
+    _known_folders_re = "|".join(re.escape(name) for name in _FOLDER_ALIASES)
     rules.append((
         re.compile(
-            r"^open\s+(\w+)(?:\s+folder)?\s+and\s+(?:find|search(?:\s+for)?)\s+(?:the\s+)?(.+)$",
+            rf"^open\s+({_known_folders_re})(?:\s+folder)?\s+and\s+(?:find|search(?:\s+for)?)\s+(?:the\s+)?(.+)$",
             re.IGNORECASE,
         ),
         lambda m, raw, norm: _plan([

@@ -10,6 +10,32 @@ from jarvis_core.config import SCREENSHOT_DIR
 logger = logging.getLogger("jarvis.system")
 
 
+# The live monitor has no background sampling thread: metrics are collected only
+# while the browser panel is explicitly open. The flag also rejects requests
+# from a stale browser timer after the user closes the panel.
+_live_monitor_lock = threading.Lock()
+_live_monitor_active = False
+
+
+def start_live_monitor() -> None:
+    """Allow the live-monitor endpoint to collect metrics."""
+    global _live_monitor_active
+    with _live_monitor_lock:
+        _live_monitor_active = True
+
+
+def stop_live_monitor() -> None:
+    """Disable the live-monitor endpoint; no background monitor remains."""
+    global _live_monitor_active
+    with _live_monitor_lock:
+        _live_monitor_active = False
+
+
+def is_live_monitor_active() -> bool:
+    with _live_monitor_lock:
+        return _live_monitor_active
+
+
 # ── CPU Temperature ───────────────────────────────────────────────────────────
 
 def _try_thermal_perf_counter() -> float | None:

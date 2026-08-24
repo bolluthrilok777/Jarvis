@@ -129,7 +129,14 @@ class Orchestrator:
         self._active_lock = threading.Lock()
         self._active_tasks: set[str] = set()
 
-    def submit(self, original_input: str) -> dict:
+    def submit(
+        self,
+        original_input: str,
+        *,
+        source: str = "Jarvis",
+        track_conversation: bool = False,
+        conversation_id: str | None = None,
+    ) -> dict:
         """
         Submit a single command line.
 
@@ -148,11 +155,49 @@ class Orchestrator:
         normalized = normalize(original_input)
         interpreted = normalized if isinstance(normalized, str) and normalized else original_input.strip()
         interpreted = build_interpreted_command(interpreted)
-        intent = classify(interpreted)
+        # Semantic Gmail understanding only selects a deterministic canonical
+        # Gmail command. Real data still comes exclusively from Gmail skills.
+        from jarvis_core.gmail_intent import gmail_intent_router
+
+        gmail_resolution = gmail_intent_router.resolve(
+            original_input,
+            conversation_id=conversation_id,
+        )
+        if gmail_resolution is not None:
+            interpreted = gmail_resolution.command
+        intent = classify(interpreted, original_input)
         logger.info("Intent for '%s': %s", original_input[:60], intent)
 
-        # 2. If conversational, route to AI chat
+        # 2. Conversational HTTP/UI requests keep their established /chat flow.
+        # Remote integrations may opt into a tracked conversation task so the
+        # same request is visible in LIVE TASKS and completes through the worker.
         if intent == "conversational_query":
+            if track_conversation:
+                task = task_manager.create_task(
+                    original_input,
+                    source=source,
+                    task_type="conversation",
+                )
+                task_manager.set_status(task.task_id, TaskStatus.interpreting.value)
+                task_manager.set_interpreted_command(task.task_id, interpreted)
+                from jarvis_core.model_router import router
+
+                decision = router.decide(interpreted, purpose="chat")
+                task_manager.set_routing(task.task_id, decision.public())
+                task_manager.add_event(
+                    task.task_id,
+                    "routed",
+                    decision.label,
+                    reason=decision.reason,
+                )
+                task_manager.set_status(task.task_id, TaskStatus.queued.value)
+                self.wake_worker()
+                return {
+                    "task_id": task.task_id,
+                    "status": "queued",
+                    "message": "Conversation queued for Jarvis.",
+                    "action": "created",
+                }
             return {
                 "task_id": None,
                 "status": "chat",
@@ -161,7 +206,7 @@ class Orchestrator:
             }
 
         # 3. It's an executable command — create a task
-        task = task_manager.create_task(original_input)
+        task = task_manager.create_task(original_input, source=source)
         task_manager.set_status(task.task_id, TaskStatus.interpreting.value)
 
         # 4. Check for critical commands (block immediately)
@@ -178,6 +223,17 @@ class Orchestrator:
 
         # 5. Build interpreted command
         task_manager.set_interpreted_command(task.task_id, interpreted)
+
+        # Publish the same routing decision that execution will use.  A rule
+        # match is a real direct-tool path, so no Ollama model is claimed.
+        from jarvis_core.rule_matcher import matcher
+        from jarvis_core.model_router import router
+        if matcher.match(interpreted, original_input) is not None:
+            decision = router.record_direct("task", "Matched a verified Jarvis tool rule.")
+        else:
+            decision = router.decide(interpreted, purpose="planner")
+        task_manager.set_routing(task.task_id, decision.public())
+        task_manager.add_event(task.task_id, "routed", decision.label, reason=decision.reason)
 
         # 6. Classify risk
         risk = classify_risk(original_input)
@@ -226,6 +282,8 @@ class Orchestrator:
         if task.status != TaskStatus.waiting_for_confirmation.value:
             return {"status": "error", "message": f"Task is in state '{task.status}', not waiting for confirmation"}
 
+        task_manager.set_confirmed(task_id, True)
+        task_manager.add_event(task_id, "confirmed", "Action confirmed")
         task_manager.set_status(task_id, TaskStatus.queued.value)
         # Wake the worker to process this confirmed task
         self.wake_worker()
@@ -268,10 +326,47 @@ class Orchestrator:
 
         try:
             task_manager.set_status(task_id, TaskStatus.running.value)
+            task_manager.add_event(task_id, "executing", "Executing task")
 
-            # Use action engine to execute
-            cmd_req = CommandRequest(command=task.interpreted_command or task.original_input)
-            result = action_engine.run(cmd_req)
+            # Use the established Jarvis conversational or action execution flow.
+            if task.task_type == "conversation":
+                from jarvis_core.conversation_service import run_conversation
+
+                result = run_conversation(task.original_input)
+            else:
+                cmd_req = CommandRequest(command=task.interpreted_command or task.original_input)
+                if task.confirmed:
+                    result = action_engine.run(cmd_req, confirmed=True)
+                else:
+                    result = action_engine.run(cmd_req)
+            if result.get("routing"):
+                task_manager.set_routing(task_id, result["routing"])
+                task_manager.add_event(task_id, "routing", result["routing"].get("label", "Route selected"), reason=result["routing"].get("reason", ""))
+
+            if result.get("status") == "confirmation_required":
+                # The action engine can discover a protected skill after the
+                # initial risk pass. Keep that task in the same task-level
+                # confirmation flow rather than treating the safety gate as a
+                # failure or executing it automatically.
+                action_id = result.get("action_id")
+                if action_id:
+                    from jarvis_core.command_dispatcher import pending_actions
+
+                    pending_actions.pop(action_id, None)
+                task_manager.set_result(task_id, result)
+                task_manager.set_status(
+                    task_id,
+                    TaskStatus.waiting_for_confirmation.value,
+                )
+                task_manager.add_event(
+                    task_id,
+                    "confirmation",
+                    "Waiting for confirmation",
+                )
+                return {
+                    "status": TaskStatus.waiting_for_confirmation.value,
+                    "message": result.get("message") or "Confirmation required.",
+                }
 
             if result.get("status") in ("done", "partial"):
                 plan_data = result.get("plan")
@@ -296,12 +391,15 @@ class Orchestrator:
                 )
                 task_manager.set_status(task_id, final_status)
                 task_manager.set_result(task_id, result)
+                task_manager.add_event(task_id, "completed", "Task execution completed")
                 return {"status": final_status, "result": result}
             else:
                 task_manager.set_status(task_id, TaskStatus.failed.value)
-                task_manager.set_error(task_id, result.get("message", "Execution failed"))
+                failure_message = self._failure_message(result)
+                task_manager.set_error(task_id, failure_message)
                 task_manager.set_result(task_id, result)
-                return {"status": "failed", "error": result.get("message", "Execution failed")}
+                task_manager.add_event(task_id, "failed", failure_message)
+                return {"status": "failed", "error": failure_message}
         except Exception as e:
             logger.exception("Error executing task %s", task_id)
             task_manager.set_status(task_id, TaskStatus.failed.value)
@@ -337,14 +435,41 @@ class Orchestrator:
                 return False
         return False
 
-    def submit_multiple(self, lines: list[str]) -> list[dict]:
+    @staticmethod
+    def _failure_message(result: dict) -> str:
+        """Prefer the concrete failed-step message over a generic status."""
+        if result.get("message"):
+            return str(result["message"])
+        for step_result in result.get("results", []):
+            if step_result.get("success"):
+                continue
+            if step_result.get("error"):
+                return str(step_result["error"])
+            output = step_result.get("output", {})
+            if isinstance(output, dict) and output.get("message"):
+                return str(output["message"])
+        return "Execution failed"
+
+    def submit_multiple(
+        self,
+        lines: list[str],
+        *,
+        source: str = "Jarvis",
+        track_conversation: bool = False,
+        conversation_id: str | None = None,
+    ) -> list[dict]:
         """Submit multiple command lines as separate tasks."""
         results = []
         for line in lines:
             stripped = line.strip()
             if not stripped:
                 continue
-            result = self.submit(stripped)
+            result = self.submit(
+                stripped,
+                source=source,
+                track_conversation=track_conversation,
+                conversation_id=conversation_id,
+            )
             results.append(result)
         return results
 

@@ -35,11 +35,21 @@ class TaskManager:
 
     # ── Task CRUD ──────────────────────────────────────────────────────────────
 
-    def create_task(self, original_input: str) -> Task:
+    def create_task(
+        self,
+        original_input: str,
+        *,
+        source: str = "Jarvis",
+        task_type: str = "command",
+    ) -> Task:
         """Create a new task in 'queued' state."""
         if not original_input or not original_input.strip():
             raise ValueError("original_input must be a non-empty string")
-        task = Task(original_input=original_input.strip())
+        task = Task(
+            original_input=original_input.strip(),
+            source=source.strip() if source and source.strip() else "Jarvis",
+            task_type=task_type,
+        )
         with self._lock:
             self._tasks[task.task_id] = task
         logger.info("Task %s created: %s", task.task_id, original_input[:60])
@@ -150,6 +160,37 @@ class TaskManager:
             if task is None:
                 return False
             task.error = error
+        return True
+
+    def set_confirmed(self, task_id: str, confirmed: bool = True) -> bool:
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if task is None:
+                return False
+            task.confirmed = bool(confirmed)
+        return True
+
+    def set_routing(self, task_id: str, routing: dict) -> bool:
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if task is None:
+                return False
+            task.routing = dict(routing)
+        return True
+
+    def add_event(self, task_id: str, stage: str, message: str, **details) -> bool:
+        """Append an actual lifecycle event for UI status, not a simulated one."""
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if task is None:
+                return False
+            task.events.append({
+                "at": datetime.now(timezone.utc).isoformat(),
+                "stage": stage,
+                "message": message,
+                **details,
+            })
+            task.events = task.events[-20:]
         return True
 
     # ── Concurrency control ────────────────────────────────────────────────────

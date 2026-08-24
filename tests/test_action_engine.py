@@ -196,6 +196,33 @@ def test_open_notepad_and_write():
     assert plan.steps[1].parameters["text"] == "yes, darvis is working"
 
 
+def test_open_notepad_write_and_save_to_desktop():
+    """A save clause becomes a save step, not part of the typed content."""
+    command = (
+        "open note pad and write the 578ishagf hfgdsui augh agjs dfa "
+        "and save it in desktop with the name of test note"
+    )
+    normalized = normalize(command)
+    plan = matcher.match(normalized, command)
+
+    assert plan is not None
+    assert [step.skill_id for step in plan.steps] == [
+        "notepad.open", "notepad.type", "notepad.save",
+    ]
+    assert plan.steps[1].parameters["text"] == "the 578ishagf hfgdsui augh agjs dfa"
+    assert plan.steps[2].parameters == {"folder_name": "desktop", "file_name": "test note"}
+
+
+def test_open_notepad_write_and_save_name_before_location():
+    command = "open notepad and type meeting agenda and save it as team meeting in documents"
+    normalized = normalize(command)
+    plan = matcher.match(normalized, command)
+
+    assert plan is not None
+    assert plan.steps[1].parameters["text"] == "meeting agenda"
+    assert plan.steps[2].parameters == {"folder_name": "documents", "file_name": "team meeting"}
+
+
 def test_command_typos_are_reframed_without_changing_payload():
     normalized = normalize("opne notpad and wirte Keep opne THSI text")
     assert normalized == "open notepad and write Keep opne THSI text"
@@ -369,6 +396,28 @@ def test_valid_ollama_plan_above_threshold_executes():
     assert result["status"] == "done"
 
 
+def test_zero_successful_steps_are_failed_not_partial():
+    plan = _make_plan([_make_step("system.status")])
+    with patch("jarvis_core.rule_matcher.matcher.match", return_value=plan), \
+         patch("jarvis_core.skill_registry.registry.get_skill") as get_skill:
+        get_skill.return_value.executor.return_value = {"status": "error", "message": "Sensor unavailable"}
+        result = ActionEngine().run(CommandRequest(command="system status"))
+    assert result["status"] == "failed"
+    assert result["results"][0]["error"] == "Sensor unavailable"
+
+
+def test_model_plan_with_unknown_app_requests_clarification_before_execution():
+    plan = _make_plan([_make_step("app.open", {"app_name": "things"})])
+    with patch("jarvis_core.rule_matcher.matcher.match", return_value=plan):
+        result = ActionEngine().run(CommandRequest(command="open the things"))
+    assert result["status"] == "clarification_needed"
+    assert "supported app" in result["message"]
+
+
+def test_open_calculator_and_search_is_not_treated_as_a_folder_search():
+    assert matcher.match("open calculator and search 5248-98", "open calculator and search 5248-98") is None
+
+
 def test_youtube_search_and_play_latest_rule():
     command = "open youtube search podcast and play latest one"
     normalized = normalize(command)
@@ -515,16 +564,37 @@ def test_open_the_calculator_and_do_5745_minus_9075():
     assert safe_calculate(called_expr) == -3330
 
 
-def test_calculator_gui_failure_still_returns_result():
-    """If GUI typing fails, internal numeric result is still returned with a warning."""
+def test_calculator_gui_failure_does_not_report_completion():
+    """A requested GUI calculation is unsuccessful until Calculator verifies it."""
     from calculator_tools import safe_calculate
     with patch("calculator_tools.drive_calculator_gui") as mock_gui:
         mock_gui.return_value = {"status": "done", "gui_ok": False, "warning": "Calculator GUI automation failed: window not found after 5s"}
         skill_result = registry.get_skill("calculator.calculate").executor(expression="59 + 17", use_gui=True)
-    assert skill_result["status"] == "done"
+    assert skill_result["status"] == "error"
     assert skill_result["result"] == 76
     assert skill_result["gui_ok"] is False
     assert skill_result["warning"].startswith("Calculator GUI automation failed:")
+
+
+def test_calculator_driver_uses_dedicated_operator_keys():
+    """Plus and divide must not depend on the current keyboard layout."""
+    from calculator_tools import _type_calculator_expression
+
+    with patch("calculator_tools._send_virtual_key") as send, \
+         patch("calculator_tools._time.sleep"):
+        _type_calculator_expression("879+4156-4564/2")
+
+    assert [call.args[0] for call in send.call_args_list] == [
+        ord("8"), ord("7"), ord("9"), 0x6B,
+        ord("4"), ord("1"), ord("5"), ord("6"), 0x6D,
+        ord("4"), ord("5"), ord("6"), ord("4"), 0x6F, ord("2"),
+    ]
+
+
+def test_calculator_driver_parenthesizes_precedence_for_standard_mode():
+    from calculator_tools import _standard_calculator_expression
+
+    assert _standard_calculator_expression("879+4156-4564/2") == "((879+4156)-(4564/2))"
 
 
 def test_super_calculator_natural_wording():

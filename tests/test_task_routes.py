@@ -71,6 +71,32 @@ def test_submit_empty_text():
     assert data["status"] == "error"
 
 
+def test_web_ui_greeting_routes_to_shared_conversation_flow():
+    """A greeting submitted by the UI is handed to the existing /chat path."""
+    submit_response = client.post("/tasks/submit", json={"text": "Hello Jarvis!"})
+
+    assert submit_response.status_code == 200
+    submission = submit_response.json()["results"][0]
+    assert submission == {
+        "task_id": None,
+        "status": "chat",
+        "message": "Routed to AI chat",
+        "action": "chat",
+    }
+
+    with patch(
+        "jarvis_core.conversation_service.ask_ollama",
+        return_value=("Hello! How can I help?", "test-model", None),
+    ):
+        chat_response = client.post(
+            "/chat",
+            json={"message": "Hello Jarvis!", "mode": "auto"},
+        )
+
+    assert chat_response.status_code == 200
+    assert chat_response.json()["reply"] == "Hello! How can I help?"
+
+
 # ── GET /tasks ────────────────────────────────────────────────────────────────
 
 def test_list_tasks_empty():

@@ -131,19 +131,24 @@ def deterministic_pre_filter(preview: GmailMessagePreview) -> Optional[bool]:
     return None  # Uncertain
 
 
-def classify_with_ai(preview: GmailMessagePreview) -> Optional[ClassificationResult]:
+def classify_with_ai(preview: GmailMessagePreview, full_context: str = "") -> Optional[ClassificationResult]:
     """Use Ollama AI to classify an email.
 
     Falls back to None if AI is unavailable.
     """
-    # Build a privacy-minimized prompt
-    prompt = f"""Classify this email as job-related or not.
+    context = full_context or preview.thread_context or preview.full_body or preview.body_preview
+    prompt = f"""Classify this job-related email using the complete local conversation context.
+
+Decide the current state from the latest message, not from an earlier invitation.
+If a specific interview date/time or meeting link is already confirmed and the email
+does not ask the candidate to reply, set should_create_draft to false. Never create
+an availability-request reply for an already scheduled interview.
 
 Sender: {preview.sender[:100]}
 Subject: {preview.subject[:200]}
-Snippet: {preview.snippet[:300]}
 Attachments: {', '.join(preview.attachment_filenames[:5]) or 'none'}
-Body preview: {preview.body_preview[:500]}
+Complete conversation (local only):
+{context[:24000]}
 
 Respond with ONLY valid JSON (no markdown, no explanation):
 {{
@@ -158,7 +163,7 @@ Respond with ONLY valid JSON (no markdown, no explanation):
 }}"""
 
     try:
-        reply, model, error = ask_ollama(prompt, mode="light")
+        reply, model, error = ask_ollama(prompt, mode="auto", purpose="gmail_classification")
         if error:
             logger.warning("AI classification failed: %s", error)
             return None
@@ -177,10 +182,10 @@ Respond with ONLY valid JSON (no markdown, no explanation):
         return None
 
 
-def deterministic_classify(preview: GmailMessagePreview) -> ClassificationResult:
+def deterministic_classify(preview: GmailMessagePreview, full_context: str = "") -> ClassificationResult:
     """Fallback deterministic classification when AI is unavailable."""
     subject_lower = preview.subject.lower()
-    combined = f"{preview.subject.lower()} {preview.snippet.lower()} {preview.body_preview.lower()}"
+    combined = f"{preview.subject.lower()} {preview.snippet.lower()} {preview.body_preview.lower()} {full_context.lower()}"
 
     result = ClassificationResult(is_job_related=False)
 
@@ -189,6 +194,16 @@ def deterministic_classify(preview: GmailMessagePreview) -> ClassificationResult
         if kw in combined or kw in subject_lower:
             result.is_job_related = True
             break
+
+    # A concrete scheduled-interview notice is job-related even when it uses
+    # natural wording such as "your final interview is scheduled for..."
+    # rather than one of the shorter keyword phrases above. This must happen
+    # before the early return so the no-draft confirmation guard can apply.
+    if "interview" in combined and any(
+        marker in combined
+        for marker in ("interview is scheduled", "interview has been scheduled", "scheduled for")
+    ):
+        result.is_job_related = True
 
     if not result.is_job_related:
         return result
@@ -268,6 +283,24 @@ def deterministic_classify(preview: GmailMessagePreview) -> ClassificationResult
         }
         result.draft_type = draft_map.get(result.category, "unknown")
 
+    # A calendar link or explicit interview time is information, not an
+    # unanswered availability request. Default to no draft unless the mail
+    # explicitly asks the candidate to confirm, select, or reschedule.
+    scheduled_markers = (
+        "interview has been scheduled", "interview is scheduled", "scheduled for",
+        "your interview", "meeting link", "calendar invite", "join the meeting",
+    )
+    response_markers = ("please confirm", "confirm your availability", "select a slot", "reschedule")
+    has_time = bool(re.search(r"\b(?:\d{1,2}:\d{2}|\d{1,2}\s*(?:am|pm))\b", combined))
+    if any(marker in combined for marker in scheduled_markers) and has_time and not any(
+        marker in combined for marker in response_markers
+    ):
+        result.category = "interview_confirmation"
+        result.summary = "Interview schedule is already confirmed."
+        result.action_required = "Review the scheduled interview details"
+        result.should_create_draft = False
+        result.draft_type = None
+
     return result
 
 
@@ -286,7 +319,7 @@ def _extract_company_from_sender(sender: str) -> str:
     return ""
 
 
-def classify_email(preview: GmailMessagePreview) -> ClassificationResult:
+def classify_email(preview: GmailMessagePreview, full_context: str = "") -> ClassificationResult:
     """Classify an email using AI first, then fall back to deterministic.
 
     Args:
@@ -302,13 +335,30 @@ def classify_email(preview: GmailMessagePreview) -> ClassificationResult:
         return ClassificationResult(is_job_related=False, category="non_job")
 
     # Step 2: Try AI classification
-    ai_result = classify_with_ai(preview)
+    ai_result = classify_with_ai(preview, full_context)
     if ai_result is not None:
         result = ai_result
     else:
         # Step 3: Fall back to deterministic
         logger.info("AI classification unavailable, using deterministic fallback")
-        result = deterministic_classify(preview)
+        result = deterministic_classify(preview, full_context)
+
+    # Apply the confirmed-schedule guard even when Ollama returns an otherwise
+    # plausible interview draft. This prevents the exact stale-slot error that
+    # occurs when a thread contains both an invitation and the later schedule.
+    combined = f"{preview.subject} {preview.snippet} {preview.body_preview} {full_context}".lower()
+    scheduled_markers = ("interview has been scheduled", "interview is scheduled", "scheduled for",
+                         "meeting link", "calendar invite", "join the meeting")
+    response_markers = ("please confirm", "confirm your availability", "select a slot", "reschedule")
+    has_time = bool(re.search(r"\b(?:\d{1,2}:\d{2}|\d{1,2}\s*(?:am|pm))\b", combined))
+    if any(marker in combined for marker in scheduled_markers) and has_time and not any(
+        marker in combined for marker in response_markers
+    ):
+        result.category = "interview_confirmation"
+        result.summary = "Interview schedule is already confirmed."
+        result.action_required = "Review the scheduled interview details"
+        result.should_create_draft = False
+        result.draft_type = None
 
     # Step 4: Override rules for specific senders — applied after any classification
     sender_lower = preview.sender.lower()

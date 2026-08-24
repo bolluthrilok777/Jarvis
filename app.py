@@ -15,11 +15,16 @@ load_gmail_config()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: begin the task worker. Shutdown: stop the task worker."""
+    """Start and stop Jarvis background workers with the application."""
     from jarvis_core.orchestrator import orchestrator
+    from jarvis_core.telegram_service import telegram_service
+
     orchestrator.start_worker()
+    telegram_service.start()
     yield
     from jarvis_core.monitoring import monitoring
+
+    telegram_service.stop()
     monitoring.stop()
     orchestrator.stop_worker()
 

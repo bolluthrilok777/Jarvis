@@ -155,7 +155,13 @@ def temp_config():
 # ── Test 1: Gmail monitor starts and stops ───────────────────────────────
 
 
-def test_monitor_start_stop():
+@patch("jarvis_core.gmail_monitor._monitor_loop")
+@patch(
+    "jarvis_core.gmail_service.validate_token_health",
+    return_value={"valid": True, "has_refresh_token": True},
+)
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
+def test_monitor_start_stop(mock_connected, mock_health, mock_loop):
     """Test that monitor starts and stops without error."""
     result = start_monitor()
     assert result["status"] in ("started", "already_running")
@@ -291,6 +297,67 @@ def test_draft_created(sample_job_email, temp_config):
         assert draft.subject != ""
         assert draft.body != ""
         assert draft.draft_type != "unknown"
+
+
+def test_confirmed_interview_schedule_never_creates_availability_draft():
+    """A confirmed time and meeting link are not an unanswered invitation."""
+    from jarvis_core.gmail_classifier import deterministic_classify
+
+    preview = GmailMessagePreview(
+        sender="interview@berribot.com",
+        subject="AI Interview with Mastermind (On Behalf of LTM)",
+        body_preview="Your final interview is scheduled for August 20 at 6:30 PM. Join the meeting using the link below.",
+    )
+    result = deterministic_classify(preview)
+
+    assert result.category == "interview_confirmation"
+    assert result.should_create_draft is False
+    assert result.draft_type is None
+
+
+def test_ai_result_cannot_override_confirmed_interview_schedule():
+    """The schedule guard still applies if an AI response asks for a draft."""
+    from jarvis_core.gmail_classifier import classify_email
+    from jarvis_core.gmail_models import ClassificationResult
+
+    preview = GmailMessagePreview(
+        sender="interview@berribot.com",
+        subject="Interview schedule confirmed",
+        body_preview="Your interview is scheduled for 6:30 PM. Meeting link follows.",
+    )
+    ai_result = ClassificationResult(
+        is_job_related=True,
+        category="interview_invite",
+        should_create_draft=True,
+        draft_type="interview",
+    )
+    with patch("jarvis_core.gmail_classifier.classify_with_ai", return_value=ai_result):
+        result = classify_email(preview)
+
+    assert result.should_create_draft is False
+    assert result.category == "interview_confirmation"
+
+
+def test_window_rescan_reads_selected_range_without_redrafting_processed_mail():
+    from jarvis_core.gmail_monitor import run_window_rescan
+
+    new_mail = GmailMessagePreview(message_id="new-1", subject="Interview invite")
+    prior_mail = GmailMessagePreview(message_id="old-1", subject="Already reviewed")
+    with patch("jarvis_core.gmail_monitor.list_messages_for_days", return_value=[new_mail, prior_mail]), \
+         patch("jarvis_core.gmail_monitor._load_processed_ids", return_value={"old-1"}), \
+         patch("jarvis_core.gmail_monitor._save_processed_ids"), \
+         patch("jarvis_core.gmail_monitor._save_window_scan_state"), \
+         patch("jarvis_core.gmail_monitor.get_thread_context", return_value="complete thread"), \
+         patch("jarvis_core.gmail_monitor.classify_email", return_value=ClassificationResult()), \
+         patch("jarvis_core.gmail_monitor._process_email") as process:
+        result = run_window_rescan(days_back=45)
+
+    assert result["days_back"] == 30
+    assert result["emails_scanned"] == 2
+    assert result["already_reviewed"] == 1
+    process.assert_called_once()
+    assert process.call_args.args[0] == new_mail
+    assert process.call_args.kwargs["full_context"] == "complete thread"
 
 
 # ── Test 10: Auto-send disabled prevents sending ─────────────────────────
@@ -700,16 +767,13 @@ def test_status_returns_account_email(mock_build_service):
     assert email == "test@gmail.com"
 
 
-@patch("jarvis_core.gmail_service.is_connected", return_value=False)
+@patch("jarvis_core.gmail_monitor.is_connected", return_value=False)
 def test_start_monitor_blocked_if_not_connected(mock_connected):
     """Test that start monitoring is blocked if Gmail not connected."""
     from jarvis_core.gmail_monitor import start_monitor
-    # The monitor will start but the loop will detect not connected
     result = start_monitor()
-    assert result["status"] in ("started", "already_running")
-    # Stop it
-    from jarvis_core.gmail_monitor import stop_monitor
-    stop_monitor()
+    assert result["status"] == "error"
+    assert result["error_code"] == "not_connected"
 
 
 @patch("jarvis_core.gmail_monitor.is_connected", return_value=False)
@@ -1920,6 +1984,7 @@ def test_list_gmail_drafts_returns_safe_metadata_only():
         result = list_gmail_drafts()
     assert len(result) == 1
     entry = result[0]
+    assert entry["id"] == "draft_abc123xyz"
     assert "subject" in entry
     assert "to" in entry
     assert "access_token" not in json.dumps(entry)
@@ -2284,20 +2349,20 @@ def test_run_gmail_scan_raises_runtime_error_on_ssl(mock_build, mock_list):
 
 @patch("jarvis_core.gmail_monitor.is_connected", return_value=True)
 @patch("jarvis_core.gmail_monitor.list_recent_unread", return_value=[])
-def test_check_now_uses_run_gmail_scan(mock_list, mock_connected):
-    """check_now() source code must call run_gmail_scan."""
+def test_check_now_uses_shared_incremental_scan(mock_list, mock_connected):
+    """check_now() must use the shared incremental Gmail scan."""
     import inspect
     from jarvis_core import gmail_monitor as gm
     src = inspect.getsource(gm.check_now)
-    assert "run_gmail_scan" in src
+    assert "run_incremental_scan" in src
 
 
-def test_monitor_loop_uses_run_gmail_scan():
-    """_monitor_loop() source must call run_gmail_scan."""
+def test_monitor_loop_uses_shared_incremental_scan():
+    """_monitor_loop() must use the shared incremental Gmail scan."""
     import inspect
     from jarvis_core import gmail_monitor as gm
     src = inspect.getsource(gm._monitor_loop)
-    assert "run_gmail_scan" in src
+    assert "run_incremental_scan" in src
 
 
 @patch("jarvis_core.gmail_monitor.is_connected", return_value=True)

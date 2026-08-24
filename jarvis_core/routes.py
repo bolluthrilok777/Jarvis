@@ -15,9 +15,10 @@ from jarvis_core.models import (
     MonitoringRequest, TaskSubmitRequest, TaskConfirmRequest,
 )
 from jarvis_core.ollama_service import (
-    ask_ollama, get_active_mode, set_active_mode, set_api_key,
+    get_active_mode, set_active_mode, set_api_key,
     get_api_key, get_installed_ollama_models,
 )
+from jarvis_core.model_router import MODEL_PROFILES, router as model_router
 from jarvis_core.system_tools import get_system_status
 from jarvis_core.command_dispatcher import run_agent_command, confirm_action
 
@@ -64,6 +65,7 @@ def health():
             "default_model": LIGHT_MODEL,
             "heavy_model": HEAVY_MODEL,
             "active_mode": get_active_mode(),
+            "router": model_router.get_last(),
             "system": get_system_status(),
         }
     except Exception as e:
@@ -72,6 +74,7 @@ def health():
             "ollama": "not reachable",
             "error": str(e),
             "active_mode": get_active_mode(),
+            "router": model_router.get_last(),
             "system": get_system_status(),
         }
 
@@ -93,10 +96,16 @@ def ollama_robot_image():
 
 @router.post("/chat")
 def chat(req: ChatRequest):
-    content, model, error = ask_ollama(req.message, req.mode)
-    if error:
-        return error
-    return {"model": model, "reply": content}
+    from jarvis_core.conversation_service import run_conversation
+
+    result = run_conversation(req.message, req.mode)
+    if result.get("status") != "done":
+        return result
+    return {
+        "model": result["model"],
+        "reply": result["reply"],
+        "routing": result["routing"],
+    }
 
 
 @router.post("/agent")
@@ -147,13 +156,18 @@ def get_models():
         "api_key_enabled": FREE_API_KEY_ENABLED,
         "light_model": LIGHT_MODEL,
         "heavy_model": HEAVY_MODEL,
+        "router": model_router.get_last(),
+        "profiles": [
+            {"id": key, **value}
+            for key, value in MODEL_PROFILES.items()
+        ],
     }
 
 
 @router.post("/models/mode")
 def set_mode(req: SetModeRequest):
     """Set the active model mode."""
-    valid_modes = ["auto", "light", "medium", "heavy", "api_key"]
+    valid_modes = ["auto", "fast", "balanced", "coding", "quality", "deep", "api_key", "light", "medium", "heavy"]
     # Also allow any model ID from the available list
     valid_model_ids = [m["id"] for m in AVAILABLE_OLLAMA_MODELS]
     
@@ -163,7 +177,10 @@ def set_mode(req: SetModeRequest):
             detail=f"Invalid mode '{req.mode}'. Valid modes: {', '.join(valid_modes)}. Valid model IDs: {', '.join(valid_model_ids[:5])}..."
         )
     
-    set_active_mode(req.mode)
+    try:
+        set_active_mode(req.mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return {"status": "ok", "active_mode": req.mode}
 
 
@@ -200,7 +217,7 @@ def tasks_submit(req: TaskSubmitRequest):
     if not non_empty:
         return {"status": "error", "message": "No non-empty lines to submit."}
 
-    results = orchestrator.submit_multiple(non_empty)
+    results = orchestrator.submit_multiple(non_empty, conversation_id="web")
     return {"status": "ok", "count": len(results), "results": results}
 
 
@@ -302,8 +319,26 @@ def apps_list():
 
 @router.get("/api/system-status")
 def api_system_status():
-    """Lightweight real-time metrics endpoint — polled every 2s by the live dashboard."""
-    from jarvis_core.system_tools import get_system_status
+    """Return metrics only while the user has the live panel open."""
+    from jarvis_core.system_tools import get_system_status, is_live_monitor_active
+    if not is_live_monitor_active():
+        raise HTTPException(status_code=409, detail="System monitor is not active")
     data = get_system_status(launch_task_manager=False)
     data["status"] = "ok"
     return data
+
+
+@router.post("/api/system-monitor/start")
+def api_system_monitor_start():
+    """Enable on-demand live system metric collection for the open panel."""
+    from jarvis_core.system_tools import start_live_monitor
+    start_live_monitor()
+    return {"status": "ok", "active": True}
+
+
+@router.post("/api/system-monitor/stop")
+def api_system_monitor_stop():
+    """Disable live metric collection when the panel is closed."""
+    from jarvis_core.system_tools import stop_live_monitor
+    stop_live_monitor()
+    return {"status": "ok", "active": False}

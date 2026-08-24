@@ -18,6 +18,7 @@ from jarvis_core.task_models import RiskLevel, ConcurrencyGroup
 PROTECTED_SKILLS: frozenset[str] = frozenset({
     "app.close",
     "notepad.save",
+    "gmail.draft.send",
 })
 
 # Skills that are dangerous/irreversible — plan is CRITICAL.
@@ -58,8 +59,9 @@ def classify_risk(plan: ActionPlan | str) -> RiskLevel:
         text = plan.lower()
         critical = ("format drive", "format disk", "wipe", "disable antivirus",
                     "disable firewall", "registry", "factory reset", "payment", "pay ")
-        protected = ("send email", "send mail", "whatsapp", "submit form",
-                     "book slot", "save over", "close unsaved", "delete file")
+        protected = ("send email", "send mail", "gmail draft send", "send gmail draft",
+                     "whatsapp", "submit form",
+                     "book slot", "save", "close unsaved", "delete file")
         if any(item in text for item in critical):
             return RiskLevel.CRITICAL
         if any(item in text for item in protected):
@@ -151,7 +153,7 @@ def _describe_step(skill_id: str, params: dict) -> str:
         preview = text[:40] + "..." if len(text) > 40 else text
         return f"Type \"{preview}\""
     if skill_id == "notepad.save":
-        return "Save document"
+        return f"Save as {params.get('file_name', 'document')} in {params.get('folder_name', 'folder').title()}"
     if skill_id == "folder.open":
         return f"Open {params.get('folder_name', 'folder')} folder"
     if skill_id == "file.search":

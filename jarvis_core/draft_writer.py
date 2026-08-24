@@ -7,12 +7,14 @@ unless explicitly configured and confirmed.
 from __future__ import annotations
 
 import logging
+import json
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from jarvis_core.gmail_models import ClassificationResult, DraftContent, GmailConfig
+from jarvis_core.ollama_service import ask_ollama
 
 logger = logging.getLogger("jarvis.draft_writer")
 
@@ -91,6 +93,65 @@ def generate_draft(
         body=body,
         draft_type=draft_type,
     )
+
+
+def generate_contextual_draft(
+    sender: str,
+    subject: str,
+    full_context: str,
+    classification: ClassificationResult,
+    config: GmailConfig,
+    user_name: str = DEFAULT_USER_NAME,
+) -> Optional[DraftContent]:
+    """Ask local Ollama to draft only after reading the complete conversation."""
+    if not classification.should_create_draft:
+        return None
+
+    recipient_email = _extract_email(sender)
+    prompt = f"""You are composing a safe Gmail DRAFT ONLY for a job search.
+Read the complete conversation before deciding whether to reply.
+
+Never draft a request for interview slots when the latest message already gives
+a scheduled date/time or meeting link, unless it explicitly asks the candidate
+to confirm, choose a slot, or reschedule. If no response is required, return
+should_create_draft=false.
+
+Latest sender: {sender}
+Subject: {subject}
+Candidate signature: {user_name}
+Classification: {classification.category}
+
+Complete conversation (local only):
+{full_context[:24000]}
+
+Return JSON only:
+{{
+  "should_create_draft": true/false,
+  "reason": "short explanation",
+  "body": "professional reply body, including greeting and signature when true"
+}}"""
+    try:
+        reply, _model, error = ask_ollama(prompt, mode="auto", purpose="gmail_draft")
+        if error:
+            logger.warning("Contextual draft generation failed: %s", error)
+            return None
+        match = re.search(r"\{.*\}", reply, re.DOTALL)
+        if not match:
+            logger.warning("Contextual draft response was not JSON")
+            return None
+        data = json.loads(match.group())
+        body = str(data.get("body", "")).strip()
+        if not data.get("should_create_draft") or not body:
+            return None
+        return DraftContent(
+            to=recipient_email,
+            subject=_generate_subject(classification.draft_type or "unknown", subject),
+            body=body,
+            draft_type=classification.draft_type or "unknown",
+        )
+    except Exception as exc:
+        logger.warning("Contextual draft generation failed safely: %s", str(exc)[:120])
+        return None
 
 
 def _generate_body(

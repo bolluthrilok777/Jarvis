@@ -11,13 +11,10 @@ HEAVY_MODEL = "qwen2.5:7b"
 AVAILABLE_OLLAMA_MODELS = [
     {"id": "gemma2:2b", "name": "Gemma 2 (2B)", "description": "Fast & lightweight", "category": "light"},
     {"id": "qwen2.5:7b", "name": "Qwen 2.5 (7B)", "description": "Balanced performance", "category": "medium"},
-    {"id": "llama3.2:3b", "name": "Llama 3.2 (3B)", "description": "Efficient & capable", "category": "light"},
-    {"id": "llama3.1:8b", "name": "Llama 3.1 (8B)", "description": "Strong reasoning", "category": "medium"},
-    {"id": "mistral:7b", "name": "Mistral (7B)", "description": "Fast & accurate", "category": "medium"},
-    {"id": "mixtral:8x7b", "name": "Mixtral (8x7B)", "description": "Heavy reasoning", "category": "heavy"},
-    {"id": "deepseek-r1:7b", "name": "DeepSeek R1 (7B)", "description": "Deep reasoning", "category": "heavy"},
-    {"id": "phi3:3.8b", "name": "Phi-3 (3.8B)", "description": "Microsoft efficient", "category": "light"},
-    {"id": "nomic-embed-text:v1.5", "name": "Nomic Embed", "description": "Embeddings only", "category": "special"},
+    {"id": "qwen2.5-coder:3b", "name": "Qwen Coder (3B)", "description": "Small coding tasks", "category": "coding"},
+    {"id": "qwen2.5-coder:7b", "name": "Qwen Coder (7B)", "description": "Implementation and debugging", "category": "coding"},
+    {"id": "gemma4:12b", "name": "Gemma 4 (12B)", "description": "Quality validation only", "category": "quality"},
+    {"id": "qwen3.6:latest", "name": "Qwen 3.6 (36B)", "description": "Manual Deep mode only", "category": "deep"},
 ]
 
 # Free API key mode configuration

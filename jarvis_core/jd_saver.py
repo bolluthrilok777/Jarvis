@@ -56,6 +56,35 @@ def _build_filename(
     return f"{timestamp}_{company_part}_{subject_part}_{orig}"
 
 
+def _attachment_already_saved(save_dir: Path, subject: str, original_filename: str) -> bool:
+    """Check local JD storage before downloading a duplicate attachment."""
+    if not save_dir.exists():
+        return False
+    subject_part = _sanitize_filename_part(subject, 50).lower()
+    original_part = _sanitize_filename_part(original_filename, 60).lower()
+    try:
+        return any(
+            path.is_file() and subject_part in path.name.lower() and original_part in path.name.lower()
+            for path in save_dir.rglob("*")
+        )
+    except OSError as exc:
+        logger.warning("Could not check existing JD files: %s", str(exc)[:80])
+        return False
+
+
+def _jd_link_already_saved(save_dir: Path, link: str) -> bool:
+    """Avoid duplicate local JD-link records after restoring memory."""
+    if not save_dir.exists() or not link:
+        return False
+    try:
+        for path in save_dir.rglob("*_jd_link.txt"):
+            if path.is_file() and link in path.read_text(encoding="utf-8", errors="ignore"):
+                return True
+    except OSError as exc:
+        logger.warning("Could not check existing JD links: %s", str(exc)[:80])
+    return False
+
+
 def save_jd_attachment(
     message_id: str,
     sender: str,
@@ -104,6 +133,10 @@ def save_jd_attachment(
             logger.info("Skipping unsupported attachment type: %s", filename)
             continue
 
+        if _attachment_already_saved(save_dir, subject, filename):
+            logger.info("JD attachment already saved, skipping duplicate: %s", filename)
+            continue
+
         # Build the save filename
         save_name = _build_filename(company, subject, filename)
         save_path = date_folder / save_name
@@ -143,6 +176,10 @@ def save_jd_link(
     """
     if save_dir is None:
         save_dir = DEFAULT_JD_FOLDER
+
+    if _jd_link_already_saved(save_dir, link):
+        logger.info("JD link already saved, skipping duplicate")
+        return None
 
     date_folder = _get_date_folder(save_dir)
     company = _extract_company_from_sender(sender)

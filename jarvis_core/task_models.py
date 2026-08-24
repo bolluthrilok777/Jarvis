@@ -41,6 +41,8 @@ class ConcurrencyGroup(str, Enum):
 class Task(BaseModel):
     task_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     original_input: str
+    source: str = "Jarvis"
+    task_type: str = "command"
     interpreted_command: str = ""
     action_plan: Optional[ActionPlan] = None
     risk_level: str = RiskLevel.SAFE.value
@@ -51,6 +53,9 @@ class Task(BaseModel):
     completed_at: Optional[datetime] = None
     result: Optional[dict] = None
     error: Optional[str] = None
+    routing: Optional[dict] = None
+    events: list[dict] = Field(default_factory=list)
+    confirmed: bool = False
     hidden: bool = False   # True when user removes card from view
 
 
@@ -58,6 +63,7 @@ class TaskPublic(BaseModel):
     """Safe public view of a Task — no raw ActionPlan JSON exposed to UI."""
     task_id: str
     original_input: str
+    source: str
     interpreted_command: str
     risk_level: str
     concurrency_group: str
@@ -68,6 +74,8 @@ class TaskPublic(BaseModel):
     result_summary: Optional[str] = None
     step_results: Optional[list[dict]] = None
     error: Optional[str] = None
+    routing: Optional[dict] = None
+    events: list[dict] = Field(default_factory=list)
     hidden: bool
 
     @classmethod
@@ -92,6 +100,7 @@ class TaskPublic(BaseModel):
         return cls(
             task_id=task.task_id,
             original_input=task.original_input,
+            source=task.source,
             interpreted_command=task.interpreted_command,
             risk_level=task.risk_level,
             concurrency_group=task.concurrency_group,
@@ -102,6 +111,8 @@ class TaskPublic(BaseModel):
             result_summary=result_summary,
             step_results=step_results,
             error=task.error,
+            routing=task.routing,
+            events=task.events[-6:],
             hidden=task.hidden,
         )
 

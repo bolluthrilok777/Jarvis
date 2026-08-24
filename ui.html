@@ -1082,6 +1082,10 @@
     .qc-ring--6 { border:1px solid rgba(34,211,238,.44); animation:qcRingC 10.5s linear infinite reverse; }
         .qc-ring--7 { border:1px solid rgba(167,139,250,.52); animation:qcRingB 17s linear infinite; }
     .qc-ring--8 { border:1px dashed rgba(139,92,246,.42); animation:qcRingD 12s linear infinite reverse; }
+    .qc-ring--9 { border:1px solid rgba(34,211,238,.5); animation:qcRingB 14s linear infinite; }
+    .qc-ring--10 { border:1px solid rgba(167,139,250,.55); animation:qcRingD 16s linear infinite reverse; }
+    .qc-ring--11 { border:1px solid rgba(56,189,248,.5); animation:qcRingA 12s linear infinite; }
+    .qc-ring--12 { border:1px dashed rgba(139,92,246,.45); animation:qcRingC 18s linear infinite reverse; }
     @keyframes qcRingA { from { transform:rotateX(74deg) rotateZ(0deg);} to { transform:rotateX(74deg) rotateZ(360deg);} }
     @keyframes qcRingB { from { transform:rotateX(67deg) rotateY(26deg) rotateZ(0deg);} to { transform:rotateX(67deg) rotateY(26deg) rotateZ(360deg);} }
     @keyframes qcRingC { from { transform:rotateX(80deg) rotateY(-20deg) rotateZ(0deg);} to { transform:rotateX(80deg) rotateY(-20deg) rotateZ(360deg);} }
@@ -1341,6 +1345,12 @@
         linear-gradient(90deg, rgba(139, 92, 246, 0.03) 1px, transparent 1px);
       background-size: 32px 32px;
       opacity: 0.5;
+      /* Fade the square grid toward the edges. This definition previously
+         lost the radial mask the original had, so crisp 32px squares showed
+         straight through the transparent quantum-core chamber — reading as
+         an animated square behind the core. Mask restored (+ tightened). */
+      -webkit-mask-image: radial-gradient(ellipse 75% 58% at 50% 30%, rgba(0,0,0,.55) 8%, transparent 62%);
+      mask-image: radial-gradient(ellipse 75% 58% at 50% 30%, rgba(0,0,0,.55) 8%, transparent 62%);
     }
     #q-bg-canvas {
       position: absolute;
@@ -1799,6 +1809,10 @@
       .qc-ring--6 { border-color: rgba(167, 139, 250, 0.7); animation: qcS6 19s linear infinite reverse; }
       .qc-ring--7 { border-color: rgba(196, 181, 253, 0.75); animation: qcS7 26s linear infinite; }
       .qc-ring--8 { border-color: rgba(56, 189, 248, 0.6); border-style: dashed; animation: qcS8 16s linear infinite reverse; }
+      .qc-ring--9 { border-color: rgba(34, 211, 238, 0.55); animation: qcS3 18s linear infinite; }
+      .qc-ring--10 { border-color: rgba(167, 139, 250, 0.6); animation: qcS5 25s linear infinite reverse; }
+      .qc-ring--11 { border-color: rgba(56, 189, 248, 0.55); animation: qcS2 20s linear infinite; }
+      .qc-ring--12 { border-color: rgba(196, 181, 253, 0.6); border-style: dashed; animation: qcS7 21s linear infinite reverse; }
 
       /* More vertical/diagonal angles, less horizontal flatness */
       @keyframes qcS1 { from { transform: rotateX(10deg) rotateY(0deg) rotateZ(0deg); } to { transform: rotateX(10deg) rotateY(0deg) rotateZ(360deg); } }
@@ -2288,8 +2302,13 @@
 
       /* ── Main container grid (hero: System Status | Core | Task Queue) ── */
       .container {
-        grid-template-columns:minmax(234px,248px) minmax(0,1fr) minmax(234px,248px);
-        grid-template-rows:48px minmax(280px,330px) auto auto auto;
+        grid-template-columns:minmax(228px,250px) minmax(0,1fr) minmax(330px,372px);
+        grid-template-rows:48px minmax(300px,340px) auto auto;
+        grid-template-areas:
+          "topbar   topbar   topbar"
+          "hud      core     task"
+          "command  command  task"
+          "quick    quick    task";
         gap:6px 18px; padding:8px 22px 10px;
       }
       .container > .qc-core-card, #qc-core-panel {
@@ -2370,24 +2389,170 @@
       .qc-ring--6 { animation:qcT6 23s linear infinite reverse; }
       .qc-ring--7 { animation:qcT7 30s linear infinite; }
       .qc-ring--8 { animation:qcT8 20s linear infinite reverse; }
+      .qc-ring--9 { animation:qcT3 27s linear infinite; }
+      .qc-ring--10 { animation:qcT5 22s linear infinite reverse; }
+      .qc-ring--11 { animation:qcT2 31s linear infinite; }
+      .qc-ring--12 { animation:qcT7 24s linear infinite reverse; }
 
-      /* ── RIGHT: Task Queue compact glass panel ── */
+      /* ── RIGHT: LIVE TASKS panel ── */
       .container > .q-task-card {
-        background:rgba(6,9,22,.62) !important;
-        border:1.5px solid rgba(167,139,250,.4) !important;
-        border-radius:18px; padding:10px 12px;
-        align-self:flex-start; max-height:150px; height:auto;
-        box-shadow:0 0 18px rgba(139,92,246,.10), inset 0 1px 0 rgba(255,255,255,.05) !important;
+        grid-area:task;
+        background:rgba(6,9,22,.68) !important;
+        border:1.5px solid rgba(167,139,250,.45) !important;
+        border-radius:20px; padding:12px 12px 10px;
+        align-self:stretch; min-height:0; height:100%; max-height:none;
+        display:flex; flex-direction:column;
+        box-shadow:0 0 24px rgba(139,92,246,.12), inset 0 1px 0 rgba(255,255,255,.05) !important;
       }
-      .q-task-card h3 { font-size:11px; letter-spacing:.2em; }
-      .q-task-header { margin-bottom:4px; }
-      .q-task-badge { font-size:10px; }
-      #task-list { max-height:120px; gap:4px; }
-      /* Empty idle state: compact card + centered placeholder, plus the JS-injected empty row */
-      #task-list:empty { min-height:42px; }
-      #task-list:empty::after { content:"No active tasks"; display:flex; align-items:center; justify-content:center; font-size:11px; color:#64748b; padding:6px 0; }
-      #task-list .task-empty { font-size:0; margin:0; padding:2px 0; }
-      #task-list .task-empty::before { content:"No active tasks"; display:block; text-align:center; font-size:11px; color:#64748b; }
+      .q-task-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+      .q-task-header h3 { font-size:12px; font-weight:800; letter-spacing:.2em; color:#e8edff; margin:0; }
+      .q-task-header h3::before { display:none; }
+      .q-task-badge {
+        font-size:10px; font-weight:700; color:#a5b4fc; letter-spacing:.05em;
+        background:rgba(139,92,246,.16); border:1px solid rgba(167,139,250,.4);
+        padding:3px 9px; border-radius:999px; white-space:nowrap;
+      }
+      #task-list {
+        flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:4px; max-height:none;
+        padding-right:5px; scrollbar-width:thin; scrollbar-color:rgba(139,92,246,.3) transparent;
+      }
+      #task-list::-webkit-scrollbar{width:6px;}
+      #task-list::-webkit-scrollbar-thumb{background:rgba(139,92,246,.35);border-radius:99px;}
+      #task-list:empty { min-height:60px; }
+      #task-list:empty::after { content:"No active tasks"; display:flex; align-items:center; justify-content:center; font-size:12px; color:#64748b; padding:18px 8px; }
+
+      /* ── Live Task card (compact 2-line) ── */
+      .lt-card {
+        position:relative; border-radius:9px; padding:5px 9px 6px;
+        background:rgba(13,17,34,.72); border:1px solid rgba(139,92,246,.16);
+        border-left:3px solid #64748b; flex-shrink:0;
+        transition:border-color .2s, background .2s;
+      }
+      .lt-card.lt-running{border-left-color:#22d3ee;}
+      .lt-card.lt-queued,.lt-card.lt-interpreting{border-left-color:#a855f7;}
+      .lt-card.lt-waiting{border-left-color:#f59e0b;}
+      .lt-card.lt-completed{border-left-color:#22c55e;}
+      .lt-card.lt-failed{border-left-color:#ef4444;}
+      .lt-card.lt-cancelled{border-left-color:#64748b;opacity:.7;}
+
+      /* indeterminate activity strip for active states (real backend state only) */
+      .lt-strip{position:absolute; top:0; left:3px; right:0; height:3px; overflow:hidden;}
+      .lt-strip .rail{position:absolute; inset:0; width:40%; background:linear-gradient(90deg,transparent,rgba(34,211,238,.9),transparent); animation:ltSlide 1.1s ease-in-out infinite;}
+      .lt-strip.purple .rail{background:linear-gradient(90deg,transparent,rgba(168,85,247,.9),transparent);}
+      .lt-strip.amber .rail{background:linear-gradient(90deg,transparent,rgba(245,158,11,.9),transparent);}
+      @keyframes ltSlide { 0%{transform:translateX(-120%);} 100%{transform:translateX(360%);} }
+
+      /* row 1: task text + spinner + expand + badge */
+      .lt-row1 { display:flex; align-items:center; gap:5px; line-height:1.15; }
+      .lt-text { flex:1; min-width:0; font-size:11.5px; font-weight:600; color:#f1f5f9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .lt-spinner { width:9px; height:9px; border:1.5px solid rgba(34,211,238,.3); border-top-color:#22d3ee; border-radius:50%; animation:ltSpin .7s linear infinite; flex-shrink:0; }
+      .lt-spinner.sp-amber{border-color:rgba(245,158,11,.3);border-top-color:#f59e0b;}
+      @keyframes ltSpin { to{transform:rotate(360deg);} }
+      .lt-xp { font-size:9px; line-height:1; color:#818cf8; background:none; border:0; padding:0 2px; cursor:pointer; flex-shrink:0; }
+      .lt-badge { flex-shrink:0; font-size:7.5px; font-weight:800; letter-spacing:.05em; padding:2px 6px; border-radius:999px; text-transform:uppercase; white-space:nowrap; }
+      .lt-badge.b-running{color:#67e8f9;background:rgba(34,211,238,.16);border:1px solid rgba(34,211,238,.55);}
+      .lt-badge.b-queued,.lt-badge.b-interpreting{color:#d8b4fe;background:rgba(168,85,247,.18);border:1px solid rgba(168,85,247,.55);}
+      .lt-badge.b-waiting{color:#fcd34d;background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.55);}
+      .lt-badge.b-completed{color:#4ade80;background:rgba(34,197,94,.16);border:1px solid rgba(34,197,94,.55);}
+      .lt-badge.b-failed{color:#f87171;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.55);}
+      .lt-badge.b-cancelled{color:#94a3b8;background:rgba(100,116,139,.2);border:1px solid rgba(100,116,139,.4);}
+
+      /* row 2: message + actions + route + time */
+      .lt-row2 { display:flex; align-items:center; gap:5px; margin-top:2px; min-height:14px; }
+      .lt-msg { flex:1; min-width:0; font-size:10px; color:#a8b3cf; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .lt-msg.msg-error{color:#f87171;}
+      .lt-msg.msg-success{color:#4ade80;}
+      .lt-route { font-size:9px; color:#f4cf63; white-space:nowrap; }
+      .lt-time { font-size:9px; color:#6b7a99; white-space:nowrap; font-variant-numeric:tabular-nums; display:inline-flex; align-items:center; gap:3px; }
+      .lt-time .lt-dot{width:5px;height:5px;border-radius:999px;flex-shrink:0;background:#22d3ee;box-shadow:0 0 5px rgba(34,211,238,.7);}
+      .lt-card.lt-waiting .lt-time .lt-dot{background:#f59e0b;}
+      .lt-card.lt-completed .lt-time .lt-dot{background:#22c55e;}
+      .lt-card.lt-failed .lt-time .lt-dot{background:#ef4444;}
+      .lt-card.lt-cancelled .lt-time .lt-dot{background:#64748b;box-shadow:none;}
+      .lt-actions { display:flex; gap:4px; align-items:center; }
+      .lt-btn { font-size:9px; font-weight:700; padding:1px 6px; border-radius:6px; cursor:pointer; line-height:1.3; white-space:nowrap; }
+      .lt-btn.ok { color:#22c55e; background:rgba(34,197,94,.14); border:1px solid rgba(34,197,94,.5); }
+      .lt-btn.no { color:#f87171; background:rgba(239,68,68,.14); border:1px solid rgba(239,68,68,.5); }
+
+      /* expandable details (hidden by default; 2-line card preserved) */
+      .lt-details { display:none; font-size:10px; color:#93a0bd; line-height:1.45; border-top:1px dashed rgba(139,92,246,.25); padding-top:4px; margin-top:3px; }
+      .lt-details.open { display:block; max-height:120px; overflow-y:auto; }
+      .lt-details .d-step{ margin:1px 0; }
+      .lt-details .d-err{color:#f87171;}
+
+      /* Whole card is clickable (opens detail view) — buttons inside stop propagation */
+      .lt-card { cursor:pointer; }
+      .lt-card .lt-btn, .lt-card .lt-xp { cursor:pointer; }
+      .lt-card:hover { border-color:rgba(139,92,246,.45); background:rgba(18,23,46,.85); }
+
+      /* Running / active cards: layered sliding waves at the top */
+      .lt-waves { position:absolute; top:2px; left:3px; right:0; height:6px; overflow:hidden; pointer-events:none; }
+      .lt-waves span { position:absolute; top:0; height:100%; border-radius:99px; opacity:.85; }
+      .lt-waves .w1 { left:-40%; width:35%; background:linear-gradient(90deg,transparent,rgba(34,211,238,.95),transparent); animation:ltWave 1.4s ease-in-out infinite; }
+      .lt-waves .w2 { left:-40%; width:22%; background:linear-gradient(90deg,transparent,rgba(34,211,238,.75),transparent); animation:ltWaveB 1.9s ease-in-out infinite; }
+      .lt-waves .w3 { left:-40%; width:45%; background:linear-gradient(90deg,transparent,rgba(34,211,238,.5),transparent); animation:ltWave 2.4s ease-in-out infinite; }
+      @keyframes ltWave { 0%{transform:translateX(0);} 50%{transform:translateX(160%);} 100%{transform:translateX(0);} }
+      @keyframes ltWaveB { 0%{transform:translateX(40%);opacity:.4;} 50%{transform:translateX(190%);opacity:1;} 100%{transform:translateX(40%);opacity:.4;} }
+      .lt-waves.purple .w1{background:linear-gradient(90deg,transparent,rgba(168,85,247,.95),transparent);}
+      .lt-waves.purple .w2{background:linear-gradient(90deg,transparent,rgba(168,85,247,.75),transparent);}
+      .lt-waves.purple .w3{background:linear-gradient(90deg,transparent,rgba(168,85,247,.5),transparent);}
+      .lt-waves.amber .w1{background:linear-gradient(90deg,transparent,rgba(245,158,11,.95),transparent);}
+      .lt-waves.amber .w2{background:linear-gradient(90deg,transparent,rgba(245,158,11,.75),transparent);}
+      .lt-waves.amber .w3{background:linear-gradient(90deg,transparent,rgba(245,158,11,.5),transparent);}
+
+      /* Completed / terminal cards settle to a dull colour */
+      .lt-card.lt-completed { background:rgba(18,22,34,.55); border-color:rgba(100,116,139,.22); opacity:.78; filter:saturate(.45); }
+      .lt-card.lt-cancelled { background:rgba(18,20,28,.5); border-color:rgba(100,116,139,.2); opacity:.6; filter:saturate(.4); }
+      .lt-card.lt-failed { background:rgba(26,16,18,.6); border-color:rgba(239,68,68,.22); opacity:.82; filter:saturate(.55); }
+      .lt-card.lt-completed .lt-badge, .lt-card.lt-cancelled .lt-badge { color:#8fa1bd; }
+
+/* ── Task detail overlay (clicked card interface) ── */
+      .lt-overlay {
+        position: fixed; inset:0; background:rgba(0,0,0,.72);
+        display:flex; align-items:center; justify-content:center; z-index:1200;
+        backdrop-filter: blur(3px);
+      }
+      .lt-overlay.hidden { display:none; }
+      .lt-dialog {
+        width:min(560px,94vw); max-height:88vh; overflow-y:auto; border-radius:18px;
+        background:linear-gradient(180deg,#0b1023,#060811);
+        border:1px solid rgba(139,92,246,.45);
+        box-shadow:0 0 60px rgba(124,58,237,.25), inset 0 1px 0 rgba(255,255,255,.06);
+        padding:22px 22px 18px; position:relative;
+      }
+      .lt-dlg-head { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+      .lt-dlg-title { flex:1; min-width:0; font-size:13px; font-weight:700; color:#f1f5f9; overflow-wrap:anywhere; line-height:1.4; }
+      .lt-dlg-badge { font-size:8px; font-weight:800; padding:3px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; flex-shrink:0; }
+      .lt-dlg-sub { font-size:11px; color:#a8b3cf; margin:2px 0 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .lt-dlg-close { position:absolute; top:12px; right:12px; width:30px; height:30px; border-radius:50%; border:1px solid rgba(139,92,246,.4); background:rgba(13,17,34,.8); color:#cbd5e1; font-size:18px; line-height:1; cursor:pointer; }
+      .lt-dlg-close:hover{ background:#a855f7; border-color:#a855f7; color:#fff; }
+      .lt-now { display:flex; align-items:center; gap:10px; margin:8px 0 10px; padding:9px 12px; border-radius:12px; background:rgba(34,211,238,.07); border:1px solid rgba(34,211,238,.25); }
+      .lt-now.amber{ background:rgba(245,158,11,.08); border-color:rgba(245,158,11,.3); }
+      .lt-now.purple{ background:rgba(168,85,247,.08); border-color:rgba(168,85,247,.3); }
+      .lt-now .lt-spinner{ width:14px; height:14px; border-width:2px; }
+      .lt-now span{ font-size:12px; color:#cfe8ff; }
+      .lt-dlg-sec { font-size:9px; font-weight:800; letter-spacing:.18em; color:#64748b; text-transform:uppercase; margin:10px 0 6px; }
+      .lt-timeline { margin:4px 0 6px; }
+      .lt-tl-item { display:flex; gap:9px; align-items:flex-start; font-size:11px; color:#a8b3cf; line-height:1.5; margin:0 0 7px; }
+      .lt-tl-dot { width:8px; height:8px; border-radius:50%; margin-top:2px; flex-shrink:0; background:#334155; }
+      .lt-tl-item.done .lt-tl-dot{ background:#4ade80; box-shadow:0 0 6px rgba(34,197,94,.6); }
+      .lt-tl-item.now .lt-tl-dot{ background:#22d3ee; box-shadow:0 0 8px rgba(34,211,238,.8); animation:ltPulseDot 1s ease-in-out infinite; }
+      .lt-tl-item.err .lt-tl-dot{ background:#ef4444; box-shadow:0 0 6px rgba(239,68,68,.6); }
+      @keyframes ltPulseDot { 50% { transform:scale(1.5); opacity:.6; } }
+      .lt-steps { display:flex; flex-direction:column; gap:5px; }
+      .lt-step { display:flex; gap:9px; align-items:flex-start; font-size:11.5px; color:#cbd5e1; line-height:1.45; padding:5px 8px; border-radius:8px; background:rgba(255,255,255,.02); border:1px solid rgba(139,92,246,.12); }
+      .lt-step .lt-st-mark { font-size:11px; margin-top:1px; flex-shrink:0; width:12px; text-align:center; }
+      .lt-step .lt-st-txt{ flex:1; min-width:0; word-break:break-word; }
+      .lt-step.ok .lt-st-mark{ color:#22c55e; }
+      .lt-step.bad .lt-st-mark{ color:#ef4444; }
+      .lt-step.active .lt-st-mark{ color:#22d3ee; animation:ltPulseDot 1s ease-in-out infinite; }
+      .lt-step .lt-st-sub{ display:block; font-size:10px; color:#7b8aa8; margin-top:1px; word-break:break-word; }
+      .lt-step .lt-st-err{ display:block; font-size:10px; color:#f87171; margin-top:1px; }
+      .lt-dlg-done { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#4ade80; margin-top:2px; }
+      .lt-dlg-fail { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#f87171; margin-top:2px; }
+      .lt-dlg-time { font-size:10px; color:#6b7a99; margin-top:12px; }
+      /* Old bottom response area is superseded by the Live Tasks panel */
+      #q-response-card { display:none !important; }
 
       /* ── Command bar (compact surface, mic inside) ── */
       .q-command-card { width:min(720px,100%); gap:4px; }
@@ -2410,6 +2575,420 @@
       .quick-btns button:not(.nav-btn)::before { font-size:18px; }
       .quick-btns button:not(.nav-btn):after { font-size:9.5px; max-width:none; }
     }
+
+    /* Responsive: below the desktop HUD width, the Live Tasks panel moves below
+       the command/quick rows as a full-width panel (no horizontal overflow). */
+    @media (max-width:1199px) {
+      .container {
+        grid-template-columns:1fr;
+        grid-template-rows:auto;
+        grid-template-areas:
+          "topbar"
+          "hud"
+          "core"
+          "command"
+          "quick"
+          "task";
+        gap:10px;
+        padding:14px;
+      }
+      .container > .q-task-card { max-height:380px; }
+      #task-list { max-height:340px; }
+      .lt-card { padding:9px 10px; }
+      .q-task-header { margin-bottom:10px; }
+      #q-response-card { display:none !important; }
+    }
+
+    /* ══ Conversation chat (command center) — user + Jarvis bubbles ══ */
+    .chat-log {
+      display:flex; flex-direction:column; gap:7px; width:100%; max-width:720px;
+      max-height:208px; overflow-y:auto; overflow-x:hidden; padding:6px 2px; margin-bottom:8px;
+      scrollbar-width:thin; scrollbar-color:rgba(139,92,246,.35) transparent;
+    }
+    .chat-log::-webkit-scrollbar { width:5px; }
+    .chat-log::-webkit-scrollbar-track { background:transparent; }
+    .chat-log::-webkit-scrollbar-thumb { background:rgba(139,92,246,.35); border-radius:99px; }
+    .chat-log:empty::before {
+      content:"Say hello — Jarvis replies appear here as a conversation.";
+      display:block; text-align:center; color:#4b5568; font-size:11.5px; font-style:italic; padding:8px 0;
+    }
+    .chat-msg {
+      max-width:82%; padding:8px 12px; border-radius:14px; font-size:12.5px; line-height:1.5;
+      white-space:pre-wrap; word-break:break-word; position:relative;
+      animation:chatIn .22s ease both;
+    }
+    .chat-msg.user {
+      align-self:flex-end; color:#e9d5ff; border-bottom-right-radius:4px;
+      background:linear-gradient(135deg,rgba(88,28,135,.55),rgba(76,29,149,.45));
+      border:1px solid rgba(168,85,246,.45); box-shadow:0 0 12px rgba(139,92,246,.15);
+    }
+    .chat-msg.jarvis {
+      align-self:flex-start; color:#c7f2ff; border-bottom-left-radius:4px;
+      background:rgba(8,20,30,.72); border:1px solid rgba(34,211,238,.35);
+      box-shadow:0 0 12px rgba(34,211,238,.10);
+    }
+    .chat-msg.jarvis::before {
+      content:"JARVIS"; display:block; font-size:8px; font-weight:800;
+      letter-spacing:.18em; color:#22d3ee; opacity:.75; margin-bottom:3px;
+    }
+    .chat-msg.jarvis.error { color:#fca5a5; background:rgba(30,8,8,.72); border-color:rgba(239,68,68,.4); }
+    .chat-msg.jarvis.error::before { color:#f87171; }
+    .chat-msg .chat-time { display:block; font-size:8.5px; color:#5b6b85; margin-top:3px; text-align:right; }
+    .chat-msg.thinking .tdots { display:inline-flex; gap:4px; align-items:center; height:10px; }
+    .chat-msg.thinking .tdots span {
+      width:5px; height:5px; border-radius:50%; background:#67e8f9;
+      animation:chatDot 1s infinite ease-in-out;
+    }
+    .chat-msg.thinking .tdots span:nth-child(2) { animation-delay:.15s; }
+    .chat-msg.thinking .tdots span:nth-child(3) { animation-delay:.3s; }
+    @keyframes chatDot { 0%,80%,100% { transform:scale(.6); opacity:.4; } 40% { transform:scale(1); opacity:1; } }
+    @keyframes chatIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+    @media (max-height:900px) { .chat-log { max-height:150px; } }
+    @media (prefers-reduced-motion: reduce) {
+      .chat-msg { animation:none; }
+      .chat-msg.thinking .tdots span { animation:none; }
+    }
+
+    /* ════════════════════════════════════════════════════════════════════
+       SIDEBAR — icon + always-visible text labels (was icon-only + tooltip)
+       Appended late so it cleanly overrides earlier rail styles only.
+       ════════════════════════════════════════════════════════════════════ */
+    .sidebar { width:138px; flex:0 0 138px; padding:20px 9px 16px; }
+    .sidebar .brand { width:106px; max-width:100%; }
+    .sidebar .nav-btn {
+      width:100%; height:37px; min-height:37px; margin:3px 0; padding:0 10px;
+      justify-content:flex-start; gap:10px;
+    }
+    .sidebar .nav-btn::before { font-size:17px; flex:0 0 auto; width:20px; text-align:center; }
+    .sidebar .nav-btn::after {
+      content:attr(data-label);
+      position:static; left:auto; top:auto; transform:none; opacity:1; pointer-events:none;
+      background:transparent; border:0; box-shadow:none; padding:0; margin:0;
+      text-indent:0; font-size:12.5px; font-weight:600; color:#c3cdea;
+      font-family:Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing:.02em;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; z-index:auto;
+    }
+    .sidebar .nav-btn:hover::after { opacity:1; color:#f4f7ff; }
+    .sidebar .nav-btn.active::after { color:#ffffff; }
+
+    /* ════════════════════════════════════════════════════════════════════
+       QUANTUM AI CORE — model-aware accent themes + working-state glow.
+       Accent RGB triplets live on .qc-core-card; the presentation sync loop
+       mirrors the Ollama mode (#ollama-core.mode-*) onto qc-theme-* here.
+       Default (no theme class) = today's violet/cyan identity.
+       ════════════════════════════════════════════════════════════════════ */
+    .qc-core-card { --qc-a:139,92,246; --qc-b:34,211,238; --qc-c:124,58,237; }
+    .qc-core-card.qc-theme-cyan     { --qc-a:32,215,255;  --qc-b:125,232,255; --qc-c:8,145,178;  }
+    .qc-core-card.qc-theme-indigo   { --qc-a:155,108,255; --qc-b:129,140,248; --qc-c:76,29,149;  }
+    .qc-core-card.qc-theme-emerald  { --qc-a:85,221,154;  --qc-b:110,231,183; --qc-c:5,150,105;  }
+    .qc-core-card.qc-theme-amethyst { --qc-a:198,140,255; --qc-b:196,181,253; --qc-c:134,43,223; }
+    .qc-core-card.qc-theme-rose     { --qc-a:255,127,143; --qc-b:253,164,175; --qc-c:190,18,60;  }
+    .qc-core-card.qc-theme-slate    { --qc-a:148,163,184; --qc-b:203,213,225; --qc-c:71,85,105;  }
+
+    /* Smooth palette cross-fade where interpolation is possible */
+    .qc-core-card .qc-ring, .qc-core-card .qc-ring i, .qc-core-card .qc-arc,
+    .qc-core-card .qc-outring, .qc-core-card .qc-ped, .qc-core-card .qc-spark,
+    .qc-core-card .qc-nucleus, .qc-core-card .qc-conduit, .qc-core-card .qc-meta-state {
+      transition:border-color .5s ease, box-shadow .5s ease, background-color .5s ease, color .5s ease, text-shadow .5s ease;
+    }
+
+    /* Halo (visible below the ≥1200px layout, which hides it) */
+    .qc-core-card .qc-core::before {
+      background:radial-gradient(circle, rgba(var(--qc-b),.30), rgba(var(--qc-a),.18) 30%, rgba(var(--qc-a),.10) 52%, rgba(var(--qc-b),.08) 68%, transparent 78%);
+    }
+
+    /* Nucleus (!important outranks the desktop sizing block's fixed violet) */
+    .qc-core-card .qc-nucleus {
+      background:
+        radial-gradient(circle at 38% 32%, #fff 0%, #fff 18%, rgba(var(--qc-b),.95) 28%, rgba(var(--qc-a),.65) 48%, rgba(var(--qc-c),.28) 72%, transparent 82%),
+        radial-gradient(circle at 50% 55%, rgb(var(--qc-a)) 0%, rgb(var(--qc-c)) 42%, rgba(var(--qc-c),.78) 72%) !important;
+      box-shadow:0 0 30px rgba(var(--qc-b),1), 0 0 70px rgba(var(--qc-a),.9), 0 0 130px rgba(var(--qc-c),.7), inset 0 0 22px rgba(255,255,255,.42) !important;
+    }
+
+    /* Rings (alphas mirror the original per-ring recipe) */
+    .qc-core-card .qc-ring--1 { border-color:rgba(var(--qc-a),.72); }
+    .qc-core-card .qc-ring--3 { border-color:rgba(var(--qc-a),.68); }
+    .qc-core-card .qc-ring--5, .qc-core-card .qc-ring--10 { border-color:rgba(var(--qc-a),.55); }
+    .qc-core-card .qc-ring--7 { border-color:rgba(var(--qc-a),.52); }
+    .qc-core-card .qc-ring--12 { border-color:rgba(var(--qc-a),.45); }
+    .qc-core-card .qc-ring--8 { border-color:rgba(var(--qc-a),.42); }
+    .qc-core-card .qc-ring--2 { border-color:rgba(var(--qc-b),.62); }
+    .qc-core-card .qc-ring--4, .qc-core-card .qc-ring--9, .qc-core-card .qc-ring--11 { border-color:rgba(var(--qc-b),.5); }
+    .qc-core-card .qc-ring--6 { border-color:rgba(var(--qc-b),.44); }
+
+    /* Orbit dots */
+    .qc-core-card .qc-ring i {
+      background:rgb(var(--qc-b));
+      box-shadow:0 0 12px rgba(var(--qc-a),1), 0 0 22px rgba(var(--qc-b),.6);
+    }
+
+    /* Arcs + outer ring */
+    .qc-core-card .qc-arc--c1 { border-top-color:rgba(var(--qc-b),.92); }
+    .qc-core-card .qc-arc--v1 { border-right-color:rgba(var(--qc-a),.88); border-bottom-color:rgba(var(--qc-a),.28); }
+    .qc-core-card .qc-arc--v2 { border-left-color:rgba(var(--qc-a),.84); }
+    .qc-core-card .qc-outring { border-color:rgba(var(--qc-a),.3); border-top-color:rgba(var(--qc-b),.62); }
+
+    /* Pedestals */
+    .qc-core-card .qc-ped { border-color:rgba(var(--qc-a),.58); background:radial-gradient(ellipse at center, rgba(var(--qc-a),.13), transparent 66%); }
+    .qc-core-card .qc-ped--1 { box-shadow:0 0 16px rgba(var(--qc-a),.45); }
+    .qc-core-card .qc-ped--2 { border-color:rgba(var(--qc-b),.58); box-shadow:0 0 15px rgba(var(--qc-b),.42); }
+    .qc-core-card .qc-ped--3 { border-color:rgba(var(--qc-b),.68); box-shadow:0 0 12px rgba(var(--qc-b),.52); }
+
+    /* Sparks + conduit feed + status text */
+    .qc-core-card .qc-spark { background:rgba(var(--qc-b),.92); box-shadow:0 0 9px rgba(var(--qc-a),.92), 0 0 13px rgba(var(--qc-b),.72); }
+    .qc-core-card .qc-conduit { background:linear-gradient(180deg, rgba(var(--qc-a),.9), transparent); }
+    .qc-core-card .qc-meta-state { color:rgb(var(--qc-b)); text-shadow:0 0 12px rgba(var(--qc-a),.55); }
+
+    /* ── WORKING STATE BOOST — same palette, hotter glow, faster breathe ── */
+    .qc-core-card .qc-core.is-thinking .qc-ring {
+      box-shadow:0 0 12px rgba(var(--qc-a),.30), inset 0 0 10px rgba(var(--qc-a),.12);
+    }
+    .qc-core-card .qc-core.is-thinking .qc-nucleus {
+      background:
+        radial-gradient(circle at 38% 32%, #fff 0%, #fff 18%, rgba(var(--qc-b),.95) 28%, rgba(var(--qc-a),.65) 48%, rgba(var(--qc-c),.28) 72%, transparent 82%),
+        radial-gradient(circle at 50% 55%, rgb(var(--qc-a)) 0%, rgb(var(--qc-c)) 42%, rgba(var(--qc-c),.78) 72%) !important;
+      box-shadow:0 0 34px rgba(var(--qc-b),1), 0 0 88px rgba(var(--qc-a),1), 0 0 150px rgba(var(--qc-c),.85), inset 0 0 24px rgba(255,255,255,.5) !important;
+      animation-duration:1.6s;
+    }
+
+    /* Offline: slate palette reads instantly as "not ready" */
+    .qc-core-card.qc-theme-slate .qc-core { opacity:.85; }
+
+    /* ════════════════════════════════════════════════════════════════════
+       MULTIVERSE CONTROL LAYER — additive only.
+       Extra model palettes + containment-field dressing around the core.
+       ════════════════════════════════════════════════════════════════════ */
+    .qc-core-card.qc-theme-amber   { --qc-a:255,176,32;  --qc-b:253,224,71;  --qc-c:180,83,9;   }
+    .qc-core-card.qc-theme-azure   { --qc-a:56,189,248;  --qc-b:125,211,252; --qc-c:2,132,199;  }
+    .qc-core-card.qc-theme-lime    { --qc-a:163,230,53;  --qc-b:190,242,100; --qc-c:77,124,15;  }
+    .qc-core-card.qc-theme-magenta { --qc-a:232,121,249; --qc-b:240,171,252; --qc-c:162,28,175; }
+
+    /* Live model readout — direct card child so it survives the desktop
+       ".qc-meta { display:none }" rule; repositioned there via absolute. */
+    .qc-meta-model {
+      margin-top:8px; font-size:10px; font-weight:700; letter-spacing:.22em;
+      text-transform:uppercase; white-space:nowrap; overflow:hidden;
+      text-overflow:ellipsis; max-width:100%;
+      color:rgb(var(--qc-a)); text-shadow:0 0 10px rgba(var(--qc-b),.55);
+      transition:color .6s ease, text-shadow .6s ease;
+    }
+    @media (min-width:1200px) {
+      .qc-core-card > .qc-meta-model {
+        display:block; position:absolute; left:50%; bottom:10px;
+        transform:translateX(-50%); margin:0; z-index:5;
+      }
+    }
+
+    /* Singularity vortex swirling behind the nucleus */
+    .qc-vortex {
+      position:absolute; left:24%; top:24%; width:52%; height:52%;
+      border-radius:50%; z-index:2; pointer-events:none; opacity:.85;
+      background:conic-gradient(from 0deg,
+        transparent 0deg, rgba(var(--qc-a),.38) 55deg, transparent 135deg,
+        transparent 175deg, rgba(var(--qc-b),.30) 235deg, transparent 320deg);
+      -webkit-mask-image:radial-gradient(circle, transparent 16%, #000 36%, rgba(0,0,0,.5) 58%, transparent 74%);
+      mask-image:radial-gradient(circle, transparent 16%, #000 36%, rgba(0,0,0,.5) 58%, transparent 74%);
+      animation:qcVortexSpin 11s linear infinite;
+    }
+    .qc-vortex::after {
+      content:""; position:absolute; inset:14%; border-radius:50%;
+      background:conic-gradient(from 180deg,
+        transparent 0deg, rgba(var(--qc-c),.42) 70deg, transparent 150deg);
+      filter:blur(1px);
+      animation:qcVortexSpin 7s linear infinite reverse;
+    }
+    @keyframes qcVortexSpin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+
+    /* Gravitational boundary ring — slow counter-rotating dashed circle */
+    .qc-grav-ring {
+      position:absolute; left:50%; top:50%; width:118%; height:118%;
+      margin:-59% 0 0 -59%; border-radius:50%; z-index:0; pointer-events:none;
+      border:1px dashed rgba(var(--qc-a),.28);
+      box-shadow:inset 0 0 22px rgba(var(--qc-a),.12);
+      animation:qcGravSpin 44s linear infinite;
+    }
+    @keyframes qcGravSpin { from { transform:rotate(0deg); } to { transform:rotate(-360deg); } }
+
+    /* Containment scanline sweeping inside the sphere */
+    .qc-scan { position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:4; pointer-events:none; }
+    .qc-scan::before {
+      content:""; position:absolute; left:4%; right:4%; height:26%; top:-30%;
+      background:linear-gradient(180deg, transparent,
+        rgba(var(--qc-b),.13) 45%, rgba(var(--qc-b),.22) 50%,
+        rgba(var(--qc-b),.13) 55%, transparent);
+      animation:qcScanSweep 7s ease-in-out infinite;
+    }
+    @keyframes qcScanSweep { 0% { top:-30%; } 62% { top:104%; } 100% { top:104%; } }
+
+    /* Corner brackets — containment-field frame */
+    .qc-bracket {
+      position:absolute; width:24px; height:24px; z-index:3;
+      pointer-events:none; animation:qcBracketBreathe 4s ease-in-out infinite;
+    }
+    .qc-bracket--tl { left:2px; top:2px; border-left:1.5px solid rgba(var(--qc-b),.65); border-top:1.5px solid rgba(var(--qc-b),.65); }
+    .qc-bracket--tr { right:2px; top:2px; border-right:1.5px solid rgba(var(--qc-b),.65); border-top:1.5px solid rgba(var(--qc-b),.65); animation-delay:-1s; }
+    .qc-bracket--bl { left:2px; bottom:2px; border-left:1.5px solid rgba(var(--qc-b),.65); border-bottom:1.5px solid rgba(var(--qc-b),.65); animation-delay:-2s; }
+    .qc-bracket--br { right:2px; bottom:2px; border-right:1.5px solid rgba(var(--qc-b),.65); border-bottom:1.5px solid rgba(var(--qc-b),.65); animation-delay:-3s; }
+    @keyframes qcBracketBreathe { 0%,100% { opacity:.45; } 50% { opacity:.95; } }
+
+    /* Shockwave ring fired when the palette rephases */
+    .qc-shockwave {
+      position:absolute; left:50%; top:50%; width:26px; height:26px;
+      margin:-13px 0 0 -13px; border-radius:50%; z-index:9; pointer-events:none;
+      border:2px solid rgba(var(--qc-b),.85); opacity:0;
+    }
+    .qc-core-card.theme-shift .qc-shockwave { animation:qcShockwave 1s ease-out; }
+    @keyframes qcShockwave {
+      0%   { transform:scale(.4); opacity:.95; border-color:rgba(var(--qc-b),.9); }
+      100% { transform:scale(11); opacity:0;   border-color:rgba(var(--qc-b),0); }
+    }
+
+    /* Full-core rephase flash while the palette cross-fades */
+    .qc-core-card.theme-shift .qc-core { animation:qcRephaseCore 1.05s ease-out; }
+    @keyframes qcRephaseCore {
+      0%   { filter:brightness(1) saturate(1); }
+      18%  { filter:brightness(2) saturate(1.5); }
+      100% { filter:brightness(1) saturate(1); }
+    }
+
+    /* Theme-tinted ambient orbs (body attribute mirrored by the sync loop) */
+    body[data-qtheme="cyan"]     .q-bg::before { background:radial-gradient(circle, rgba(8,145,178,.34), transparent 70%); }
+    body[data-qtheme="indigo"]   .q-bg::before { background:radial-gradient(circle, rgba(99,102,241,.34), transparent 70%); }
+    body[data-qtheme="emerald"]  .q-bg::before { background:radial-gradient(circle, rgba(5,150,105,.32), transparent 70%); }
+    body[data-qtheme="amethyst"] .q-bg::before { background:radial-gradient(circle, rgba(147,51,234,.34), transparent 70%); }
+    body[data-qtheme="rose"]     .q-bg::before { background:radial-gradient(circle, rgba(225,29,72,.30), transparent 70%); }
+    body[data-qtheme="slate"]    .q-bg::before { background:radial-gradient(circle, rgba(100,116,139,.28), transparent 70%); }
+    body[data-qtheme="amber"]    .q-bg::before { background:radial-gradient(circle, rgba(217,119,6,.30), transparent 70%); }
+    body[data-qtheme="azure"]    .q-bg::before { background:radial-gradient(circle, rgba(2,132,199,.32), transparent 70%); }
+    body[data-qtheme="lime"]     .q-bg::before { background:radial-gradient(circle, rgba(101,163,13,.30), transparent 70%); }
+    body[data-qtheme="magenta"]  .q-bg::before { background:radial-gradient(circle, rgba(192,38,211,.32), transparent 70%); }
+    body[data-qtheme="cyan"]     .q-bg::after  { background:radial-gradient(circle, rgba(125,232,255,.22), transparent 70%); }
+    body[data-qtheme="emerald"]  .q-bg::after  { background:radial-gradient(circle, rgba(110,231,183,.20), transparent 70%); }
+    body[data-qtheme="amethyst"] .q-bg::after  { background:radial-gradient(circle, rgba(196,181,253,.22), transparent 70%); }
+    body[data-qtheme="rose"]     .q-bg::after  { background:radial-gradient(circle, rgba(253,164,175,.18), transparent 70%); }
+    body[data-qtheme="magenta"]  .q-bg::after  { background:radial-gradient(circle, rgba(240,171,252,.20), transparent 70%); }
+
+    /* Accessibility + low-power: freeze decorative layers */
+    @media (prefers-reduced-motion: reduce) {
+      .qc-vortex, .qc-vortex::after, .qc-grav-ring, .qc-scan::before,
+      .qc-bracket, .qc-shockwave,
+      .qc-core-card.theme-shift .qc-core,
+      .qc-core-card.theme-shift .qc-shockwave { animation:none !important; }
+    }
+    body.effects-low-power .qc-vortex, body.effects-low-power .qc-vortex::after,
+    body.effects-low-power .qc-grav-ring, body.effects-low-power .qc-scan::before,
+    body.effects-low-power .qc-bracket { animation-play-state:paused; }
+
+    /* ══ OPEN MULTI-THREAD QUANTUM CORE ════════════════════════════════
+       Fourteen independent transform-only orbital threads. The old corner
+       frame and containment scan are intentionally suppressed so the core
+       reads as an open, dimensional execution field. */
+    .qc-scan, .qc-bracket { display:none !important; }
+
+    /* Keep the existing model picker interactive when its dropdown overlaps
+       the central core grid area.  The core remains purely presentational. */
+    .q-topbar { position:relative; z-index:70; overflow:visible; }
+    .qc-core-card { z-index:1; }
+    .qc-orbit-field {
+      position:absolute; inset:0; transform-style:preserve-3d;
+      pointer-events:none; transform-origin:50% 50%;
+    }
+    /* Per-ring variable FALLBACKS live on this low-specificity .qc-ring rule.
+       They used to sit on ".qc-orbit-field .qc-ring" (specificity 0,2,0),
+       which outranked every ".qc-ring--N" (0,1,0) override, so all rings
+       computed identical 28s clockwise motion. Keep fallbacks here; never
+       re-declare the --qc-* variables on the higher-specificity selector. */
+    .qc-ring {
+      --qc-rx:0deg; --qc-ry:0deg; --qc-rz:0deg; --qc-turn:360deg;
+      --qc-scale:1; --qc-dur:28s; --qc-busy:9s; --qc-delay:0s;
+      --qc-dir:normal;
+    }
+    .qc-orbit-field .qc-ring {
+      animation:qcThreadOrbit var(--qc-dur) linear infinite var(--qc-delay);
+      animation-direction:var(--qc-dir);
+      border-style:solid; backface-visibility:visible;
+      opacity:.46; filter:drop-shadow(0 0 4px rgba(var(--qc-a),.24));
+      transition:opacity .45s ease, filter .45s ease, border-color .55s ease;
+    }
+    @keyframes qcThreadOrbit {
+      from { transform:rotateX(var(--qc-rx)) rotateY(var(--qc-ry)) rotateZ(var(--qc-rz)) scale(var(--qc-scale)); }
+      to   { transform:rotateX(var(--qc-rx)) rotateY(var(--qc-ry)) rotateZ(calc(var(--qc-rz) + var(--qc-turn))) scale(var(--qc-scale)); }
+    }
+    .qc-ring--1  { --qc-rx:12deg; --qc-ry:4deg;   --qc-dir:normal; --qc-scale:1.04; --qc-dur:31s; --qc-busy:8.2s; }
+    .qc-ring--2  { --qc-rx:76deg; --qc-ry:12deg;  --qc-dir:reverse; --qc-scale:.96; --qc-dur:38s; --qc-busy:10.4s; --qc-delay:-8s; }
+    .qc-ring--3  { --qc-rx:54deg; --qc-ry:57deg;  --qc-dir:normal; --qc-scale:.88; --qc-dur:23s; --qc-busy:6.4s; --qc-delay:-13s; }
+    .qc-ring--4  { --qc-rx:34deg; --qc-ry:73deg;  --qc-dir:reverse; --qc-scale:1.08; --qc-dur:43s; --qc-busy:11.6s; --qc-delay:-21s; }
+    .qc-ring--5  { --qc-rx:49deg; --qc-ry:-63deg; --qc-dir:normal; --qc-scale:.78; --qc-dur:27s; --qc-busy:7.4s; --qc-delay:-5s; }
+    .qc-ring--6  { --qc-rx:23deg; --qc-ry:64deg;  --qc-dir:reverse; --qc-scale:.93; --qc-dur:35s; --qc-busy:9.5s; --qc-delay:-18s; }
+    .qc-ring--7  { --qc-rx:66deg; --qc-ry:-42deg; --qc-dir:normal; --qc-scale:1.12; --qc-dur:40s; --qc-busy:10.8s; --qc-delay:-11s; }
+    .qc-ring--8  { --qc-rx:43deg; --qc-ry:38deg;  --qc-dir:reverse; --qc-scale:.84; --qc-dur:21s; --qc-busy:5.9s; --qc-delay:-7s; }
+    .qc-ring--9  { --qc-rx:82deg; --qc-ry:-18deg; --qc-dir:normal; --qc-scale:1.00; --qc-dur:33s; --qc-busy:8.8s; --qc-delay:-25s; }
+    .qc-ring--10 { --qc-rx:28deg; --qc-ry:-78deg; --qc-dir:reverse; --qc-scale:.72; --qc-dur:25s; --qc-busy:6.8s; --qc-delay:-15s; }
+    .qc-ring--11 { --qc-rx:61deg; --qc-ry:27deg;  --qc-dir:normal; --qc-scale:1.16; --qc-dur:46s; --qc-busy:12.2s; --qc-delay:-31s; }
+    .qc-ring--12 { --qc-rx:18deg; --qc-ry:83deg;  --qc-dir:reverse; --qc-scale:.82; --qc-dur:29s; --qc-busy:7.9s; --qc-delay:-9s; }
+    .qc-ring--13 { --qc-rx:71deg; --qc-ry:51deg;  --qc-dir:normal; --qc-scale:1.20; --qc-dur:37s; --qc-busy:9.2s; --qc-delay:-23s; opacity:.12; border-color:rgba(236,72,153,.42) !important; }
+    .qc-ring--14 { --qc-rx:39deg; --qc-ry:-31deg; --qc-dir:reverse; --qc-scale:.68; --qc-dur:19s; --qc-busy:5.2s; --qc-delay:-12s; opacity:.10; border-color:rgba(255,255,255,.32) !important; }
+    .qc-ring--1, .qc-ring--3, .qc-ring--5, .qc-ring--7 { z-index:3; }
+    .qc-ring--2, .qc-ring--4, .qc-ring--6, .qc-ring--9 { z-index:6; opacity:.34; }
+    .qc-ring--8, .qc-ring--10, .qc-ring--11, .qc-ring--12, .qc-ring--13, .qc-ring--14 { z-index:12; }
+    .qc-orbit-field .qc-ring i {
+      animation:qcThreadNode 2.8s ease-in-out infinite alternate;
+      will-change:opacity, box-shadow;
+    }
+    .qc-orbit-field .qc-ring:nth-child(3n) i { animation-duration:1.9s; background:#f0abfc; }
+    .qc-orbit-field .qc-ring:nth-child(4n) i { animation-duration:3.6s; background:#fff; }
+    @keyframes qcThreadNode {
+      from { opacity:.42; box-shadow:0 0 5px rgba(var(--qc-a),.55); }
+      to { opacity:1; box-shadow:0 0 12px #fff, 0 0 24px rgba(var(--qc-b),.95); }
+    }
+    .qc-core[data-task-load="1"] .qc-ring--13,
+    .qc-core[data-task-load="2"] .qc-ring--13,
+    .qc-core[data-task-load="3"] .qc-ring--13,
+    .qc-core[data-task-load="4"] .qc-ring--13 { opacity:.56; }
+    .qc-core[data-task-load="2"] .qc-ring--14,
+    .qc-core[data-task-load="3"] .qc-ring--14,
+    .qc-core[data-task-load="4"] .qc-ring--14 { opacity:.62; }
+    .qc-core[data-task-load="3"] .qc-ring,
+    .qc-core[data-task-load="4"] .qc-ring { opacity:.72; filter:drop-shadow(0 0 7px rgba(var(--qc-b),.48)); }
+    .qc-core.is-thinking .qc-orbit-field .qc-ring,
+    .qc-core.has-running-tasks .qc-orbit-field .qc-ring {
+      animation-duration:var(--qc-busy) !important;
+      filter:drop-shadow(0 0 8px rgba(var(--qc-b),.62));
+    }
+    .qc-core.has-queued-tasks .qc-ring--13 { opacity:.68; }
+    .qc-nucleus { overflow:visible; }
+    .qc-nucleus::before {
+      content:""; position:absolute; inset:12%; border-radius:50%;
+      background:conic-gradient(from 20deg, transparent, rgba(var(--qc-b),.92), transparent 34%, rgba(var(--qc-a),.82), transparent 72%);
+      mix-blend-mode:screen; animation:qcNucleusEnergy 4.8s linear infinite;
+    }
+    .qc-nucleus::after {
+      content:""; position:absolute; inset:27%; border-radius:50%;
+      background:#fff; box-shadow:0 0 10px #fff, 0 0 24px rgba(var(--qc-b),.95);
+      animation:qcInnerPulse 2.6s ease-in-out infinite;
+    }
+    @keyframes qcNucleusEnergy { to { transform:rotate(360deg); } }
+    @keyframes qcInnerPulse { 50% { transform:scale(.68); opacity:.72; } }
+    .qc-core-card.theme-shift .qc-orbit-field { animation:qcOrbitRephase 1.05s cubic-bezier(.22,.8,.3,1); }
+    @keyframes qcOrbitRephase {
+      0% { transform:scale(1); filter:brightness(1); }
+      28% { transform:scale(.82); filter:brightness(.7); }
+      54% { transform:scale(.9); filter:brightness(1.8); }
+      78% { transform:scale(1.04); filter:brightness(1.35); }
+      100% { transform:scale(1); filter:brightness(1); }
+    }
+    body.quantum-paused .qc-orbit-field *, body.quantum-paused .qc-nucleus,
+    body.quantum-paused .qc-nucleus::before, body.quantum-paused .qc-nucleus::after,
+    body.quantum-paused .qc-vortex, body.quantum-paused .qc-grav-ring {
+      animation-play-state:paused !important;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .qc-orbit-field, .qc-orbit-field *, .qc-nucleus::before, .qc-nucleus::after {
+        animation:none !important; transition:none !important;
+      }
+      .qc-ring--13, .qc-ring--14 { opacity:.22; }
+    }
+
   </style>
 </head>
 <body>
@@ -2518,16 +3097,26 @@
       <span class="qc-ped qc-ped--2"></span>
       <span class="qc-ped qc-ped--3"></span>
       <span class="qc-outring"></span>
-      <span class="qc-beam"></span>
       <span class="qc-nucleus"></span>
-      <span class="qc-ring qc-ring--1"><i></i><i></i></span>
-      <span class="qc-ring qc-ring--2"><i></i></span>
-      <span class="qc-ring qc-ring--3"><i></i><i></i><i></i></span>
-      <span class="qc-ring qc-ring--4"><i></i></span>
-      <span class="qc-ring qc-ring--5"><i></i><i></i></span>
-      <span class="qc-ring qc-ring--6"><i></i></span>
-      <span class="qc-ring qc-ring--7"><i></i><i></i></span>
-      <span class="qc-ring qc-ring--8"><i></i></span>
+      <span class="qc-vortex" aria-hidden="true"></span>
+      <span class="qc-grav-ring" aria-hidden="true"></span>
+      <span class="qc-shockwave" aria-hidden="true"></span>
+      <span class="qc-orbit-field" aria-hidden="true">
+        <span class="qc-ring qc-ring--1"><i></i><i></i></span>
+        <span class="qc-ring qc-ring--2"><i></i></span>
+        <span class="qc-ring qc-ring--3"><i></i><i></i><i></i></span>
+        <span class="qc-ring qc-ring--4"><i></i></span>
+        <span class="qc-ring qc-ring--5"><i></i><i></i></span>
+        <span class="qc-ring qc-ring--6"><i></i></span>
+        <span class="qc-ring qc-ring--7"><i></i><i></i></span>
+        <span class="qc-ring qc-ring--8"><i></i></span>
+        <span class="qc-ring qc-ring--9"><i></i><i></i></span>
+        <span class="qc-ring qc-ring--10"><i></i></span>
+        <span class="qc-ring qc-ring--11"><i></i><i></i></span>
+        <span class="qc-ring qc-ring--12"><i></i></span>
+        <span class="qc-ring qc-ring--13"><i></i><i></i></span>
+        <span class="qc-ring qc-ring--14"><i></i></span>
+      </span>
       <span class="qc-arc qc-arc--c1"></span>
       <span class="qc-arc qc-arc--v1"></span>
       <span class="qc-arc qc-arc--v2"></span>
@@ -2543,6 +3132,7 @@
       <div class="qc-meta-sub" id="qcore-sub">Neural engine ready</div>
     </div>
     <div class="qc-conduit" aria-hidden="true"></div>
+    <div class="qc-meta-model" id="qcore-model" aria-live="off">MODEL · AUTO ROUTING</div>
   </div>
 
   <!-- ══ TOP SYSTEM STATUS BAR ══ -->
@@ -2679,6 +3269,9 @@
   <div class="card q-command-card">
 <h2>Type a command or question. Enter to submit. Shift+Enter for new line.</h2>
 
+    <!-- Conversation: user commands + Jarvis replies as chat bubbles -->
+    <div id="chat-log" class="chat-log" aria-live="polite" aria-label="Conversation with Jarvis"></div>
+
     <div class="cmd-bar-wrap">
       <textarea id="cmd" placeholder="Type a command or question..."></textarea>
       <div class="cmd-waveform" aria-hidden="true"></div>
@@ -2735,11 +3328,11 @@
 
   </div>
 
-  <!-- ══ TASK QUEUE ══ -->
+  <!-- ══ LIVE TASKS (right-side panel) ══ -->
   <div class="card q-task-card">
     <div class="q-task-header">
-      <h3>Task Queue</h3>
-      <span class="q-task-badge">— 4 ↻</span>
+      <h3>LIVE TASKS</h3>
+      <span class="q-task-badge" id="lt-active-count">0 ACTIVE</span>
     </div>
     <div id="task-list" class="task-list"></div>
   </div>
@@ -3323,7 +3916,10 @@
 </div>
   </div>
 
-
+<!-- Task Detail Overlay (clicked Live Task card interface) -->
+<div id="lt-overlay" class="lt-overlay hidden">
+  <div class="lt-dialog" id="lt-dlg"></div>
+</div>
 
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
@@ -3363,17 +3959,70 @@ document.getElementById("cmd").addEventListener("keydown", function(e) {
   }
 });
 
+// ── Conversation chat helpers ────────────────────────────────────────────────
+const CHAT_HISTORY_MAX = 60;
+function _chatScroll(log) { log.scrollTop = log.scrollHeight; }
+
+function addChatMsg(role, text) {
+  const log = document.getElementById("chat-log");
+  if (!log || !text) return null;
+  while (log.children.length >= CHAT_HISTORY_MAX) log.removeChild(log.firstChild);
+  const el = document.createElement("div");
+  el.className = "chat-msg " + role;
+  el.textContent = text; // textContent → injection-safe
+  const t = document.createElement("span");
+  t.className = "chat-time";
+  t.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  el.appendChild(t);
+  log.appendChild(el);
+  _chatScroll(log);
+  return el;
+}
+
+function addChatThinking() {
+  const log = document.getElementById("chat-log");
+  if (!log) return null;
+  while (log.children.length >= CHAT_HISTORY_MAX) log.removeChild(log.firstChild);
+  const el = document.createElement("div");
+  el.className = "chat-msg jarvis thinking";
+  const dots = document.createElement("span");
+  dots.className = "tdots";
+  for (let i = 0; i < 3; i++) dots.appendChild(document.createElement("span"));
+  el.appendChild(dots);
+  log.appendChild(el);
+  _chatScroll(log);
+  return el;
+}
+
+function resolveChatThinking(el, text, isError) {
+  if (!el || !el.isConnected) { addChatMsg(isError ? "jarvis error" : "jarvis", text); return; }
+  el.classList.remove("thinking");
+  if (isError) el.classList.add("error");
+  el.textContent = text;
+  const t = document.createElement("span");
+  t.className = "chat-time";
+  t.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  el.appendChild(t);
+  const log = document.getElementById("chat-log");
+  if (log) _chatScroll(log);
+}
+
 // ── Core: Submit command(s) ──────────────────────────────────────────────────
 async function submitCommand() {
   if (isSubmitting) return;
   const text = document.getElementById("cmd").value;
   if (!text.trim()) {
-    showResponse("Please enter a command or question.");
+    addChatMsg("jarvis", "Please enter a command or question.");
     return;
   }
 
   isSubmitting = true;
   document.getElementById("execute-btn").disabled = true;
+
+  // Conversation feed: echo every submitted line as a user bubble (1:1 with the
+  // backend's per-line results handled below).
+  const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+  lines.forEach(l => addChatMsg("user", l));
 
   try {
     // Submit via the new task API
@@ -3385,73 +4034,51 @@ async function submitCommand() {
     const data = await res.json();
 
     if (data.status === "ok") {
-      // Show results — one entry per result line
-      let html = "";
-      // Split original text into lines to match each result to its line
-      const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+      // Conversational replies render as chat bubbles above the command bar;
+      // executable tasks render in the LIVE TASKS panel — no duplicate surfaces.
       for (let i = 0; i < data.results.length; i++) {
         const r = data.results[i];
         const lineText = i < lines.length ? lines[i] : text;
         if (r.action === "chat") {
-          // Route to AI chat
-          html += `<div class="entry">
-            <div class="label">You said:</div>
-            <div class="original">${escapeHtml(lineText)}</div>
-            <div class="label">Jarvis reframed:</div>
-            <div class="understood">Conversational question — routing to AI chat</div>
-          </div>`;
-          // Fire AI chat
+          // Conversational → AI reply appears in the conversation (typing indicator
+          // while waiting). No toast — this IS the reply surface now.
           const mode = ollamaMode;
           setOllamaWorking(true);
-          const chatRes = await fetch("/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: lineText, mode: mode })
-          });
-          const chatData = await chatRes.json();
-          updateRouterStatus(chatData.routing);
-          html += `<div class="entry">
-            <div class="label">Jarvis:</div>
-            <div class="reply">${escapeHtml(chatData.reply || chatData.message || "No response")}</div>
-          </div>`;
+          const bubble = addChatThinking();
+          try {
+            const chatRes = await fetch("/chat", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ message: lineText, mode: mode })
+            });
+            const chatData = await chatRes.json();
+            updateRouterStatus(chatData.routing);
+            resolveChatThinking(bubble, chatData.reply || chatData.message || "No response", false);
+          } catch (chatErr) {
+            resolveChatThinking(bubble, "Could not reach the AI service. Please try again.", true);
+          }
         } else if (r.action === "blocked") {
-          html += `<div class="entry">
-            <div class="label">You said:</div>
-            <div class="original">${escapeHtml(lineText)}</div>
-            <div class="label">Jarvis reframed:</div>
-            <div class="understood">${escapeHtml(r.message)}</div>
-            <div class="error">⛔ This action is blocked for safety.</div>
-          </div>`;
+          addChatMsg("jarvis error", r.message || "This action is blocked for safety.");
+        } else if (r.action === "error") {
+          addChatMsg("jarvis error", r.message || "Could not create the task.");
         } else if (r.action === "created") {
-          html += `<div class="entry">
-            <div class="label">You said:</div>
-            <div class="original">${escapeHtml(lineText)}</div>
-            <div class="label">Jarvis reframed:</div>
-            <div class="understood">${escapeHtml(r.message)}</div>
-          </div>`;
           if (r.status === "waiting_for_confirmation") {
             pendingConfirmTaskId = r.task_id;
             showConfirmDialog(r.message);
+            addChatMsg("jarvis", r.message || "Waiting for your confirmation — use Confirm or Cancel.");
           }
-        } else {
-          html += `<div class="entry">
-            <div class="label">You said:</div>
-            <div class="original">${escapeHtml(lineText)}</div>
-            <div class="label">Jarvis reframed:</div>
-            <div class="understood">${escapeHtml(r.message)}</div>
-          </div>`;
+          // Task progress/results appear in the LIVE TASKS panel automatically.
         }
       }
-      showResponse(html);
       document.getElementById("cmd").value = "";
     } else {
-      showResponse(`Error: ${escapeHtml(data.message || "Unknown error")}`);
+      addChatMsg("jarvis error", data.message || "Unknown error");
     }
 
     // Refresh task list
     refreshTasks();
   } catch (err) {
-    showResponse(`Error: ${escapeHtml(err.message || err)}`);
+    addChatMsg("jarvis error", `Error: ${err.message || err}`);
   } finally {
     setOllamaWorking(false);
     isSubmitting = false;
@@ -3471,57 +4098,270 @@ async function refreshTasks() {
   }
 }
 
+// Live Tasks status metadata (backend states only, no fake data)
+function _ltStatusMeta(status) {
+  switch (status || "") {
+    case "running": return { label: "Running", badge: "b-running", cls: "lt-running", active: true };
+    case "queued": return { label: "Queued", badge: "b-queued", cls: "lt-queued", active: true };
+    case "interpreting": return { label: "Interpreting", badge: "b-interpreting", cls: "lt-interpreting", active: true };
+    case "waiting_for_confirmation": return { label: "Confirm", badge: "b-waiting", cls: "lt-waiting", active: true };
+    case "completed": return { label: "Completed \u2713", badge: "b-completed", cls: "lt-completed", active: false };
+    case "partially_completed": return { label: "Partial", badge: "b-completed", cls: "lt-completed", active: false };
+    case "failed": return { label: "Failed", badge: "b-failed", cls: "lt-failed", active: false };
+    case "cancelled": return { label: "Cancelled", badge: "b-cancelled", cls: "lt-cancelled", active: false };
+    default: return { label: (status || "unknown").toUpperCase(), badge: "", cls: "", active: false };
+  }
+}
+
+// Short message for a card from the real backend fields
+function _ltMsg(task, meta) {
+  if (task.error) return { text: task.error, cls: "msg-error" };
+  if (task.result_summary) return { text: task.result_summary, cls: "msg-success" };
+  if (task.events && task.events.length) {
+    const last = task.events[task.events.length - 1];
+    if (last && last.message) return { text: last.message, cls: "" };
+  }
+  if (task.interpreted_command && meta.cls !== "lt-running") return { text: task.interpreted_command, cls: "" };
+  return { text: "", cls: "" };
+}
+
+function fmtLT(ms) {
+  if (ms == null || isNaN(ms)) return "";
+  ms = Math.max(0, ms);
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return s + "s";
+  const m = Math.floor(s / 60), ss = s % 60;
+  if (m < 60) return m + "m " + ss + "s";
+  const h = Math.floor(m / 60), mm = m % 60;
+  return h + "h " + mm + "m";
+}
+
+function _ltRank(status) {
+  switch (status || "") {
+    case "running": return 0;
+    case "interpreting": return 1;
+    case "queued": return 2;
+    case "waiting_for_confirmation": return 3;
+    case "completed":
+    case "partially_completed": return 4;
+    case "failed": return 5;
+    case "cancelled": return 6;
+    default: return 99;
+  }
+}
+
 function renderTasks(tasks) {
   const container = document.getElementById("task-list");
-  const card = container ? container.closest(".q-task-card") : null;
-  if (!tasks.length) {
-    if (container) {
-      container.innerHTML = '<div class="task-empty">No tasks yet</div>';
-      if (card) card.classList.add("is-empty");
-    }
+  if (!container) return;
+  const card = container.closest(".q-task-card");
+
+  // Dynamic active count — only non-final states
+  let active = 0;
+  (tasks || []).forEach(t => { if (_ltStatusMeta(t.status).active) active++; });
+  if (window.updateQuantumTaskState) window.updateQuantumTaskState(tasks || []);
+  const acEl = document.getElementById("lt-active-count");
+  if (acEl) acEl.textContent = active + " ACTIVE";
+
+  if (!tasks || !tasks.length) {
+    container.innerHTML = "";
+    if (card) card.classList.add("is-empty");
     return;
   }
   if (card) card.classList.remove("is-empty");
 
-  // Show only about 3 recent tasks, with internal scroll for more
-  const visibleTasks = tasks.slice(0, 3);
-  let html = "";
-  for (const t of visibleTasks) {
-    const statusClass = t.status.replace(/_/g, "_");
-    const statusLabel = t.status.replace(/_/g, " ").toUpperCase();
-    const isTerminal = ["completed", "partially_completed", "failed", "cancelled"].includes(t.status);
-    const isWaiting = t.status === "waiting_for_confirmation";
-    const isReframing = ["queued", "interpreting", "running"].includes(t.status);
-    const routeText = t.routing?.label || "";
-    const routeReason = t.routing?.reason || "";
-    const latestEvent = t.events && t.events.length ? t.events[t.events.length - 1] : null;
+  // Store latest data and sort: running on top, then queued sequence, finished last
+  const list = (tasks || []).filter(t => !t.hidden);
+  list.forEach(t => { _ltTaskMap[t.task_id] = t; });
+  list.sort((a, b) => {
+    const ra = _ltRank(a.status), rb = _ltRank(b.status);
+    if (ra !== rb) return ra - rb;
+    return String(a.created_at || "").localeCompare(String(b.created_at || ""));
+  });
 
-    html += `<div class="task-item ${statusClass}">
-      <div class="task-id">${escapeHtml(t.task_id.slice(0, 8))}</div>
-      <div class="task-input">
-        <div class="original"><span class="label">You said:</span> ${escapeHtml(t.original_input)}</div>
-        ${isReframing
-          ? `<div class="reframing">${escapeHtml(latestEvent?.message || "Preparing task")}${t.status === "running" ? '<span class="loading-dots" aria-label="loading"><span>.</span><span>.</span><span>.</span></span>' : ''}</div>`
-          : (t.interpreted_command ? `<div class="interpreted"><span class="label">Jarvis reframed:</span> ${escapeHtml(t.interpreted_command)}</div>` : "")}
-        ${routeText ? `<div class="task-result" title="${escapeHtml(routeReason)}" style="color:${t.routing?.execution === 'direct' ? '#55dfff' : '#f4cf63'};font-size:12px;">${escapeHtml(routeText)}</div>` : ""}
-        ${t.error ? `<div class="task-result" style="color:#f87171;">Error: ${escapeHtml(t.error)}</div>` : ""}
-        ${t.result_summary ? `<div class="task-result" style="color:#22c55e;">${escapeHtml(t.result_summary)}</div>` : ""}
-        ${t.step_results && t.step_results.length > 0 ? `<div class="task-result">${t.step_results.map(sr => {
-          const output = sr.output_summary ? ` → ${escapeHtml(sr.output_summary)}` : "";
-          const err = sr.error ? ` <span style="color:#f87171;">Error: ${escapeHtml(sr.error)}</span>` : "";
-          return `<div>${escapeHtml(sr.description)}${output}${err}</div>`;
-        }).join("")}</div>` : ""}
-      </div>
-      <div class="task-status status-${statusClass}">${statusLabel}</div>
-      <div class="task-actions">
-        ${isWaiting ? `<button class="btn btn-success btn-sm" onclick="confirmTaskById('${t.task_id}')">✓</button>
-          <button class="btn btn-danger btn-sm" onclick="cancelTask('${t.task_id}')">✗</button>` : ""}
-        ${!isTerminal && !isWaiting ? `<button class="btn btn-danger btn-sm" onclick="cancelTask('${t.task_id}')">✕</button>` : ""}
-      </div>
+  let html = "";
+  for (const t of list) {
+    const meta = _ltStatusMeta(t.status);
+    const msg = _ltMsg(t, meta);
+    const isWaiting = t.status === "waiting_for_confirmation";
+    const isTerminal = ["completed", "partially_completed", "failed", "cancelled"].includes(t.status);
+    const createdMs = t.created_at ? new Date(t.created_at).getTime() : null;
+    const endMs = t.completed_at ? new Date(t.completed_at).getTime() : null;
+    const showDetails = !!(t.step_results && t.step_results.length);
+
+    // spinner (inline; active states only)
+    let spinner = "";
+    if (meta.active) {
+      spinner = `<i class="lt-spinner ${meta.cls === "lt-waiting" ? "sp-amber" : ""}" aria-label="working"></i>`;
+    }
+
+    // running / active cards: sliding waves at the top
+    let waves = "";
+    if (meta.active) {
+      const pcls = (meta.cls === "lt-queued" || meta.cls === "lt-interpreting") ? "purple" : (meta.cls === "lt-waiting" ? "amber" : "");
+      waves = `<span class="lt-waves ${pcls}"><span class="w1"></span><span class="w2"></span><span class="w3"></span></span>`;
+    }
+
+    // details are shown in the clicked overlay; keep a compact inline fallback
+    let details = "";
+    if (showDetails) {
+      details = `<div class="lt-details">${t.step_results.map(sr => {
+        const out = sr.output_summary ? " \u2014 " + escapeHtml(sr.output_summary) : "";
+        const err = sr.error ? ` <span class="d-err">Error: ${escapeHtml(sr.error)}</span>` : "";
+        return `<div class="d-step">${escapeHtml(sr.description || "Step")}${out}${err}</div>`;
+      }).join("")}</div>`;
+    }
+
+    // elapsed / completed time from the real timestamps
+    let timeLabel = "\u2014";
+    let timeAttr = "";
+    if (isTerminal) {
+      timeLabel = fmtLT(endMs && createdMs ? endMs - createdMs : 0) || "\u2014";
+    } else if (meta.active && createdMs) {
+      timeAttr = ` data-ts="${createdMs}"`;
+      timeLabel = fmtLT(Date.now() - createdMs) || "\u2014";
+    }
+
+    const source = String(t.source || "").toLowerCase() === "telegram"
+      ? `<span class="lt-route">Source: Telegram</span>`
+      : "";
+    const route = t.routing && t.routing.label ? `<span class="lt-route">${escapeHtml(t.routing.label)}</span>` : "";
+
+    // row-2 action buttons — stopPropagation so they don't open the overlay
+    const stopper = "event.stopPropagation();";
+    let actions = "";
+    if (isWaiting) {
+      actions = `<span class="lt-actions">
+        <button class="lt-btn ok" onclick="${stopper} confirmTaskById('${t.task_id}')">Go</button>
+        <button class="lt-btn no" onclick="${stopper} cancelTask('${t.task_id}')">No</button>
+      </span>`;
+    } else if (!isTerminal) {
+      actions = `<span class="lt-actions"><button class="lt-btn no" onclick="${stopper} cancelTask('${t.task_id}')">&times;</button></span>`;
+    }
+
+    const expand = showDetails ? `<button class="lt-xp" onclick="${stopper} toggleTaskDetails(this)" title="Details">\u25BE</button>` : "";
+
+    // whole card clickable -> opens the detail overlay
+    html += `<div class="lt-card ${meta.cls}" data-task="${escapeHtml(t.task_id)}" onclick="openTaskModal('${t.task_id}')">
+      ${waves}
+      <div class="lt-row1"><span class="lt-text">${escapeHtml(t.original_input || t.task_id)}</span>${spinner}${expand}<span class="lt-badge ${meta.badge}">${meta.label}</span></div>
+      <div class="lt-row2">${msg.text ? `<span class="lt-msg ${msg.cls}">${escapeHtml(msg.text)}</span>` : ""}${actions}${source}${route}<span class="lt-time"><span class="lt-dot"></span><span${timeAttr}>${timeLabel}</span></span></div>
+      ${details}
     </div>`;
   }
   container.innerHTML = html;
+
+  // keep a live overlay in sync while it's open
+  if (_ltOpenTask && _ltTaskMap[_ltOpenTask]) renderTaskModal(_ltTaskMap[_ltOpenTask]);
 }
+
+// Keeps elapsed time ticking for active cards (real timestamps only)
+function toggleTaskDetails(btn) {
+  const d = btn.closest(".lt-card").querySelector(".lt-details");
+  if (!d) return;
+  d.classList.toggle("open");
+  btn.textContent = d.classList.contains("open") ? "\u25B4" : "\u25BE";
+}
+
+function ltTick() {
+  document.querySelectorAll(".lt-card .lt-time [data-ts]").forEach(el => {
+    const start = parseInt(el.getAttribute("data-ts"), 10) || 0;
+    el.textContent = fmtLT(Date.now() - start);
+  });
+}
+
+// ── Live Tasks detail overlay (clicked card interface) ──────────────────────
+let _ltOpenTask = null;   // task_id currently shown in the overlay
+const _ltTaskMap = {};    // task_id -> latest task object
+
+function openTaskModal(taskId) {
+  const t = _ltTaskMap[taskId] || null;
+  if (!t) return;
+  _ltOpenTask = taskId;
+  renderTaskModal(t);
+  const ov = document.getElementById("lt-overlay");
+  if (ov) ov.classList.remove("hidden");
+}
+
+function closeTaskModal() {
+  _ltOpenTask = null;
+  const ov = document.getElementById("lt-overlay");
+  if (ov) ov.classList.add("hidden");
+}
+
+// Build the detail view from REAL backend data (events, steps, result, error)
+function renderTaskModal(t) {
+  const body = document.getElementById("lt-dlg");
+  if (!body) return;
+  const meta = _ltStatusMeta(t.status);
+  const isTerminal = ["completed", "partially_completed", "failed", "cancelled"].includes(t.status);
+  const createdMs = t.created_at ? new Date(t.created_at).getTime() : null;
+  const endMs = t.completed_at ? new Date(t.completed_at).getTime() : null;
+
+  // live "now" banner with real latest event
+  let now = "";
+  if (meta.active) {
+    const pcls = meta.cls === "lt-waiting" ? "amber" : (meta.cls === "lt-queued" || meta.cls === "lt-interpreting") ? "purple" : "";
+    const last = t.events && t.events.length ? t.events[t.events.length - 1] : null;
+    const txt = last && last.message ? last.message : "Working\u2026";
+    now = `<div class="lt-now ${pcls}"><i class="lt-spinner ${meta.cls === "lt-waiting" ? "sp-amber" : ""}"></i><span>${escapeHtml(txt)}</span></div>`;
+  } else if (meta.cls === "lt-completed") {
+    now = `<div class="lt-now" style="background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.3);"><span class="lt-dlg-done">\u2713 Completed${t.result_summary ? " \u2014 " + escapeHtml(t.result_summary) : ""}</span></div>`;
+  } else if (meta.cls === "lt-failed") {
+    now = `<div class="lt-now" style="background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);"><span class="lt-dlg-fail">\u2717 Failed${t.error ? " \u2014 " + escapeHtml(t.error) : ""}</span></div>`;
+  } else if (meta.cls === "lt-cancelled") {
+    now = `<div class="lt-now" style="background:rgba(100,116,139,.08);border-color:rgba(100,116,139,.3);"><span class="lt-dlg-fail" style="color:#94a3b8;">Cancelled</span></div>`;
+  }
+
+  // step results — check / current / error per real step
+  let steps = "";
+  if (t.step_results && t.step_results.length) {
+    const rows = t.step_results.map(sr => {
+      const bad = !!sr.error || sr.success === false;
+      const markCls = bad ? "bad" : (isTerminal ? "ok" : "active");
+      const mark = bad ? "\u2717" : (isTerminal ? "\u2713" : "\u25CE");
+      const sub = sr.output_summary ? `<span class="lt-st-sub">${escapeHtml(sr.output_summary)}</span>` : "";
+      const err = sr.error ? `<span class="lt-st-err">${escapeHtml(sr.error)}</span>` : "";
+      return `<div class="lt-step ${markCls}"><span class="lt-st-mark">${mark}</span><span class="lt-st-txt">${escapeHtml(sr.description || "Step")}${sub}${err}</span></div>`;
+    }).join("");
+    steps = `<div class="lt-dlg-sec">Steps</div><div class="lt-steps">${rows}</div>`;
+  }
+
+  // real event activity timeline
+  let timeline = "";
+  if (t.events && t.events.length) {
+    const evs = t.events;
+    const items = evs.map((e, i) => {
+      const last = i === evs.length - 1;
+      let cls = "done";
+      if (!isTerminal && last) cls = "now";
+      else if (meta.cls === "lt-failed" && e.level === "error") cls = "err";
+      return `<div class="lt-tl-item ${cls}"><span class="lt-tl-dot"></span><span>${escapeHtml(e.message || e.type || "")}</span></div>`;
+    }).join("");
+    timeline = `<div class="lt-dlg-sec">Activity</div><div class="lt-timeline">${items}</div>`;
+  }
+
+  const elapsed = isTerminal
+    ? (endMs && createdMs ? fmtLT(endMs - createdMs) : "")
+    : (createdMs ? fmtLT(Date.now() - createdMs) : "");
+  const timeText = elapsed ? (isTerminal ? elapsed + " elapsed" : "elapsed " + elapsed) : "";
+  const routeText = t.routing && t.routing.label ? escapeHtml(t.routing.label) : "";
+  const sourceText = String(t.source || "").toLowerCase() === "telegram" ? "Source: Telegram" : "";
+
+  body.innerHTML = `
+    <button class="lt-dlg-close" onclick="closeTaskModal()" aria-label="Close">&times;</button>
+    <div class="lt-dlg-head"><span class="lt-dlg-title">${escapeHtml(t.original_input || t.task_id)}</span><span class="lt-dlg-badge ${meta.badge}">${meta.label}</span></div>
+    ${(sourceText || routeText) ? `<div class="lt-dlg-sub">${[sourceText, routeText].filter(Boolean).join(" · ")}</div>` : ""}
+    ${now}
+    ${steps}
+    ${timeline}
+    ${timeText ? `<div class="lt-dlg-time">${timeText}</div>` : ""}
+  `;
+}
+
+// Escape-dismiss the overlay
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") closeTaskModal();
+});
 
 // ── Task Actions ─────────────────────────────────────────────────────────────
 async function cancelTask(taskId) {
@@ -3581,15 +4421,16 @@ async function rejectTask() {
   hideConfirmDialog();
 }
 
-// ── Response Display ─────────────────────────────────────────────────────────
+// ── Response fallback (superseded by Live Tasks panel) ───────────────────────
 function showResponse(html) {
-  var area = document.getElementById("response-area");
-  var card = document.getElementById("q-response-card") || document.querySelector(".q-response-card");
-  if (area) {
-    area.innerHTML = html;
-    area.classList.remove("waiting");
-  }
-  if (card) card.classList.remove("collapsed");
+  // Task results now live in the right-side LIVE TASKS panel. This legacy helper
+  // forwards any remaining transient text to a toast so feedback is never lost.
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  const text = (div.textContent || "").replace(/\s+/g, " ").trim();
+  if (!text) return;
+  const isErr = /error|blocked|fail/i.test(html);
+  showGmailToast(text.slice(0, 240), isErr ? "error" : "info");
 }
 
 function escapeHtml(str) {
@@ -3779,7 +4620,9 @@ function resolveOllamaMode(text) {
 function applyOllamaModeAppearance(mode) {
   const core = document.getElementById("ollama-core");
   if (!core) return;
-  core.classList.remove("mode-auto","mode-light","mode-heavy","mode-medium","mode-api_key","mode-fast","mode-balanced","mode-coding","mode-quality","mode-deep");
+  // Strip ANY previous mode-<id> class (quick modes AND raw Ollama model ids
+  // alike) so picking a new model never leaves a stale sibling class behind.
+  Array.from(core.classList).forEach(c => { if (c.indexOf("mode-") === 0) core.classList.remove(c); });
   core.classList.add(mode === "api_key" ? "mode-light" : `mode-${mode}`);
   document.querySelectorAll("#ollama-menu button[data-mode]").forEach(button => button.classList.toggle("selected", button.dataset.mode === mode));
 }
@@ -3794,6 +4637,9 @@ function toggleOllamaMenu(event) {
 }
 async function selectOllamaMode(mode) {
   ollamaMode=mode;
+  /* Stamp BEFORE the POST: any /health response whose request started
+     earlier is stale and must never overwrite the newer user choice. */
+  OLLAMA_HEALTH.lastModeChangeAt = Date.now();
   const core=document.getElementById("ollama-core");
   applyOllamaModeAppearance(mode);
   if (mode === "api_key") {
@@ -3818,19 +4664,67 @@ function setOllamaWorking(working) {
   document.getElementById("ollama-core").classList.toggle("working", working);
   document.getElementById("router-status")?.classList.toggle("working", working);
 }
+/* Ollama status ownership: ONLY this function may mark ollama-core offline.
+   State comes exclusively from /health (the real Ollama/model health source).
+   A single delayed/failed request never flips the status - offline requires
+   OLLAMA_HEALTH.failThreshold consecutive definitive failures, while any
+   authoritative answer updates state immediately (real offline detection). */
+const OLLAMA_HEALTH = { inFlight: false, fails: 0, failThreshold: 2, timeoutMs: 12000,
+                        lastModeChangeAt: 0 };
 async function refreshOllamaStatus() {
+  if (OLLAMA_HEALTH.inFlight) return; /* single-flight: no overlapping checks */
+  OLLAMA_HEALTH.inFlight = true;
+  const healthReqStart = Date.now(); /* staleness stamp for mode adoption */
   const core=document.getElementById("ollama-core"), label=document.getElementById("ollama-connection");
+  let markOffline = false, offlineMsg = "";
   try {
-    const res=await fetch("/health"), data=await res.json(), connected=data.ollama==="running";
-    core.classList.toggle("offline",!connected);
-    if (data.active_mode) { ollamaMode = data.active_mode; applyOllamaModeAppearance(ollamaMode); }
+    let data = null;
+    if (typeof AbortController !== "undefined") {
+      const ctrl = new AbortController();
+      const killer = setTimeout(function(){ ctrl.abort(); }, OLLAMA_HEALTH.timeoutMs);
+      try {
+        const res = await fetch("/health", { cache: "no-store", signal: ctrl.signal });
+        data = await res.json();
+      } finally { clearTimeout(killer); }
+    } else {
+      const res = await fetch("/health", { cache: "no-store" });
+      data = await res.json();
+    }
+    const connected = data.ollama === "running";
+    if (connected) {
+      OLLAMA_HEALTH.fails = 0;
+    } else {
+      /* Definitive answer: backend itself reports Ollama unreachable */
+      OLLAMA_HEALTH.fails = OLLAMA_HEALTH.failThreshold;
+      markOffline = true;
+      offlineMsg = "Ollama offline";
+    }
+    core.classList.toggle("offline",markOffline);
+    if (data.active_mode && healthReqStart >= (OLLAMA_HEALTH.lastModeChangeAt || 0)) {
+      /* Fresh answer only: request started after the last explicit mode
+         change, so it reflects (or postdates) the user's latest choice. */
+      ollamaMode = data.active_mode; applyOllamaModeAppearance(ollamaMode);
+    }
     updateRouterStatus(data.router);
     const modeLabel = ollamaMode === "api_key" ? "API KEY" : ollamaMode.toUpperCase();
     label.textContent=connected?`Ollama connected · ${modeLabel}`:"Ollama offline";
     core.title=label.textContent;
     const system = data.system || {};
     document.body.classList.toggle("effects-low-power", document.hidden || Number(system.cpu_percent) > 85 || Number(system.ram_percent) > 88);
-  } catch(e) { core.classList.add("offline"); label.textContent="Ollama unavailable"; }
+  } catch(e) {
+    /* Transient failure (timeout/abort/network hiccup): tolerate ONE missed
+       check. Only consecutive failures beyond the threshold may mark Ollama
+       offline, so Gmail/UI load delaying a response never does. */
+    OLLAMA_HEALTH.fails++;
+    if (OLLAMA_HEALTH.fails >= OLLAMA_HEALTH.failThreshold) {
+      markOffline = true;
+      offlineMsg = offlineMsg || "Ollama unavailable";
+    }
+    core.classList.toggle("offline", markOffline);
+    if (markOffline) { label.textContent = offlineMsg; core.title = offlineMsg; }
+  } finally {
+    OLLAMA_HEALTH.inFlight = false;
+  }
 }
 async function loadModelList() {
   const container = document.getElementById("ollama-model-list");
@@ -3961,6 +4855,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initialiseVisualEffects();
   startPolling();
   startNotifPolling();
+  if (!window._ltTickInt) window._ltTickInt = setInterval(ltTick, 1000);
 });
 window.addEventListener("beforeunload", stopPolling);
 
@@ -3987,14 +4882,86 @@ function updateBehaviorSummary(style) {
 }
 
 // ── Gmail Monitor ──────────────────────────────────────────────────────────
-let gmailPollInterval = null;
+let gmailPollInterval = null; /* legacy handle - cadence now driven by GMAIL_POLL */
+
+/* Gmail polling coordinator:
+   - single-flight: at most one poll round in flight at any time
+   - timeout: every poll request is aborted after GMAIL_POLL.TIMEOUT_MS
+   - stale-drop: responses from superseded runs are discarded via runId
+   - backoff: failures double the next delay up to MAX_BACKOFF_MS
+   - hidden tab: automatic polls pause entirely, resume on visibilitychange
+   - manual refreshes (Check Now / Rescan / OAuth return) always run at once.
+   These requests share the backend with Jarvis commands, Telegram commands,
+   Ollama calls and LIVE TASK updates, so they must never pile up. */
+const GMAIL_POLL = {
+  inFlight: false, runId: 0, timer: null, failures: 0,
+  BASE_MS: 3000, SCAN_MS: 3000, OVERLAY_MS: 8000, IDLE_MS: 15000,
+  MAX_BACKOFF_MS: 60000, TIMEOUT_MS: 9000,
+};
+
+function _gmailNextDelayMs() {
+  if (GMAIL_POLL.failures > 0) {
+    return Math.min(GMAIL_POLL.MAX_BACKOFF_MS,
+                    GMAIL_POLL.BASE_MS * Math.pow(2, GMAIL_POLL.failures));
+  }
+  const overlayOpen = !document.getElementById('gmail-overlay').classList.contains('hidden');
+  if (window._checkStepsState ||
+      (window._gmailStatusCache && window._gmailStatusCache.scan_in_progress)) {
+    return GMAIL_POLL.SCAN_MS;
+  }
+  if (overlayOpen) return GMAIL_POLL.OVERLAY_MS;
+  return GMAIL_POLL.IDLE_MS;
+}
+
+function _gmailScheduleNext(immediate) {
+  if (GMAIL_POLL.timer) { clearTimeout(GMAIL_POLL.timer); GMAIL_POLL.timer = null; }
+  const delay = immediate ? 50 : _gmailNextDelayMs();
+  GMAIL_POLL.timer = setTimeout(function () {
+    GMAIL_POLL.timer = null; /* consumed - keeps resume logic accurate */
+    gmailRefresh();
+  }, delay);
+}
+
+async function _gmailFetchJSON(url, runId) {
+  if (typeof AbortController === 'undefined') {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (runId !== GMAIL_POLL.runId) return { __stale: true };
+    return await res.json();
+  }
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const killer = setTimeout(function () { timedOut = true; ctrl.abort(); },
+                            GMAIL_POLL.TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+    if (runId !== GMAIL_POLL.runId) return { __stale: true };
+    return await res.json();
+  } catch (err) {
+    if (timedOut) {
+      const e = new Error('gmail poll timed out after ' + GMAIL_POLL.TIMEOUT_MS + 'ms');
+      e.isTimeout = true;
+      throw e;
+    }
+    throw err;
+  } finally {
+    clearTimeout(killer);
+  }
+}
 
 // Check for Gmail OAuth callback results on page load
 document.addEventListener('DOMContentLoaded', function() {
   // Status polling belongs to the page, not the modal. This keeps the home
   // widget and the scan indicator accurate after the Operations Center closes.
   setTimeout(gmailRefresh, 250);
-  gmailPollInterval = setInterval(gmailRefresh, 2000);
+  // Automatic polls pause entirely while the tab is hidden (pending timer is
+  // cancelled too) and resume promptly when the tab becomes visible again.
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      if (GMAIL_POLL.timer) { clearTimeout(GMAIL_POLL.timer); GMAIL_POLL.timer = null; }
+    } else if (!GMAIL_POLL.inFlight) {
+      _gmailScheduleNext(true);
+    }
+  });
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.has('gmail')) {
     const result = urlParams.get('gmail');
@@ -4765,11 +5732,27 @@ function gmailSetPeriod(period) {
   el = document.getElementById('gmail-important-label'); if (el) el.textContent = lbl[0];
   el = document.getElementById('gmail-jd-label');        if (el) el.textContent = lbl[1];
   el = document.getElementById('gmail-drafts-label');    if (el) el.textContent = lbl[2];
-  // Fetch counts for the new period
-  gmailRefreshPeriodCounts();
+  // Fetch counts for the new period (manual switch -> immediate)
+  gmailRefreshPeriodCounts(true);
 }
 
-function gmailRefreshPeriodCounts() {
+/* Throttled: metric counts are cosmetic. Coalesce automatic bursts into at
+   most one request per 60s; explicit period switches bypass the throttle. */
+let _gmailCountsLastAt = 0, _gmailCountsTimer = null;
+function gmailRefreshPeriodCounts(forceNow) {
+  const now = Date.now();
+  if (!forceNow && now - _gmailCountsLastAt < 60000) {
+    if (_gmailCountsTimer) return;
+    _gmailCountsTimer = setTimeout(function () {
+      _gmailCountsTimer = null;
+      gmailRefreshPeriodCounts(true);
+    }, Math.max(50, 60000 - (now - _gmailCountsLastAt)));
+    return;
+  }
+  _gmailCountsLastAt = Date.now();
+  _gmailPeriodCountsFetch();
+}
+function _gmailPeriodCountsFetch() {
   fetch('/gmail/events?period=' + _gmailPeriod)
     .then(function(r) { return r.json(); })
     .then(function(d) {
@@ -4783,17 +5766,21 @@ function gmailRefreshPeriodCounts() {
     .catch(function() {});
 }
 
-async function gmailRefresh() {
+async function gmailRefresh(opts) {
+  opts = opts || {};
+  if (GMAIL_POLL.inFlight && !opts.force) return; /* never overlap identical polls */
+  if (document.hidden && !opts.force) return;     /* pause automatic polls while hidden */
+  GMAIL_POLL.inFlight = true;
+  const runId = ++GMAIL_POLL.runId;
   try {
-    const [statusRes, eventsRes, configRes] = await Promise.all([
-      fetch('/gmail/status'),
-      fetch('/gmail/events?period=' + _gmailPeriod),
-      fetch('/gmail/config')
-    ]);
-    const status = await statusRes.json();
+    const status = await _gmailFetchJSON('/gmail/status', runId);
+    if (runId !== GMAIL_POLL.runId || status.__stale) return;
     window._gmailStatusCache = status;
-    const events = await eventsRes.json();
-    const config = await configRes.json();
+    const events = await _gmailFetchJSON('/gmail/events?period=' + _gmailPeriod, runId);
+    if (runId !== GMAIL_POLL.runId || events.__stale) return;
+    const config = await _gmailFetchJSON('/gmail/config', runId);
+    if (runId !== GMAIL_POLL.runId || config.__stale) return;
+    GMAIL_POLL.failures = 0;
 
     // Always check for revoked token first — show reconnect banner regardless of connected state
     if (status.token_revoked) {
@@ -4899,11 +5886,16 @@ async function gmailRefresh() {
     // Update draft-only toggle
     document.getElementById('gmail-draft-only').checked = config.draft_only !== false;
 
-    // Update behavior summary from stored rules
+    // Update behavior summary from stored rules (throttled: rules rarely change)
     if (status.connected) {
-      fetch('/gmail/prompt-rules').then(r => r.json()).then(d => {
-        if (d.status === 'ok') updateBehaviorSummary(d.rules.reply_style || 'professional');
-      }).catch(() => {});
+      const _nowRules = Date.now();
+      if (!gmailRefresh._rulesFetchedAt) gmailRefresh._rulesFetchedAt = 0;
+      if (_nowRules - gmailRefresh._rulesFetchedAt >= 60000) {
+        gmailRefresh._rulesFetchedAt = _nowRules;
+        fetch('/gmail/prompt-rules').then(r => r.json()).then(d => {
+          if (d.status === 'ok') updateBehaviorSummary(d.rules.reply_style || 'professional');
+        }).catch(() => {});
+      }
     }
 
     // Show poll health warning if monitoring is active but polling degraded
@@ -5026,7 +6018,15 @@ async function gmailRefresh() {
 
     // Update events
     renderGmailEvents(events.events || []);
-  } catch(e) { /* poll retries */ }
+  } catch (e) {
+    /* Backoff: each failed/timed-out round doubles the wait before the next
+       automatic poll so a slow backend is never hammered. */
+    GMAIL_POLL.failures = Math.min(GMAIL_POLL.failures + 1, 6);
+    console.warn('[gmail] status poll failed:', e && e.message ? e.message : e);
+  } finally {
+    GMAIL_POLL.inFlight = false;
+    _gmailScheduleNext(false);
+  }
 }
 
 function fmtEventTime(raw) {
@@ -6388,32 +7388,112 @@ document.addEventListener('DOMContentLoaded', () => {
   var core = byId("qc-core");
   if (!core) return;
   var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)");
+  var realTaskState = { active:0, running:0, queued:0, statuses:{} };
 
+  var MODE_THEME = { auto:"", balanced:"", medium:"", light:"cyan", fast:"cyan",
+                     heavy:"indigo", coding:"emerald", quality:"amethyst",
+                     deep:"rose", api_key:"cyan" };
+  /* Model→palette resolution: curated quick-modes first, then engine-family
+     matching, then a stable hash so every raw Ollama model gets its own hue. */
+  var MODEL_FAMILY_THEME = [["coder","cyan"],["code","cyan"],["gemma","amethyst"],
+    ["qwen","emerald"],["llama","amber"],["mistral","rose"],["mixtral","rose"],
+    ["deepseek","azure"],["phi","azure"],["claude","magenta"],["gpt","magenta"],
+    ["grok","lime"]];
+  var HASH_THEMES = ["cyan","indigo","emerald","amethyst","rose","amber","azure","lime","magenta"];
+  function themeForId(id) {
+    if (!id) return "";
+    if (Object.prototype.hasOwnProperty.call(MODE_THEME, id)) return MODE_THEME[id];
+    var low = id.toLowerCase(), i;
+    for (i = 0; i < MODEL_FAMILY_THEME.length; i++)
+      if (low.indexOf(MODEL_FAMILY_THEME[i][0]) > -1) return MODEL_FAMILY_THEME[i][1];
+    var h = 0;
+    for (i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    return HASH_THEMES[h % HASH_THEMES.length];
+  }
   function readStates() {
     var execBtn = byId("execute-btn"), o = byId("ollama-core"), vBtn = byId("voice-btn"),
         mon = byId("monitor-live"), gmail = byId("gmail-home-widget");
+    var mode = "";
+    if (o && o.classList) {
+      /* Any mode-<id> class counts — quick modes AND raw Ollama model ids
+         (selectOllamaMode stamps mode-gemma3:12b etc.). Last match wins. */
+      for (var i = 0; i < o.classList.length; i++) {
+        var m = /^mode-(.+)$/.exec(o.classList[i]);
+        if (m) { mode = m[1]; }
+      }
+    }
     return {
       executing: !!(execBtn && execBtn.disabled),
       thinking: !!(o && o.classList.contains("working")),
       listening: !!(vBtn && vBtn.classList.contains("recording")),
       monitoring: !!(mon && !mon.classList.contains("hidden")),
-      gmailScan: !!(gmail && gmail.classList.contains("is-scanning"))
+      gmailScan: !!(gmail && gmail.classList.contains("is-scanning")),
+      activeTasks: realTaskState.active,
+      runningTasks: realTaskState.running,
+      queuedTasks: realTaskState.queued,
+      theme: themeForId(mode),
+      modeId: mode,
+      offline: !!(o && o.classList && o.classList.contains("offline"))
     };
   }
 
-  var last = { executing: false, thinking: false, listening: false, monitoring: false, gmailScan: false };
+  var last = { executing: false, thinking: false, listening: false, monitoring: false, gmailScan: false,
+               activeTasks:0, runningTasks:0, queuedTasks:0 };
+  var lastTheme = null;
+  var lastModelLabel = "";
+  var themeShiftTimer = null;
+  var card = core.parentElement; /* .qc-core-card hosts the shared accent variables */
   function sync() {
     var s = readStates();
     var activeMonitor = s.monitoring || s.gmailScan;
     var changed = s.executing !== last.executing || s.thinking !== last.thinking ||
-                  s.listening !== last.listening || activeMonitor !== (last.monitoring || last.gmailScan);
+                  s.listening !== last.listening || activeMonitor !== (last.monitoring || last.gmailScan) ||
+                  s.activeTasks !== last.activeTasks || s.runningTasks !== last.runningTasks ||
+                  s.queuedTasks !== last.queuedTasks;
     last = s;
-    core.classList.toggle("is-thinking", s.executing || s.thinking);
+    core.classList.toggle("is-thinking", s.executing || s.thinking || s.runningTasks > 0);
     core.classList.toggle("is-listening", s.listening);
     core.classList.toggle("is-monitoring", activeMonitor);
+    core.classList.toggle("has-running-tasks", s.runningTasks > 0);
+    core.classList.toggle("has-queued-tasks", s.queuedTasks > 0);
+    core.setAttribute("data-task-load", String(Math.min(4, s.activeTasks)));
+    /* Model-aware palette: mirrors the ollama-core mode class onto qc-theme-* */
+    var theme = s.offline ? "slate" : s.theme;
+    if (theme !== lastTheme && card) {
+      /* First sync only records the baseline (no flash on page load); every
+         real transition after that gets the full palette swap + rephase.
+         Runs for EVERY transition - including back to the default (Auto)
+         palette - so the core visibly reacts to both switch directions. */
+      if (lastTheme !== null) {
+        if (lastTheme) card.classList.remove("qc-theme-" + lastTheme);
+        if (theme) card.classList.add("qc-theme-" + theme);
+        /* Multiverse rephase: full-core brightness flash while the palette
+           cross-fades + an expanding shockwave ring from the nucleus.
+           Timer is cancelled+restarted per transition so a stale removal
+           from the previous shift can't cut the new flash short. */
+        if (themeShiftTimer) { clearTimeout(themeShiftTimer); themeShiftTimer = null; }
+        card.classList.remove("theme-shift");
+        void card.offsetWidth;
+        card.classList.add("theme-shift");
+        themeShiftTimer = setTimeout(function () {
+          card.classList.remove("theme-shift"); themeShiftTimer = null;
+        }, 1100);
+      }
+      lastTheme = theme;
+      document.body.setAttribute("data-qtheme", theme || "default");
+    }
+    /* Live model readout under the chamber (both layouts) */
+    var modelLabel = "MODEL · " + (s.modeId ? s.modeId.toUpperCase() : "AUTO ROUTING");
+    if (modelLabel !== lastModelLabel) {
+      lastModelLabel = modelLabel;
+      var mEl = byId("qcore-model");
+      if (mEl) mEl.textContent = modelLabel;
+    }
     if (!changed) return;
     var label = "STANDBY", sub = "Neural engine ready";
-    if (s.executing) { label = "EXECUTING"; sub = "Running requested task"; }
+    if (s.runningTasks > 0) { label = "EXECUTING"; sub = s.runningTasks + " active execution" + (s.runningTasks === 1 ? "" : "s"); }
+    else if (s.queuedTasks > 0) { label = "QUEUED"; sub = s.queuedTasks + " thread" + (s.queuedTasks === 1 ? "" : "s") + " preparing"; }
+    else if (s.executing) { label = "EXECUTING"; sub = "Running requested task"; }
     else if (s.thinking) { label = "THINKING"; sub = "Interpreting request"; }
     else if (s.listening) { label = "LISTENING"; sub = "Voice input active"; }
     else if (s.monitoring) { label = "MONITORING"; sub = s.gmailScan ? "Scanning Gmail" : "Activity monitor active"; }
@@ -6434,21 +7514,27 @@ document.addEventListener('DOMContentLoaded', () => {
     void core.offsetWidth;
     core.classList.add(type === "error" ? "pulse-error" : "pulse-success");
   }
-  var taskList = byId("task-list");
-  if (taskList && window.MutationObserver) {
-    new MutationObserver(function (muts) {
-      for (var m = 0; m < muts.length; m++) {
-        for (var k = 0; k < muts[m].addedNodes.length; k++) {
-          var el = muts[m].addedNodes[k];
-          if (!el || el.nodeType !== 1) continue;
-          var item = el.classList && el.classList.contains("task-item") ? el : (el.querySelector ? el.querySelector(".task-item") : null);
-          if (!item) continue;
-          if (item.classList.contains("failed") || item.classList.contains("cancelled")) pulse("error");
-          else if (item.classList.contains("completed") || item.classList.contains("partially_completed")) pulse("success");
-        }
+  window.updateQuantumTaskState = function (tasks) {
+    var next = { active:0, running:0, queued:0, statuses:{} };
+    (tasks || []).forEach(function (task) {
+      if (!task || task.hidden) return;
+      var status = String(task.status || "");
+      next.statuses[task.task_id] = status;
+      if (["running","queued","interpreting","waiting_for_confirmation"].indexOf(status) >= 0) next.active++;
+      if (status === "running") next.running++;
+      if (["queued","interpreting","waiting_for_confirmation"].indexOf(status) >= 0) next.queued++;
+      var before = realTaskState.statuses[task.task_id];
+      if (before && before !== status) {
+        if (status === "completed" || status === "partially_completed") pulse("success");
+        else if (status === "failed" || status === "cancelled") pulse("error");
       }
-    }).observe(taskList, { childList: true, subtree: true });
-  }
+    });
+    realTaskState = next;
+    sync();
+  };
+  function syncVisibility() { document.body.classList.toggle("quantum-paused", document.hidden); }
+  document.addEventListener("visibilitychange", syncVisibility);
+  syncVisibility();
 
   // Ambient quantum dust (single lightweight canvas; pauses when hidden)
   var bg = byId("q-bg-canvas");

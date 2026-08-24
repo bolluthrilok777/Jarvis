@@ -112,18 +112,38 @@ def _exec_calculator_calculate(expression: str, use_gui: bool = False) -> dict:
         if use_gui:
             gui_result = drive_calculator_gui(expression)
             out["gui_ok"] = bool(gui_result.get("gui_ok"))
-            if gui_result.get("warning"):
-                out["warning"] = gui_result["warning"]
+            if not out["gui_ok"]:
+                warning = gui_result.get("warning", "Calculator did not confirm the displayed result.")
+                # Retain the computed value for troubleshooting, but a GUI
+                # request is incomplete until Calculator displays the value.
+                out.update({
+                    "status": "error",
+                    "warning": warning,
+                    "message": f"Calculator was not updated: {warning}",
+                })
+            elif gui_result.get("displayed_result") is not None:
+                out["displayed_result"] = gui_result["displayed_result"]
         return out
     except Exception as exc:
         return {"status": "error", "message": str(exc)}
 
 
 def _exec_browser_open(url: str) -> dict:
+    import subprocess
     safe_url = url.strip()
     if not safe_url.startswith(("http://", "https://")):
         safe_url = "https://" + safe_url
-    webbrowser.open(safe_url)
+    # Use 'start' shell command on Windows to open URL in the default browser
+    # and force it to the foreground (unlike webbrowser.open which can open behind)
+    try:
+        subprocess.Popen(
+            f'start "" "{safe_url}"',
+            shell=True,
+        )
+    except Exception:
+        # Fallback to webbrowser if shell start fails
+        import webbrowser
+        webbrowser.open(safe_url)
     return {"status": "done", "url": safe_url}
 
 
@@ -149,7 +169,14 @@ def _exec_browser_youtube_play_latest(query: str) -> dict:
         response.raise_for_status()
         video_ids = re.findall(r'"videoId":"([A-Za-z0-9_-]{11})"', response.text)
         if not video_ids:
-            return {"status": "error", "message": "No recent YouTube result was found."}
+            # YouTube sometimes returns a minimal/anti-bot page without ids.
+            # The date-filtered search page is a useful truthful fallback.
+            webbrowser.open(search_url)
+            return {
+                "status": "done", "query": query, "url": search_url,
+                "warning": "YouTube did not expose a playable result directly.",
+                "message": "Opened YouTube results sorted by newest upload.",
+            }
         watch_url = f"https://www.youtube.com/watch?v={video_ids[0]}&autoplay=1"
         webbrowser.open(watch_url)
         return {"status": "done", "query": query, "url": watch_url,
@@ -266,11 +293,66 @@ def _exec_notepad_type(text: str) -> dict:
         return {"status": "error", "message": str(exc)}
 
 
-def _exec_notepad_save() -> dict:
+def _exec_notepad_save(folder_name: str, file_name: str) -> dict:
+    """Save the active Notepad tab to an allowlisted folder using Save As."""
     try:
         import pyautogui
-        pyautogui.hotkey("ctrl", "s")
-        return {"status": "done", "message": "Saved active document."}
+        import pygetwindow as gw
+        import time
+        from jarvis_core.config import ALLOWED_FOLDERS
+
+        folder = folder_name.lower().strip()
+        if folder not in ALLOWED_FOLDERS:
+            return {"status": "error", "message": f"Folder not in allowlist: {folder}"}
+
+        # A filename must never be allowed to escape the requested folder.
+        safe_name = file_name.strip().strip('"').strip()
+        if not safe_name or any(char in safe_name for char in '<>:"/\\|?*'):
+            return {"status": "error", "message": "The requested filename is invalid."}
+        if safe_name in {".", ".."} or safe_name.rstrip(". ") != safe_name:
+            return {"status": "error", "message": "The requested filename is invalid."}
+        if not Path(safe_name).suffix:
+            safe_name += ".txt"
+
+        target = Path(ALLOWED_FOLDERS[folder]) / safe_name
+        if target.exists():
+            return {
+                "status": "error",
+                "message": f"File already exists and will not be overwritten: {target}",
+            }
+
+        active = gw.getActiveWindow()
+        if not active or "notepad" not in getattr(active, "title", "").lower():
+            return {"status": "error", "message": "Notepad is not the focused window."}
+
+        # Ctrl+Shift+S forces the Save As dialog even if a tab was previously saved.
+        pyautogui.hotkey("ctrl", "shift", "s")
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            save_windows = gw.getWindowsWithTitle("Save As")
+            if save_windows:
+                break
+            time.sleep(0.2)
+        else:
+            return {"status": "error", "message": "Notepad's Save As dialog did not open."}
+
+        save_window = save_windows[0]
+        if getattr(save_window, "isMinimized", False):
+            save_window.restore()
+        save_window.activate()
+        time.sleep(0.2)
+        # In the standard Windows dialog Alt+N focuses File name. Passing the
+        # full allowed path avoids relying on the dialog's current directory.
+        pyautogui.hotkey("alt", "n")
+        pyautogui.write(str(target), interval=0.02)
+        pyautogui.press("enter")
+
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            if target.exists():
+                return {"status": "done", "message": f"Saved document to {target}", "file": str(target)}
+            time.sleep(0.2)
+        return {"status": "error", "message": f"Notepad did not save the document to {target}."}
     except Exception as exc:
         return {"status": "error", "message": str(exc)}
 
@@ -370,6 +452,36 @@ def _exec_system_status() -> dict:
     data["summary"] = "\n".join(lines)
     data["panel"] = "system_status"   # ← tells the UI to open the live monitor
     return data
+
+
+def _exec_gmail_report(request: str) -> dict:
+    from jarvis_core.gmail_reporting import run_gmail_report
+
+    return run_gmail_report(request)
+
+
+def _exec_gmail_details(category: str, start_date: str, end_date: str) -> dict:
+    from jarvis_core.gmail_reporting import get_gmail_details
+
+    return get_gmail_details(category, start_date, end_date)
+
+
+def _exec_gmail_draft_view(draft_id: str) -> dict:
+    from jarvis_core.gmail_reporting import view_gmail_draft
+
+    return view_gmail_draft(draft_id)
+
+
+def _exec_gmail_draft_keep(draft_id: str) -> dict:
+    from jarvis_core.gmail_reporting import keep_gmail_draft
+
+    return keep_gmail_draft(draft_id)
+
+
+def _exec_gmail_draft_send(draft_id: str) -> dict:
+    from jarvis_core.gmail_reporting import send_existing_gmail_draft
+
+    return send_existing_gmail_draft(draft_id)
 
 
 
@@ -511,8 +623,8 @@ registry.register(SkillDefinition(
 
 registry.register(SkillDefinition(
     skill_id="notepad.save",
-    description="Save the active Notepad file (requires confirmation)",
-    required_params=[],
+    description="Save the active Notepad file to an allowlisted folder (requires confirmation)",
+    required_params=["folder_name", "file_name"],
     optional_params=[],
     requires_confirmation=True,
     executor=_exec_notepad_save,
@@ -570,4 +682,49 @@ registry.register(SkillDefinition(
     optional_params=[],
     requires_confirmation=False,
     executor=_exec_system_screenshot,
+))
+
+registry.register(SkillDefinition(
+    skill_id="gmail.report",
+    description="Scan an exact Gmail date range and build an authoritative report",
+    required_params=["request"],
+    optional_params=[],
+    requires_confirmation=False,
+    executor=_exec_gmail_report,
+))
+
+registry.register(SkillDefinition(
+    skill_id="gmail.details",
+    description="Show safe stored Gmail report details",
+    required_params=["category", "start_date", "end_date"],
+    optional_params=[],
+    requires_confirmation=False,
+    executor=_exec_gmail_details,
+))
+
+registry.register(SkillDefinition(
+    skill_id="gmail.draft.view",
+    description="View an existing Gmail draft",
+    required_params=["draft_id"],
+    optional_params=[],
+    requires_confirmation=False,
+    executor=_exec_gmail_draft_view,
+))
+
+registry.register(SkillDefinition(
+    skill_id="gmail.draft.keep",
+    description="Keep an existing Gmail draft without sending it",
+    required_params=["draft_id"],
+    optional_params=[],
+    requires_confirmation=False,
+    executor=_exec_gmail_draft_keep,
+))
+
+registry.register(SkillDefinition(
+    skill_id="gmail.draft.send",
+    description="Send one existing Gmail draft after explicit confirmation",
+    required_params=["draft_id"],
+    optional_params=[],
+    requires_confirmation=True,
+    executor=_exec_gmail_draft_send,
 ))
