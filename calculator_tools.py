@@ -4,16 +4,27 @@ calculator_tools.py — Safe calculator evaluator and Windows Calculator GUI aut
 Two public functions:
   safe_calculate(expression)  — pure AST-based evaluation, no GUI.
   drive_calculator_gui(expr)  — type expression into Calculator window and press Enter.
+
+GUI automation is Windows-desktop-only. On headless nodes (Linux cloud VM)
+drive_calculator_gui returns a structured ``unsupported_on_this_node``
+response and the pure evaluator keeps working.
 """
 import ast
 import ctypes
-import ctypes.wintypes
 import math
 import operator
 import re
 import subprocess
+import sys
 import time as _time
 from typing import Any, Dict, List, Optional, Union
+
+from jarvis_core.desktop_capabilities import DESKTOP_AVAILABLE, IS_WINDOWS
+
+if IS_WINDOWS:
+    # ctypes.wintypes only exists on Windows; importing it unconditionally
+    # would crash this module (and everything that imports it) on Linux.
+    import ctypes.wintypes
 
 ALLOWED_OPERATORS = {
     ast.Add: operator.add,
@@ -322,6 +333,21 @@ def drive_calculator_gui(expression: str) -> Dict[str, Any]:
     def failed(reason: str) -> Dict[str, Any]:
         return {"status": "done", "gui_ok": False,
                 "warning": f"Calculator GUI automation failed: {reason}"}
+
+    # Headless nodes have no Calculator window to drive. The pure evaluator
+    # above still returned the correct numeric result; report cleanly here.
+    if not DESKTOP_AVAILABLE or not IS_WINDOWS:
+        refusal = {
+            "status": "unsupported_on_this_node",
+            "feature": "calculator.gui",
+            "message": (
+                "Calculator GUI automation requires a Windows desktop "
+                "session, which is not available on this node. Use plain "
+                "calculate instead; all other features remain operational."
+            ),
+            "desktop_available": False,
+        }
+        return refusal
 
     expr = _normalize_for_gui(expression)
     if not expr:

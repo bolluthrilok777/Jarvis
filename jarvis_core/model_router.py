@@ -12,12 +12,13 @@ import re
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from jarvis_core.config import CONFIG_DIR
 from pathlib import Path
 from typing import Optional
 
 
-BASE_DIR = Path("C:/Project Opus")
-SETTINGS_FILE = BASE_DIR / "config" / "model_router.json"
+BASE_DIR = CONFIG_DIR.parent
+SETTINGS_FILE = CONFIG_DIR / "model_router.json"
 
 MODEL_PROFILES = {
     "fast": {"model": "gemma2:2b", "label": "FAST · GEMMA2 2B"},

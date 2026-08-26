@@ -57,6 +57,7 @@ from jarvis_core.gmail_service import (
 )
 from jarvis_core.jd_saver import list_saved_jd_files
 from jarvis_core.draft_writer import list_drafts
+from jarvis_core.config import NOTES_DIR as JARVIS_NOTES_DIR, JOBS_JD_DIR, GMAIL_DRAFTS_DIR, CONFIG_DIR as JARVIS_CONFIG_DIR
 from jarvis_core.gmail_service import (
     list_gmail_drafts,
     get_draft_scope_available,
@@ -357,9 +358,10 @@ def gmail_connect():
         }
 
     if creds_type == "installed":
+        from jarvis_core.gmail_service import EXPECTED_REDIRECT_URI
         return {
             "status": "error",
-            "message": "Please upload Web application OAuth credentials with redirect URI http://127.0.0.1:8000/gmail/oauth/callback"
+            "message": f"Please upload Web application OAuth credentials with redirect URI {EXPECTED_REDIRECT_URI}"
         }
 
     # Generate authorization URL
@@ -406,9 +408,10 @@ def gmail_oauth_start():
         }
 
     if creds_type == "installed":
+        from jarvis_core.gmail_service import EXPECTED_REDIRECT_URI as _EXPECTED_URI
         return {
             "status": "error",
-            "message": "Please upload Web application OAuth credentials with redirect URI http://127.0.0.1:8000/gmail/oauth/callback"
+            "message": f"Please upload Web application OAuth credentials with redirect URI {_EXPECTED_URI}"
         }
 
     auth_url, error_msg = get_authorization_url()
@@ -473,13 +476,13 @@ def gmail_oauth_callback(
     if actual_error:
         logger.info("OAuth code received: no (error from Google)")
         logger.warning("OAuth callback error from Google (safe): access denied or user cancelled")
-        return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=error&reason=google_denied")
+        return RedirectResponse(url="/ui?gmail=error&reason=google_denied")
 
     # If no code provided
     if not actual_code:
         logger.info("OAuth code received: no")
         logger.warning("OAuth callback missing authorization code")
-        return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=error&reason=missing_code")
+        return RedirectResponse(url="/ui?gmail=error&reason=missing_code")
 
     logger.info("OAuth code received: yes")
     logger.info("Token exchange started")
@@ -497,7 +500,7 @@ def gmail_oauth_callback(
         logger.info("Token saved: yes")
         logger.info("Token file exists: yes")
         logger.info("Redirect target: /ui?gmail=connected")
-        return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=connected")
+        return RedirectResponse(url="/ui?gmail=connected")
     else:
         logger.info("Token exchange failure")
         logger.info("Token saved: no")
@@ -506,11 +509,11 @@ def gmail_oauth_callback(
         
         # Handle specific error cases with user-friendly redirects
         if "invalid_grant" in message.lower() or "invalid authorization code" in message.lower():
-            return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=error&reason=code_expired")
+            return RedirectResponse(url="/ui?gmail=error&reason=code_expired")
         elif "redirect_uri_mismatch" in message.lower():
-            return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=error&reason=uri_mismatch") 
+            return RedirectResponse(url="/ui?gmail=error&reason=uri_mismatch")
         else:
-            return RedirectResponse(url="http://127.0.0.1:8000/ui?gmail=error&reason=token_exchange_failed")
+            return RedirectResponse(url="/ui?gmail=error&reason=token_exchange_failed")
 
 
 # ── Credentials Management ────────────────────────────────────────────────
@@ -633,7 +636,7 @@ def _count_events_for_period(period: str = "today") -> dict:
     Returns safe counts — no raw email content.
     """
     from datetime import date, timedelta
-    notes_dir = Path("C:/Jarvis/notes")
+    notes_dir = JARVIS_NOTES_DIR
     today = date.today()
     days_back = {"week": 7, "month": 30}.get(period, 1)
 
@@ -704,7 +707,7 @@ def gmail_events(period: str = "today"):
     Never exposes tokens or secrets.
     """
     from datetime import date, timedelta
-    notes_dir = Path("C:/Jarvis/notes")
+    notes_dir = JARVIS_NOTES_DIR
     today = date.today()
     days_back = {"week": 7, "month": 30}.get(period, 1)
 
@@ -743,7 +746,7 @@ def gmail_events(period: str = "today"):
 def gmail_jd_files():
     """Return list of saved JD files with safe metadata only."""
     from pathlib import Path as _Path
-    _jd_abs = _Path("C:/Jarvis/jobs_jd")
+    _jd_abs = JOBS_JD_DIR
     files = list_saved_jd_files(save_dir=_jd_abs) if _jd_abs.exists() else []
     safe_files = [
         {
@@ -758,14 +761,14 @@ def gmail_jd_files():
         "status": "ok",
         "count": len(safe_files),
         "files": safe_files,
-        "folder": "C:\\Jarvis\\jobs_jd",
+        "folder": str(JOBS_JD_DIR),
     }
 
 
 @router.get("/jd-file")
 def gmail_jd_file(path: str):
     """Open a saved JD only when its resolved path remains in the JD folder."""
-    jd_root = Path("C:/Jarvis/jobs_jd").resolve()
+    jd_root = JOBS_JD_DIR.resolve()
     try:
         target = (jd_root / path).resolve()
         target.relative_to(jd_root)
@@ -805,7 +808,7 @@ def gmail_drafts():
     # fall back to direct filesystem read if helper returns empty to avoid CWD issues.
     local_files_raw = list_drafts()
     if not local_files_raw:
-        _local_drafts_dir = Path("C:/Jarvis/notes/gmail_drafts")
+        _local_drafts_dir = GMAIL_DRAFTS_DIR
         if _local_drafts_dir.exists():
             from datetime import datetime as _dt
             for _f in sorted(_local_drafts_dir.iterdir(), reverse=True):
@@ -842,7 +845,7 @@ def gmail_drafts():
         # Local backup drafts
         "local_drafts": safe_local,
         "local_backup_count": len(safe_local),
-        "local_folder": "C:\\Jarvis\\notes\\gmail_drafts",
+        "local_folder": str(GMAIL_DRAFTS_DIR),
         # Diagnostics
         "connected_account_email": account_email or "",
         "draft_scope_available": draft_scope_ok,
@@ -860,7 +863,7 @@ def gmail_log(lines: int = 100):
     import re as _re
     from datetime import date, timedelta
 
-    notes_dir = Path("C:/Jarvis/notes")
+    notes_dir = JARVIS_NOTES_DIR
     today_str = date.today().isoformat()
     log_path = notes_dir / f"gmail_monitor_log_{today_str}.jsonl"
 
@@ -1056,7 +1059,7 @@ def get_prompt_rules():
     
     Returns default values if config file doesn't exist.
     """
-    config_path = Path("C:/Jarvis/config/gmail_prompt_rules.json")
+    config_path = JARVIS_CONFIG_DIR / "gmail_prompt_rules.json"
     
     # Default configuration
     defaults = {
@@ -1096,10 +1099,10 @@ def get_prompt_rules():
 def update_prompt_rules(req: PromptRulesRequest):
     """Update Gmail behavior prompt/rules configuration.
     
-    Saves configuration to C:/Jarvis/config/gmail_prompt_rules.json.
+    Saves configuration to the Jarvis config directory (gmail_prompt_rules.json).
     Always enforces draft_only_safety=True for security.
     """
-    config_path = Path("C:/Jarvis/config/gmail_prompt_rules.json")
+    config_path = JARVIS_CONFIG_DIR / "gmail_prompt_rules.json"
     
     # Ensure config directory exists
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1148,7 +1151,7 @@ def gmail_new_events(since: str = ""):
     """
     from datetime import date, timedelta
 
-    notes_dir = Path("C:/Jarvis/notes")
+    notes_dir = JARVIS_NOTES_DIR
     today = date.today()
 
     # Collect today's + yesterday's events (in case monitor ran across midnight)

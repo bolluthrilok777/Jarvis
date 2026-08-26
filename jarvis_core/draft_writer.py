@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from jarvis_core.gmail_models import ClassificationResult, DraftContent, GmailConfig
+from jarvis_core.config import GMAIL_DRAFTS_DIR
 from jarvis_core.ollama_service import ask_ollama
 
 logger = logging.getLogger("jarvis.draft_writer")
@@ -21,8 +22,8 @@ logger = logging.getLogger("jarvis.draft_writer")
 # Default user name for drafts
 DEFAULT_USER_NAME = "Jarvis User"
 
-# Drafts save directory
-DRAFTS_DIR = Path("C:/Jarvis/notes/gmail_drafts")
+# Drafts save directory (derived from BASE_DIR — cross-platform safe)
+DRAFTS_DIR = GMAIL_DRAFTS_DIR
 
 
 def _ensure_drafts_dir() -> Path:

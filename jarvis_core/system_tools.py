@@ -2,12 +2,25 @@ import datetime
 import logging
 import os
 import subprocess
+import sys
 import threading
 import psutil
-from PIL import ImageGrab
 from jarvis_core.config import SCREENSHOT_DIR
+from jarvis_core.desktop_capabilities import DESKTOP_AVAILABLE, IS_WINDOWS, require_desktop
 
 logger = logging.getLogger("jarvis.system")
+
+
+def _disk_target() -> str:
+    """Filesystem root to report for disk metrics, per running platform.
+
+    Windows uses the system drive (honouring the SystemDrive environment
+    variable, defaulting to C:\\). Linux/Unix monitors the root filesystem,
+    which is where Jarvis itself lives on a cloud VM.
+    """
+    if IS_WINDOWS:
+        return os.environ.get("SystemDrive", "C:") + "\\"
+    return "/"
 
 
 # The live monitor has no background sampling thread: metrics are collected only
@@ -256,6 +269,9 @@ def _get_gpu_metrics() -> dict | None:
 
 def _launch_task_manager() -> None:
     """Fire-and-forget Task Manager launch using os.startfile."""
+    if not IS_WINDOWS:
+        logger.info("Task Manager launch skipped: not a Windows node")
+        return
     try:
         os.startfile("taskmgr.exe")
         logger.info("Task Manager launched via os.startfile")
@@ -293,7 +309,7 @@ def get_system_status(launch_task_manager: bool = False) -> dict:
 
     cpu = psutil.cpu_percent(interval=1)
     memory = psutil.virtual_memory()
-    disk = psutil.disk_usage("C:/")
+    disk = psutil.disk_usage(_disk_target())
 
     status: dict = {
         "cpu_percent":       cpu,
@@ -320,6 +336,16 @@ def get_system_status(launch_task_manager: bool = False) -> dict:
 
 
 def take_screenshot():
+    if not DESKTOP_AVAILABLE:
+        refusal = require_desktop("system.screenshot", available=DESKTOP_AVAILABLE)
+        logger.info("Screenshot refused: %s", refusal["message"])
+        return refusal
+    try:
+        from PIL import ImageGrab
+    except Exception as exc:
+        return {"status": "unsupported_on_this_node", "feature": "system.screenshot",
+                "message": f"Screen capture is unavailable on this node: {exc}",
+                "desktop_available": False}
     filename = datetime.datetime.now().strftime("screenshot_%Y%m%d_%H%M%S.png")
     file_path = SCREENSHOT_DIR / filename
 

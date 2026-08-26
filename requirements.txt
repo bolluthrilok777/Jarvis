@@ -18,6 +18,35 @@ google-auth-oauthlib
 google-api-python-client
 google-auth-httplib2
 
+# ── Linux / headless / ARM64 notes (no install changes needed on Windows) ────
+#
+# pyautogui:
+#   Windows: works out of the box.
+#   Linux x86_64: requires an X display plus the python3-xlib system package
+#     (sudo apt install python3-tk python3-dev; pip installs python-xlib).
+#   Linux headless cloud VM: import is lazy everywhere in jarvis_core, and all
+#   desktop-only commands return "unsupported_on_this_node" — safe to install
+#   but never used without a display.
+# pygetwindow==0.0.9:
+#   Windows-only at runtime (win32). pip installs fine on Linux; imports are
+#   lazy so it simply never activates on a headless node.
+# faster-whisper==1.1.1:
+#   Pulls ctranslate2 + onnxruntime. x86_64 wheels exist for both; ARM64
+#   (aarch64) wheels exist for ctranslate2 >= 4.5 and onnxruntime, but verify
+#   at deploy time on the target VM (Python 3.11–3.12 has the best wheel
+#   coverage). Voice features degrade gracefully if it cannot be installed:
+#   voice_service raises a clean error per request instead of crashing startup.
+# playwright~=1.61.0:
+#   After pip install on the Linux VM also run:
+#     playwright install chromium && playwright install-deps chromium
+#   Headless Chromium works without a display. Set PLAYWRIGHT_BROWSERS_PATH to
+#   a writable directory if the repo dir is read-only.
+# Pillow~=12.3.0:
+#   Prebuilt wheels exist for Windows x64, Linux x86_64, and Linux aarch64.
+#   ImageGrab screen capture needs X11/Wayland; guarded in code for headless.
+# psutil~=7.2.0:
+#   Pure cross-platform; wheels available for aarch64. No special handling.
+
 # Dev/test dependencies (install separately if needed):
 # pytest~=9.1.0
 # httpx~=0.28.0

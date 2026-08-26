@@ -7,14 +7,23 @@ import webbrowser
 from urllib.parse import quote_plus
 
 from jarvis_core.config import ALLOWED_APPS, ALLOWED_FOLDERS, NOTES_DIR
+from jarvis_core.desktop_capabilities import DESKTOP_AVAILABLE
 
 logger = logging.getLogger("jarvis.app_tools")
+
+_UNSUPPORTED_MSG = (
+    "This command needs a desktop session, which is not available on this "
+    "node. Jarvis is running headless; all other features remain operational."
+)
 
 
 def open_known_app(app_name: str) -> tuple[bool, str]:
     app_name = app_name.lower().strip()
 
     if app_name in ALLOWED_APPS:
+        if not DESKTOP_AVAILABLE:
+            logger.info("open_known_app refused on headless node: %s", app_name)
+            return False, _UNSUPPORTED_MSG
         logger.info("Tool selected: open_known_app(%s)", app_name)
         if app_name in ("calculator", "calc"):
             # Import shared helpers to avoid duplicate-launch
@@ -152,6 +161,9 @@ def open_known_folder(folder_name: str) -> tuple[bool, str]:
     folder_name = folder_name.lower().strip()
 
     if folder_name in ALLOWED_FOLDERS:
+        if not DESKTOP_AVAILABLE:
+            logger.info("open_known_folder refused on headless node: %s", folder_name)
+            return False, _UNSUPPORTED_MSG
         logger.info("Tool selected: open_known_folder(%s)", folder_name)
         subprocess.Popen(["explorer", str(ALLOWED_FOLDERS[folder_name])])
         logger.info("Tool completed: open_known_folder(%s)", folder_name)

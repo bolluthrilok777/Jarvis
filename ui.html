@@ -6198,7 +6198,7 @@ async function gmailOpenJDFolder() {
 function renderGmailJDModal(data) {
   const el = document.getElementById('gmail-jd-modal-content');
   if (!el) return;
-  const folder = escapeHtml(data.folder || 'C:\\Jarvis\\jobs_jd');
+  const folder = escapeHtml(data.folder || 'Jarvis jobs folder');
   if (!data.files || data.files.length === 0) {
     el.innerHTML = `<div style="color:#555;text-align:center;padding:24px;">No JD files saved yet.<br><span style="font-size:12px;color:#444;">Folder: ${folder}</span></div>`;
   } else {
@@ -6240,7 +6240,7 @@ function renderGmailDraftsModal(data) {
   const el = document.getElementById('gmail-drafts-modal-content');
   if (!el) return;
 
-  const localFolder = escapeHtml(data.local_folder || 'C:\\Jarvis\\notes\\gmail_drafts');
+  const localFolder = escapeHtml(data.local_folder || 'Jarvis local drafts');
   const email = data.connected_account_email || '';
   const gmailUrl = data.gmail_drafts_url || ('https://mail.google.com/mail/' + (email ? '?authuser=' + encodeURIComponent(email) : '') + '#drafts');
   const scopeOk = data.draft_scope_available;

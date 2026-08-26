@@ -1,11 +1,45 @@
+import os
 import pathlib
 
 APP_NAME = "Jarvis Local Agent - Phase 2"
-OLLAMA_URL = "http://localhost:11434"
 
-# ── Model Configuration ──────────────────────────────────────────────────────
-LIGHT_MODEL = "gemma2:2b"
-HEAVY_MODEL = "qwen2.5:7b"
+# ── Cross-platform filesystem configuration ──────────────────────────────────
+# All runtime locations are derived from BASE_DIR so the SAME repository runs
+# unchanged on Windows (C:\\Users\\...\\Jarvis) and Linux/cloud (/opt/jarvis).
+#
+# Resolution order:
+#   1. JARVIS_BASE_DIR environment variable (explicit override, e.g. a cloud
+#      data volume such as /var/lib/jarvis)
+#   2. The repository root (folder that contains this config.py's package),
+#      which is where ui.html, notes/, config/, data/, etc. already live.
+# Never hardcode drive letters or /opt/jarvis anywhere else in the codebase.
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+BASE_DIR = pathlib.Path(os.environ.get("JARVIS_BASE_DIR") or REPO_ROOT).resolve()
+
+USER_HOME = pathlib.Path.home()
+ONEDRIVE_DIR = USER_HOME / "OneDrive"
+NOTES_DIR = BASE_DIR / "notes"
+SCREENSHOT_DIR = BASE_DIR / "screenshots"
+LOGS_DIR = BASE_DIR / "logs"
+UI_FILE = BASE_DIR / "ui.html"
+OLLAMA_ROBOT_IMAGE = BASE_DIR / "assets" / "ollama-robot.png"
+CONFIG_DIR = BASE_DIR / "config"
+DATA_DIR = BASE_DIR / "data"
+JOBS_JD_DIR = BASE_DIR / "jobs_jd"
+GMAIL_DRAFTS_DIR = NOTES_DIR / "gmail_drafts"
+WEB_SCREENSHOT_DIR = BASE_DIR / "web_screenshots"
+
+NOTES_DIR.mkdir(parents=True, exist_ok=True)
+SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+# LOGS_DIR is intentionally NOT created here — logging_config.py handles it
+
+# ── Ollama Configuration (environment-overridable for cloud deployments) ─────
+# Defaults stay byte-for-byte compatible with the previous hardcoded values.
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+LIGHT_MODEL = os.environ.get("JARVIS_LIGHT_MODEL", "gemma2:2b")
+HEAVY_MODEL = os.environ.get("JARVIS_HEAVY_MODEL", "qwen2.5:7b")
 
 # Additional Ollama models available for selection
 AVAILABLE_OLLAMA_MODELS = [
@@ -25,25 +59,12 @@ FREE_API_KEY_MODEL = "gpt-4o-mini"  # Default model for API key mode
 # Current active mode (persisted across requests)
 ACTIVE_MODE = "auto"  # "auto", "light", "medium", "heavy", or a specific model ID, or "api_key"
 
-BASE_DIR = pathlib.Path("C:/Project Opus")
-USER_HOME = pathlib.Path.home()
-ONEDRIVE_DIR = USER_HOME / "OneDrive"
-NOTES_DIR = BASE_DIR / "notes"
-SCREENSHOT_DIR = BASE_DIR / "screenshots"
-LOGS_DIR = BASE_DIR / "logs"
-UI_FILE = BASE_DIR / "ui.html"
-OLLAMA_ROBOT_IMAGE = BASE_DIR / "assets" / "ollama-robot.png"
-
-NOTES_DIR.mkdir(exist_ok=True)
-SCREENSHOT_DIR.mkdir(exist_ok=True)
-# LOGS_DIR is intentionally NOT created here — logging_config.py handles it
-
 ACTION_EXPIRY_SECONDS = 300
 
 SYSTEM_PROMPT = """
-You are Jarvis, a local AI assistant running on a Windows laptop.
+You are Jarvis, a local AI assistant running on the user's machine.
 Use short and practical answers.
-Default mode is lightweight because the laptop has 16GB RAM.
+Default mode is lightweight because the machine may have limited RAM.
 Use heavy reasoning only when requested.
 Ask confirmation before dangerous actions like deleting files, sending emails, submitting forms, booking slots, payments, or server changes.
 """
@@ -78,14 +99,20 @@ ALLOWED_FOLDERS = {
     "screenshots": SCREENSHOT_DIR
 }
 
-ALLOWED_ROOTS = [
+_ALLOWED_ROOTS = [
     BASE_DIR,
     USER_HOME / "Desktop",
     USER_HOME / "Documents",
     USER_HOME / "Downloads",
-    ONEDRIVE_DIR / "Desktop",
-    ONEDRIVE_DIR / "Documents",
 ]
+# OneDrive redirect folders only exist on some Windows machines; including
+# them unconditionally is harmless on Windows but meaningless on Linux.
+if ONEDRIVE_DIR.exists():
+    _ALLOWED_ROOTS.extend([
+        ONEDRIVE_DIR / "Desktop",
+        ONEDRIVE_DIR / "Documents",
+    ])
+ALLOWED_ROOTS = _ALLOWED_ROOTS
 
 ALLOWED_EXTENSIONS = [".txt", ".md", ".py", ".json", ".csv", ".log"]
 

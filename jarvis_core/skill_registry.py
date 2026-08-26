@@ -16,6 +16,8 @@ from urllib.parse import quote_plus
 
 logger = logging.getLogger("jarvis.skills")
 
+from jarvis_core.desktop_capabilities import DESKTOP_AVAILABLE, require_desktop  # noqa: E402
+
 
 # ── Exceptions ────────────────────────────────────────────────────────────────
 
@@ -75,6 +77,9 @@ def _exec_app_focus(app_name: str) -> dict:
     name = app_name.lower().strip()
     if name not in ALLOWED_APPS:
         return {"status": "error", "message": f"App not in allowlist: {name}"}
+    refusal = require_desktop("app.focus", available=DESKTOP_AVAILABLE)
+    if refusal:
+        return refusal
     try:
         import pygetwindow as gw
         wins = gw.getWindowsWithTitle(name)
@@ -92,6 +97,9 @@ def _exec_app_close(app_name: str) -> dict:
     name = app_name.lower().strip()
     if name not in ALLOWED_APPS:
         return {"status": "error", "message": f"App not in allowlist: {name}"}
+    refusal = require_desktop("app.close", available=DESKTOP_AVAILABLE)
+    if refusal:
+        return refusal
     try:
         import pygetwindow as gw
         wins = gw.getWindowsWithTitle(name)
@@ -248,6 +256,9 @@ def _exec_browser_website_screenshot(url: str) -> dict:
 
 
 def _exec_notepad_open() -> dict:
+    refusal = require_desktop("notepad.open", available=DESKTOP_AVAILABLE)
+    if refusal:
+        return refusal
     from jarvis_core.app_tools import open_known_app
     import time
     success, message = open_known_app("notepad")
@@ -281,6 +292,9 @@ def _exec_notepad_open() -> dict:
 
 
 def _exec_notepad_type(text: str) -> dict:
+    refusal = require_desktop("notepad.type", available=DESKTOP_AVAILABLE)
+    if refusal:
+        return refusal
     try:
         import pyautogui
         import pygetwindow as gw
@@ -295,6 +309,9 @@ def _exec_notepad_type(text: str) -> dict:
 
 def _exec_notepad_save(folder_name: str, file_name: str) -> dict:
     """Save the active Notepad tab to an allowlisted folder using Save As."""
+    refusal = require_desktop("notepad.save", available=DESKTOP_AVAILABLE)
+    if refusal:
+        return refusal
     try:
         import pyautogui
         import pygetwindow as gw
@@ -407,6 +424,12 @@ def _exec_file_open_containing(query: str, open_file: bool = False) -> dict:
         if not matches:
             return {"status": "error", "message": f"No allowed file matched: {query}"}
         match = sorted(matches, key=lambda path: (len(path.name), str(path).lower()))[0]
+        if not DESKTOP_AVAILABLE:
+            # Locating the file is pure filesystem work and stays available;
+            # actually opening it requires a desktop session.
+            refusal = require_desktop("file.open_containing", available=DESKTOP_AVAILABLE)
+            refusal.update({"file": str(match), "folder": str(match.parent)})
+            return refusal
         if open_file:
             os.startfile(str(match))
             message = f"Opened file: {match.name}"
@@ -435,7 +458,7 @@ def _exec_system_status() -> dict:
         f"🖥️  CPU       : {data['cpu_percent']}%",
         f"🌡️  Temp      : {temp_str}",
         f"🧠  RAM       : {data['ram_percent']}%  ({data['ram_used_gb']} / {data['ram_total_gb']} GB)",
-        f"💾  Disk (C:) : {data['disk_percent']}%  ({data['disk_used_gb']} / {data['disk_total_gb']} GB)",
+        f"💾  Disk      : {data['disk_percent']}%  ({data['disk_used_gb']} / {data['disk_total_gb']} GB)",
         f"⚙️  Processes : {data['running_processes']} running",
     ]
     if "gpu_percent" in data:

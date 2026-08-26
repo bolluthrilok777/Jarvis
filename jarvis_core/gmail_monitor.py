@@ -35,15 +35,16 @@ from jarvis_core.gmail_service import (
     get_thread_context,
 )
 from jarvis_core.jd_saver import save_jd_attachment, save_jd_link, extract_jd_links_from_body
+from jarvis_core.config import CONFIG_DIR as _JARVIS_CONFIG_DIR, DATA_DIR as _JARVIS_DATA_DIR, NOTES_DIR as _JARVIS_NOTES_DIR
 
 logger = logging.getLogger("jarvis.gmail_monitor")
 
-# Paths
-CONFIG_DIR = Path("C:/Jarvis/config")
+# Paths (derived from BASE_DIR — cross-platform safe)
+CONFIG_DIR = _JARVIS_CONFIG_DIR
 CONFIG_FILE = CONFIG_DIR / "gmail_monitor.json"
-DATA_DIR = Path("C:/Jarvis/data")
+DATA_DIR = _JARVIS_DATA_DIR
 PROCESSED_IDS_FILE = DATA_DIR / "gmail_processed.json"
-NOTES_DIR = Path("C:/Jarvis/notes")
+NOTES_DIR = _JARVIS_NOTES_DIR
 
 # Global monitor state
 _monitor_thread: Optional[threading.Thread] = None

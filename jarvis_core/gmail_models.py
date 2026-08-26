@@ -9,6 +9,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from jarvis_core.config import JOBS_JD_DIR, NOTES_DIR
+
 
 class GmailConfig(BaseModel):
     """Configuration for Gmail monitoring."""
@@ -20,8 +22,10 @@ class GmailConfig(BaseModel):
     allowed_auto_send_categories: list[str] = Field(default_factory=list)
     allowed_senders: list[str] = Field(default_factory=list)
     scan_period: str = "today"
-    save_jd_folder: str = "C:\\Jarvis\\jobs_jd"
-    log_folder: str = "C:\\Jarvis\\notes"
+    # Defaults resolve against BASE_DIR at runtime so the same repository is
+    # portable across Windows and Linux/cloud deployments.
+    save_jd_folder: str = Field(default_factory=lambda: str(JOBS_JD_DIR))
+    log_folder: str = Field(default_factory=lambda: str(NOTES_DIR))
 
     @classmethod
     def load(cls, path: Path) -> GmailConfig:

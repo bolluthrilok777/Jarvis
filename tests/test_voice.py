@@ -47,7 +47,9 @@ from jarvis_core.config import (
 
 client = TestClient(app)
 
-UI_FILE = Path("C:/Jarvis/ui.html")
+# Repository-relative paths — never assume a specific install location.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+UI_FILE = REPO_ROOT / "ui.html"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -396,7 +398,7 @@ def test_typed_command_behavior_unchanged():
 # Test 22: voice text NOT auto-executed
 def test_voice_text_not_auto_executed():
     """Assert voice_routes.py and ui.html never auto-call /agent or /command."""
-    voice_routes_path = Path("C:/Jarvis/jarvis_core/voice_routes.py")
+    voice_routes_path = REPO_ROOT / "jarvis_core" / "voice_routes.py"
     voice_routes_src = voice_routes_path.read_text(encoding="utf-8")
 
     # voice_routes.py must not contain any call to /agent or /command
@@ -500,7 +502,7 @@ def test_full_test_suite_passes():
     import subprocess
     result = subprocess.run(
         [
-            r"C:\Jarvis\.venv\Scripts\python.exe",
+            sys.executable,
             "-m", "pytest",
             "tests/",
             "--ignore=tests/test_voice.py",  # avoid recursive self-inclusion
@@ -508,7 +510,7 @@ def test_full_test_suite_passes():
         ],
         capture_output=True,
         text=True,
-        cwd="C:/Jarvis",
+        cwd=str(REPO_ROOT),
     )
     output = result.stdout + result.stderr
     print(output)

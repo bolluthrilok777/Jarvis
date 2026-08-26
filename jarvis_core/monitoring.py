@@ -8,6 +8,7 @@ from datetime import date, datetime, time as clock_time, timedelta
 from pathlib import Path
 
 from jarvis_core.config import NOTES_DIR
+from jarvis_core.desktop_capabilities import DESKTOP_AVAILABLE
 
 ALLOWED_INTERVALS = {15, 30, 60}
 ALLOWED_SOUNDS = {"soft", "double", "alert", "gentle"}
@@ -63,6 +64,8 @@ def append_alert_to_activity_tab(
     path: Path, moment: datetime
 ) -> tuple[bool, str | None]:
     """Append an alert through the verified Notepad tab, avoiding disk conflicts."""
+    if not DESKTOP_AVAILABLE:
+        return False, "Desktop session unavailable; alert was written to the activity file only."
     try:
         import pyautogui
         import pygetwindow as gw
@@ -141,7 +144,12 @@ def append_alert_to_activity_tab(
 def play_sound(sound: str) -> None:
     if sound not in ALLOWED_SOUNDS:
         raise ValueError("Unknown monitoring sound.")
-    import winsound
+    try:
+        import winsound
+    except ImportError:
+        # Headless node (no audio device / non-Windows): stay operational.
+        time.sleep(0.2)
+        return
     patterns = {
         "soft": [(700, 900)],
         "double": [(850, 350), (0, 150), (850, 350)],
@@ -213,14 +221,19 @@ class MonitoringService:
         now = datetime.now()
         path = activity_file(now.date())
         warning = None
-        if path.exists():
-            _, warning = append_alert_to_activity_tab(path, now)
+        if DESKTOP_AVAILABLE:
+            if path.exists():
+                _, warning = append_alert_to_activity_tab(path, now)
+            else:
+                path = append_activity(ACTIVITY_CHECK_ENTRY, now)
+                try:
+                    subprocess.Popen(["notepad.exe", str(path)])
+                except Exception as exc:
+                    warning = f"Could not open the activity file: {exc}"
         else:
+            # Headless node: persist the prompt to the activity file directly.
             path = append_activity(ACTIVITY_CHECK_ENTRY, now)
-            try:
-                subprocess.Popen(["notepad.exe", str(path)])
-            except Exception as exc:
-                warning = f"Could not open the activity file: {exc}"
+            warning = "Headless node: activity check written to file instead of Notepad."
         with self._lock:
             self._state["last_alert"] = now.isoformat()
         result = {"status": "done", "activity_file": str(path), "timestamp": now.isoformat()}

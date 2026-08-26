@@ -13,11 +13,12 @@ from typing import Optional
 
 from jarvis_core.gmail_classifier import is_allowed_attachment, is_dangerous_attachment
 from jarvis_core.gmail_service import download_attachment, get_attachment_ids_and_names
+from jarvis_core.config import JOBS_JD_DIR
 
 logger = logging.getLogger("jarvis.jd_saver")
 
-# Default save folder
-DEFAULT_JD_FOLDER = Path("C:/Jarvis/jobs_jd")
+# Default save folder (derived from BASE_DIR — cross-platform safe)
+DEFAULT_JD_FOLDER = JOBS_JD_DIR
 
 
 def _get_date_folder(base_dir: Path) -> Path:

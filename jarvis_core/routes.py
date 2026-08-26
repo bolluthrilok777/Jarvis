@@ -46,7 +46,9 @@ def root():
     return {
         "name": APP_NAME,
         "status": "running",
-        "ui": "http://127.0.0.1:8000/ui",
+        # Relative so the same metadata is correct behind a reverse proxy,
+        # on localhost, or on a cloud VM.
+        "ui": "/ui",
         "default_model": LIGHT_MODEL,
         "heavy_model": HEAVY_MODEL,
     }

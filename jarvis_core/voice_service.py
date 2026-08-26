@@ -19,7 +19,16 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from faster_whisper import WhisperModel
+# faster-whisper is a heavy optional dependency (it pulls PyAV and native
+# codecs). On locked-down or headless nodes its DLLs may be unavailable, so
+# the import must never crash Jarvis at startup — voice requests then fail
+# with a clear error while everything else stays operational.
+try:
+    from faster_whisper import WhisperModel  # type: ignore[misc]
+    _whisper_import_error: Optional[Exception] = None
+except Exception as _exc:  # ImportError and native-DLL load failures alike
+    WhisperModel = None  # type: ignore[assignment,misc]
+    _whisper_import_error = _exc
 
 from jarvis_core.config import (
     VOICE_ENABLED,
@@ -35,6 +44,32 @@ from jarvis_core.config import (
 )
 
 logger = logging.getLogger("jarvis.voice")
+if _whisper_import_error is not None:
+    logger.warning(
+        "Voice: faster-whisper is not usable on this node (%s). "
+        "/voice endpoints will return errors until it is installed/allowed.",
+        _whisper_import_error,
+    )
+
+
+def _load_whisper_cls():
+    """Return the WhisperModel class, retrying the import if it failed earlier.
+
+    Tests patch ``jarvis_core.voice_service.WhisperModel``; a patched value is
+    returned as-is so mocking works even when the real package is blocked.
+    """
+    global _whisper_import_error
+    cls = globals().get("WhisperModel")
+    if cls is not None:
+        return cls
+    try:
+        from faster_whisper import WhisperModel as _WM  # noqa: N813
+        globals()["WhisperModel"] = _WM
+        _whisper_import_error = None
+        return _WM
+    except Exception as exc:
+        _whisper_import_error = exc
+        return None
 
 # ── Task 3.1: Custom exceptions ───────────────────────────────────────────────
 
@@ -66,7 +101,7 @@ SAFE_MIME_TYPES: frozenset = frozenset({
 
 MAX_BYTES: int = VOICE_MAX_UPLOAD_MB * 1024 * 1024
 
-_model: Optional[WhisperModel] = None      # protected by _lock
+_model: Optional[object] = None             # protected by _lock
 _lock: threading.Lock = threading.Lock()
 _last_used: float = 0.0
 _idle_timer: Optional[threading.Timer] = None
@@ -101,14 +136,25 @@ def _idle_unload() -> None:
 # ── Task 3.2: Lazy model loader ───────────────────────────────────────────────
 
 
-def _get_or_load_model() -> WhisperModel:
+def _get_or_load_model():
     """Return the loaded WhisperModel, loading it on first call.
 
-    Thread-safe: only one thread will ever call WhisperModel(...).
+    Thread-safe: only one thread will ever call the model constructor.
     _reschedule_idle_timer() is called inside the lock on every successful
     access so that the timeout resets each time the model is used.
+
+    Raises:
+        RuntimeError: faster-whisper is unavailable on this node (not
+            installed, or its native libraries cannot be loaded).
     """
     global _model, _last_used
+    whisper_cls = _load_whisper_cls()
+    if whisper_cls is None:
+        raise RuntimeError(
+            "faster-whisper is not available on this node "
+            f"({_whisper_import_error}). Voice transcription is disabled; "
+            "all other Jarvis features remain operational."
+        )
     with _lock:
         if _model is None:
             logger.info(
@@ -117,7 +163,7 @@ def _get_or_load_model() -> WhisperModel:
                 VOICE_DEVICE,
                 VOICE_COMPUTE_TYPE,
             )
-            _model = WhisperModel(
+            _model = whisper_cls(
                 VOICE_MODEL,
                 device=VOICE_DEVICE,
                 compute_type=VOICE_COMPUTE_TYPE,

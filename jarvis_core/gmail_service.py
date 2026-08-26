@@ -20,13 +20,14 @@ from typing import Any, Optional
 import requests
 
 from jarvis_core.gmail_models import GmailMessagePreview
+from jarvis_core.config import CONFIG_DIR as _JARVIS_CONFIG_DIR, DATA_DIR as _JARVIS_DATA_DIR
 from jarvis_core.timezone_utils import jarvis_timezone
 
 logger = logging.getLogger("jarvis.gmail_service")
 
-# Paths for credentials, token, and OAuth state
-CONFIG_DIR = Path("C:/Jarvis/config")
-DATA_DIR = Path("C:/Jarvis/data")
+# Paths for credentials, token, and OAuth state (derived from BASE_DIR)
+CONFIG_DIR = _JARVIS_CONFIG_DIR
+DATA_DIR = _JARVIS_DATA_DIR
 CREDENTIALS_FILE = CONFIG_DIR / "gmail_credentials.json"
 TOKEN_FILE = CONFIG_DIR / "gmail_token.json"
 OAUTH_STATE_FILE = DATA_DIR / "gmail_oauth_state.json"
@@ -49,7 +50,13 @@ _credentials_available = False
 # Cleared when a new token is saved after re-authorization.
 _token_revoked = False
 
-EXPECTED_REDIRECT_URI = "http://127.0.0.1:8000/gmail/oauth/callback"
+import os
+
+# OAuth redirect contract. Default keeps the historical local-dev value; a
+# cloud deployment behind Nginx can override it without code changes.
+EXPECTED_REDIRECT_URI = os.environ.get(
+    "GMAIL_OAUTH_REDIRECT_URI", "http://127.0.0.1:8000/gmail/oauth/callback"
+)
 
 
 def credentials_exist() -> bool:
@@ -359,8 +366,9 @@ def validate_web_credentials_strict(data: dict) -> tuple[bool, str]:
     if not isinstance(javascript_origins, list) or not javascript_origins:
         return False, "Missing 'javascript_origins' array in web credentials"
     
-    if "http://127.0.0.1:8000" not in javascript_origins:
-        return False, "JavaScript origin http://127.0.0.1:8000 not found in web credentials"
+    expected_origin = EXPECTED_REDIRECT_URI.rsplit("/gmail/oauth/callback", 1)[0]
+    if expected_origin not in javascript_origins:
+        return False, f"JavaScript origin {expected_origin} not found in web credentials"
 
     return True, ""
 
@@ -626,8 +634,9 @@ def validate_credentials_json(data: dict) -> tuple[bool, str]:
     if not isinstance(javascript_origins, list) or not javascript_origins:
         return False, "Missing 'javascript_origins' array in web credentials"
     
-    if "http://127.0.0.1:8000" not in javascript_origins:
-        return False, "JavaScript origin http://127.0.0.1:8000 not found in web credentials"
+    expected_origin = EXPECTED_REDIRECT_URI.rsplit("/gmail/oauth/callback", 1)[0]
+    if expected_origin not in javascript_origins:
+        return False, f"JavaScript origin {expected_origin} not found in web credentials"
 
     return True, ""
 

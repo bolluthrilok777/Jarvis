@@ -1,12 +1,12 @@
 from datetime import datetime
-from pathlib import Path
 from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
+from jarvis_core.config import WEB_SCREENSHOT_DIR
 
-JARVIS_DIR = Path("C:/Jarvis")
-WEB_SCREENSHOT_DIR = JARVIS_DIR / "web_screenshots"
+
+JARVIS_DIR = WEB_SCREENSHOT_DIR.parent  # repository root / JARVIS_BASE_DIR
 WEB_SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
 
