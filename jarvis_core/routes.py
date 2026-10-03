@@ -52,6 +52,93 @@ def root():
     }
 
 
+@router.get("/browser-bind/{token}")
+def browser_bind(token: str):
+    """Harmless marker page for the dedicated-window launch-provenance binding.
+
+    Jarvis launches a dedicated Chrome window at
+    ``/browser-bind/<launch_token>`` and then proves that the resulting new
+    window/tab is the one it created by matching the unique ``token`` in this
+    URL. The page contains NO secrets and NO workflow data — only the token,
+    which is itself an unguessable random value whose sole purpose is exact
+    window/tab correlation. Requires no user interaction.
+    """
+    from fastapi.responses import HTMLResponse
+    import html as _html
+    safe = _html.escape(str(token))[:80]
+    body = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<title>Jarvis Browser Binding</title></head>"
+        "<body style='font-family:sans-serif'>"
+        "<h3>Jarvis Browser Binding</h3>"
+        f"<p data-jarvis-bind-token='{safe}'>token: {safe}</p>"
+        "</body></html>"
+    )
+    return HTMLResponse(content=body)
+
+
+@router.get("/api/runtime-info")
+def runtime_info():
+    """Read-only diagnostics of the LIVE Jarvis runtime (no secrets).
+
+    Reports the exact interpreter serving this process, loaded module paths,
+    dependency availability and whether the real UIA/Chrome tab backend works
+    right now - used to prove Telegram actions run inside the project .venv.
+    """
+    import importlib
+    import os
+    import sys
+
+    info: dict = {
+        "pid": os.getpid(),
+        "sys_executable": sys.executable,
+        "python_version": sys.version.split()[0],
+        "cwd": os.getcwd(),
+    }
+
+    modules: dict[str, str] = {}
+    for name in (
+        "resource_manager", "browser_resource_manager",
+        "uia_browser_manager", "screenshot_service",
+        "windows_resource_manager",
+    ):
+        try:
+            module = importlib.import_module(f"jarvis_core.{name}")
+            modules[name] = str(getattr(module, "__file__", "") or "")
+        except Exception as exc:  # surfaced, never swallowed silently
+            modules[name] = f"IMPORT FAILED: {type(exc).__name__}: {exc}"
+    info["jarvis_modules"] = modules
+
+    deps: dict[str, str] = {}
+    for dep in ("pywinauto", "comtypes", "psutil", "requests", "PIL"):
+        try:
+            dep_module = importlib.import_module(dep)
+            deps[dep] = str(getattr(dep_module, "__version__", "") or "ok")
+        except Exception as exc:
+            deps[dep] = f"MISSING ({type(exc).__name__})"
+    info["dependencies"] = deps
+
+    # Live browser diagnostics (bounded by uia_browser_manager deadlines).
+    chrome: dict = {}
+    try:
+        from jarvis_core.browser_resource_manager import discover_tabs
+
+        scan = discover_tabs()
+        chrome["chrome_detected"] = bool(scan.get("chrome_detected"))
+        chrome["uia_usable"] = bool(scan.get("controllable"))
+        chrome["control_mode"] = str(scan.get("control_mode") or "")
+        chrome["tabs_discovered"] = len(scan.get("tabs") or [])
+        chrome["tab_titles"] = [
+            str(t.get("title") or "") for t in (scan.get("tabs") or [])[:30]
+        ]
+        chrome["fallback_failure"] = str(scan.get("reason") or "")
+    except Exception as exc:
+        chrome["uia_usable"] = False
+        chrome["fallback_failure"] = f"{type(exc).__name__}: {exc}"
+    info["chrome"] = chrome
+    return info
+
+
 @router.get("/health")
 def health():
     try:
@@ -217,16 +304,49 @@ def tasks_submit(req: TaskSubmitRequest):
     if not non_empty:
         return {"status": "error", "message": "No non-empty lines to submit."}
 
-    results = orchestrator.submit_multiple(non_empty, conversation_id="web")
+    from jarvis_core.feature_orchestrator import feature_orchestrator
+
+    results = []
+    for line in non_empty:
+        # Explicit intent prefixes bypass auto-detection/confirmation.
+        lowered = line.lower()
+        if lowered.startswith("feature:"):
+            payload = line.split(":", 1)[1].strip()
+            if payload:
+                results.append(feature_orchestrator.submit_feature_request(payload, source="Web"))
+            continue
+        if lowered.startswith("normal:"):
+            payload = line.split(":", 1)[1].strip()
+            if payload:
+                results.append(orchestrator.submit(payload, conversation_id="web"))
+            continue
+        if feature_orchestrator.is_feature_request(line):
+            results.append(feature_orchestrator.submit_feature_request(line, source="Web"))
+        else:
+            results.append(orchestrator.submit(line, conversation_id="web"))
     return {"status": "ok", "count": len(results), "results": results}
 
 
 @router.get("/tasks")
 def tasks_list():
-    """List all visible tasks."""
-    from jarvis_core.task_manager import task_manager
+    """List all visible tasks.
 
-    return {"status": "ok", "tasks": task_manager.get_public_tasks()}
+    Feature-orchestrator tasks carry a structured ``feature_progress`` block
+    (phases, steps, timings, cancel_allowed) computed from the real persisted
+    FeatureRequest state — the UI never parses display strings.
+    """
+    from jarvis_core.task_manager import task_manager
+    from jarvis_core.feature_progress import build_progress
+
+    tasks = task_manager.get_public_tasks()
+    for task in tasks:
+        if task.get("task_type") == "feature":
+            from jarvis_core.feature_orchestrator import feature_orchestrator
+
+            feature = feature_orchestrator._store.by_task_id(task["task_id"])
+            if feature is not None:
+                task["feature_progress"] = build_progress(feature)
+    return {"status": "ok", "tasks": tasks}
 
 
 @router.get("/tasks/{task_id}")
@@ -268,6 +388,90 @@ def tasks_clear_completed():
 
     count = task_manager.clear_completed()
     return {"status": "ok", "hidden": count}
+
+
+# ── Autonomous Feature Orchestrator API ──────────────────────────────────────
+
+
+class FeatureSubmitRequest(BaseModel):
+    text: str
+
+
+class FeatureReviewRequest(BaseModel):
+    review: str
+
+
+class FeatureDecisionRequest(BaseModel):
+    decision: str  # "cancel" | "changes" | "skip_review"
+    instructions: Optional[str] = None
+
+
+@router.post("/features/submit")
+def features_submit(req: FeatureSubmitRequest):
+    """Submit a feature-development request from the Jarvis web command box."""
+    from jarvis_core.feature_orchestrator import feature_orchestrator
+
+    result = feature_orchestrator.submit_feature_request(req.text, source="Web")
+    if result.get("status") == "not_a_feature":
+        raise HTTPException(status_code=400, detail=result.get("message", "Not a feature request."))
+    return result
+
+
+@router.get("/features")
+def features_list(status: Optional[str] = None):
+    """List feature requests (safe public view)."""
+    from jarvis_core.feature_orchestrator import feature_orchestrator
+
+    return {"status": "ok", "features": feature_orchestrator.list_features(status)}
+
+
+@router.get("/features/{feature_id}")
+def features_get(feature_id: str):
+    """Full feature detail including plan, Cline task and history."""
+    from jarvis_core.feature_orchestrator import feature_orchestrator
+    from jarvis_core.feature_progress import build_progress
+
+    feature = feature_orchestrator.get_feature(feature_id)
+    if feature is None:
+        raise HTTPException(status_code=404, detail="Feature not found")
+    raw = feature_orchestrator._store.get(feature_id)
+    if raw is not None:
+        feature["feature_progress"] = build_progress(raw)
+    return {"status": "ok", "feature": feature}
+
+
+@router.post("/features/{feature_id}/review")
+def features_review(feature_id: str, req: FeatureReviewRequest):
+    """Accept the user-pasted ChatGPT review for local analysis."""
+    from jarvis_core.feature_orchestrator import feature_orchestrator
+
+    return feature_orchestrator.submit_chatgpt_review(feature_id, req.review)
+
+
+@router.post("/features/{feature_id}/skip-review")
+def features_skip_review(feature_id: str):
+    from jarvis_core.feature_orchestrator import feature_orchestrator
+
+    return feature_orchestrator.skip_chatgpt(feature_id)
+
+
+@router.post("/features/{feature_id}/decision")
+def features_decision(feature_id: str, req: FeatureDecisionRequest):
+    """Cancel or request changes from the Web UI.
+
+    Approval and high-risk confirmation are intentionally NOT available here:
+    the Telegram approval gate is mandatory (allowlisted users only).
+    """
+    from jarvis_core.feature_orchestrator import feature_orchestrator
+
+    if req.decision == "cancel":
+        return feature_orchestrator.cancel(feature_id)
+    if req.decision == "changes":
+        return feature_orchestrator.request_changes(feature_id, req.instructions or "")
+    raise HTTPException(
+        status_code=400,
+        detail="Unsupported decision. Approvals must be granted via Telegram.",
+    )
 
 
 @router.get("/monitoring")

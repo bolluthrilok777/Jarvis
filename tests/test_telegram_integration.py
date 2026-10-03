@@ -18,10 +18,67 @@ from jarvis_core.telegram_config import TelegramSettings, parse_allowed_user_ids
 from jarvis_core.telegram_service import TelegramService
 
 
+@pytest.fixture(autouse=True)
+def _isolate_workflow_command_routing(monkeypatch):
+    """Isolate this suite from the real workflow_command_service singleton.
+
+    TelegramService._route_workflow_command consults the module-level
+    workflow_command_service (real engine / data DB). Across a full test run a
+    transient WAITING_FOR_COMMAND workflow left by another suite could make a
+    plain command ("open calculator") be intercepted as a workflow command.
+    These tests exercise the NORMAL command paths, so we pin the routing view to
+    "no waiting workflows" — production behaviour is unchanged and covered by
+    the Part 5 suite.
+    """
+    try:
+        from jarvis_core.workflow_command_service import workflow_command_service
+        monkeypatch.setattr(workflow_command_service, "list_waiting_workflows",
+                            lambda: [], raising=True)
+    except Exception:
+        pass
+    try:
+        from jarvis_core.workflow_approval_service import workflow_approval_service
+        monkeypatch.setattr(workflow_approval_service, "is_edit_pending",
+                            lambda user_id, chat_id: False, raising=True)
+    except Exception:
+        pass
+
+
+class InlineThread:
+    """Drop-in threading.Thread replacement that runs target() synchronously.
+
+    The Feature Orchestrator dispatches its resource-review scan on a daemon
+    thread. In tests a real thread would race into later tests and mutate the
+    shared ``resource_registry`` singleton; running inline keeps feature tests
+    fully deterministic.
+    """
+
+    def __init__(self, target=None, name=None, daemon=None, **_kw):
+        self._target = target
+
+    def start(self):
+        if self._target:
+            self._target()
+
+    def join(self, timeout=None):  # parity with real API
+        return None
+
+    def is_alive(self):  # parity with real API
+        return False
+
+
+def patch_inline_feature_threads(monkeypatch):
+    """Make FeatureOrchestrator's background threads synchronous in tests."""
+    import jarvis_core.feature_orchestrator as fo_mod
+
+    monkeypatch.setattr(fo_mod.threading, "Thread", InlineThread)
+
+
 class FakeAPI:
     def __init__(self):
         self.messages = []
         self.callbacks = []
+        self.photos = []
         self.closed = False
 
     def send_message(self, chat_id, text, *, reply_markup=None):
@@ -32,8 +89,35 @@ class FakeAPI:
         })
         return {}
 
+    def send_photo(self, chat_id, photo_path, *, caption="", reply_markup=None):
+        """Record a sendPhoto upload; tests assert on ``photos`` entries."""
+        import os
+
+        self.photos.append({
+            "chat_id": chat_id,
+            "photo": photo_path,
+            "caption": caption,
+            "reply_markup": reply_markup,
+            "existed": os.path.isfile(photo_path),
+            "size": os.path.getsize(photo_path) if os.path.isfile(photo_path) else 0,
+        })
+        return {}
+
     def answer_callback_query(self, callback_query_id, text=""):
         self.callbacks.append((callback_query_id, text))
+
+    def edit_message_text(self, chat_id, message_id, text, *,
+                          reply_markup=None):
+        """Record an editMessageText call; tests assert on ``edits``."""
+        if not hasattr(self, "edits"):
+            self.edits = []
+        self.edits.append({
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+            "reply_markup": reply_markup,
+        })
+        return {}
 
     def close(self):
         self.closed = True

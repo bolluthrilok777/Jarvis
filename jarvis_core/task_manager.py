@@ -179,11 +179,17 @@ class TaskManager:
         return True
 
     def add_event(self, task_id: str, stage: str, message: str, **details) -> bool:
-        """Append an actual lifecycle event for UI status, not a simulated one."""
+        """Append an actual lifecycle event for UI status, not a simulated one.
+
+        Consecutive identical (stage, message) events are collapsed so the UI
+        never shows duplicate "Analyzing feature request" rows from re-polls.
+        """
         with self._lock:
             task = self._tasks.get(task_id)
             if task is None:
                 return False
+            if task.events and task.events[-1].get("stage") == stage and task.events[-1].get("message") == message:
+                return True
             task.events.append({
                 "at": datetime.now(timezone.utc).isoformat(),
                 "stage": stage,

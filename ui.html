@@ -2551,6 +2551,76 @@
       .lt-dlg-done { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#4ade80; margin-top:2px; }
       .lt-dlg-fail { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#f87171; margin-top:2px; }
       .lt-dlg-time { font-size:10px; color:#6b7a99; margin-top:12px; }
+/* ── Feature Orchestrator compact card (3 phases) ── */
+      .lt-feature-phases { display:flex; gap:6px; margin:6px 2px 2px; }
+      .lt-fp { flex:1; min-width:0; padding:4px 6px; border-radius:7px; background:rgba(255,255,255,.025); border:1px solid rgba(139,92,246,.14); font-size:9.5px; font-weight:700; color:#8b93ab; letter-spacing:.02em; cursor:pointer; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:all .15s; }
+      .lt-fp:hover { border-color:rgba(167,139,250,.55); color:#e4e8f5; }
+      .lt-fp.done { color:#4ade80; border-color:rgba(34,197,94,.35); background:rgba(34,197,94,.06); }
+      .lt-fp.running { color:#22d3ee; border-color:rgba(34,211,238,.5); background:rgba(34,211,238,.07); }
+      .lt-fp.running::before { content:""; display:inline-block; width:7px; height:7px; border:1.5px solid rgba(34,211,238,.35); border-top-color:#22d3ee; border-radius:50%; margin-right:4px; vertical-align:middle; animation:ltSpin .7s linear infinite; }
+      .lt-fp.waiting { color:#fbbf24; border-color:rgba(245,158,11,.45); background:rgba(245,158,11,.07); }
+      .lt-fp.waiting::before { content:"⏸"; font-size:8px; margin-right:3px; }
+      .lt-fp.pending { color:#64748b; }
+      .lt-fp.pending::before { content:"○"; margin-right:3px; }
+      .lt-fp.skipped { color:#a78bfa; border-style:dashed; }
+      .lt-fp.skipped::before { content:"⏭"; font-size:8px; margin-right:3px; }
+      .lt-fp.cancelled { color:#94a3b8; text-decoration:line-through; border-style:dashed; }
+      .lt-fp.cancelled::before { content:"🚫"; font-size:9px; margin-right:3px; }
+      .lt-feature-meta { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:3px; font-size:9.5px; color:#7b8aa8; }
+      .lt-feature-meta .lt-cur { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .lt-feature-meta .lt-cur b { color:#cfe8ff; font-weight:600; }
+      .lt-feature-meta .lt-timer { white-space:nowrap; color:#93a3c0; }
+      .lt-cancel-feature-btn { margin-top:6px; width:100%; padding:5px 8px; border-radius:7px; border:1px solid rgba(239,68,68,.45); background:rgba(239,68,68,.08); color:#fca5a5; font-size:10.5px; font-weight:700; cursor:pointer; text-align:center; letter-spacing:.02em; transition:all .15s; }
+      .lt-cancel-feature-btn:hover { background:rgba(239,68,68,.18); color:#fff; }
+/* ── Feature detail timeline (dialog) ── */
+      .lt-orch { margin:4px 0 8px; }
+      .lt-orch-title { font-size:11px; font-weight:800; letter-spacing:.14em; color:#a5b4fc; text-transform:uppercase; }
+      .lt-orch-prog { display:flex; align-items:center; gap:8px; margin:8px 0 4px; }
+      .lt-orch-bar { flex:1; height:6px; border-radius:99px; background:rgba(139,92,246,.14); overflow:hidden; }
+      .lt-orch-bar > span { display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,#7c3aed,#22d3ee); transition:width .4s ease; }
+      .lt-orch-pct { font-size:11px; font-weight:800; color:#a5b4fc; }
+      .lt-orch-curnext { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:6px 0 10px; }
+      .lt-orch-cn { padding:7px 9px; border-radius:10px; background:rgba(255,255,255,.025); border:1px solid rgba(139,92,246,.16); }
+      .lt-orch-cn .k { font-size:8.5px; font-weight:800; letter-spacing:.14em; color:#64748b; text-transform:uppercase; margin-bottom:3px; }
+      .lt-orch-cn .v { font-size:11px; font-weight:600; color:#e4e8f5; }
+      .lt-orch-cn .v.wait { color:#fbbf24; }
+      .lt-orch-timers { display:flex; flex-wrap:wrap; gap:8px 14px; font-size:10px; color:#7b8aa8; margin:6px 0 2px; }
+      .lt-orch-timers b { color:#cfe8ff; font-weight:600; }
+      .lt-fphase { margin:6px 0 10px; }
+      .lt-fphase-head { display:flex; align-items:center; gap:6px; font-size:10px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#94a3b8; margin-bottom:4px; }
+      .lt-fphase-head span.mark { font-size:11px; }
+      .lt-fphase.done > .lt-fphase-head { color:#4ade80; }
+      .lt-fphase.running > .lt-fphase-head { color:#22d3ee; }
+      .lt-fphase.waiting > .lt-fphase-head { color:#fbbf24; }
+      .lt-fphase.skipped > .lt-fphase-head { color:#a78bfa; }
+      .lt-fphase.cancelled > .lt-fphase-head { color:#94a3b8; }
+      .lt-fstep { display:flex; gap:8px; align-items:flex-start; font-size:11px; color:#a8b3cf; padding:3px 6px; border-radius:6px; }
+      .lt-fstep .m { width:14px; text-align:center; flex-shrink:0; font-size:10px; }
+      .lt-fstep.done .m{ color:#4ade80; }
+      .lt-fstep.running .m{ color:#22d3ee; animation:ltPulseDot 1s ease-in-out infinite; }
+      .lt-fstep.waiting .m{ color:#fbbf24; }
+      .lt-fstep.skipped .m{ color:#a78bfa; }
+      .lt-fstep.cancelled .m{ color:#94a3b8; }
+      .lt-fstep.pending .m{ color:#334155; }
+      .lt-fstep.failed .m{ color:#ef4444; }
+      .lt-fs-txt { flex:1; min-width:0; }
+      .lt-fs-meta { white-space:nowrap; font-size:9.5px; color:#7b8aa8; }
+      /* Feature card in LIVE TASKS */
+      .lt-card.lt-feature { border-left:3px solid rgba(167,139,250,.55); cursor:pointer; }
+      .lt-card.lt-feature.lt-waiting { border-left-color:#f59e0b; }
+      .lt-card.lt-feature.lt-running { border-left-color:#22d3ee; }
+      .lt-card.lt-feature.lt-completed { border-left-color:#22c55e; }
+      .lt-card.lt-feature.lt-cancelled { border-left-color:#64748b; }
+      .lt-feature-actions { display:flex; gap:6px; margin-top:7px; }
+      .lt-feature-actions .lt-btn { flex:1; }
+      .lt-orch-sec { font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:#a5b4fc; margin:14px 0 4px; }
+      .fc-prompt-wrap { margin:6px 0; font-size:11px; color:#a8b3cf; }
+      .fc-prompt-wrap summary { cursor:pointer; color:#c4b5fd; font-weight:700; }
+      .fc-prompt { max-height:220px; overflow:auto; background:rgba(0,0,0,.35); border:1px solid rgba(139,92,246,.25); border-radius:8px; padding:10px; white-space:pre-wrap; font-size:10.5px; line-height:1.45; margin:8px 0 6px; }
+      .fc-review-input { width:100%; box-sizing:border-box; background:rgba(0,0,0,.35); color:#e4e8f5; border:1px solid rgba(139,92,246,.35); border-radius:8px; padding:8px; font-size:11.5px; font-family:inherit; resize:vertical; }
+      .fc-review-input:focus { outline:none; border-color:#a78bfa; }
+      .lt-focus-flash { animation:ltFocusFlash 1.1s ease-out 1; }
+      @keyframes ltFocusFlash { 0% { background:rgba(167,139,250,.28); } 100% { background:transparent; } }
       /* Old bottom response area is superseded by the Live Tasks panel */
       #q-response-card { display:none !important; }
 
@@ -2662,14 +2732,20 @@
     .sidebar .nav-btn::before { font-size:17px; flex:0 0 auto; width:20px; text-align:center; }
     .sidebar .nav-btn::after {
       content:attr(data-label);
-      position:static; left:auto; top:auto; transform:none; opacity:1; pointer-events:none;
+      /* width/height/right reset so the decorative .nav-btn.active::after rule
+         (a 24px dot) can never clip the label on the active item. */
+      position:static; left:auto; right:auto; top:auto; transform:none; opacity:1; pointer-events:none;
+      width:auto; height:auto; border-radius:0; animation:none;
       background:transparent; border:0; box-shadow:none; padding:0; margin:0;
       text-indent:0; font-size:12.5px; font-weight:600; color:#c3cdea;
       font-family:Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing:.02em;
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; z-index:auto;
     }
     .sidebar .nav-btn:hover::after { opacity:1; color:#f4f7ff; }
-    .sidebar .nav-btn.active::after { color:#ffffff; }
+    .sidebar .nav-btn.active::after {
+      color:#ffffff; width:auto; height:auto; right:auto; position:static;
+      background:transparent; box-shadow:none; border-radius:0; animation:none;
+    }
 
     /* ════════════════════════════════════════════════════════════════════
        QUANTUM AI CORE — model-aware accent themes + working-state glow.
@@ -3086,6 +3162,7 @@
   <button class="nav-btn" onclick="setCmd('open calculator')" data-icon="AI" data-label="Apps" aria-label="Apps">Apps</button>
   <button class="nav-btn" onclick="openMonitoring()" data-icon="⬡" data-label="Monitoring" aria-label="Monitoring">Monitoring</button>
   <button class="nav-btn" onclick="openGmailMonitor()" data-icon="◈" data-label="Gmail" aria-label="Gmail">Gmail</button>
+  <button class="nav-btn" id="nav-autonomous" onclick="openArchitecture()" data-icon="⟐" data-label="Autonomous" aria-label="Autonomous Workflow" title="Autonomous Workflow">Autonomous</button>
   <button class="nav-btn" data-icon="⚙" data-label="Settings" aria-label="Settings">Settings</button>
   <button class="nav-btn" data-icon="↺" data-label="History" aria-label="History">History</button>
 </aside>
@@ -3337,7 +3414,192 @@
     <div id="task-list" class="task-list"></div>
   </div>
 </div>
+<!-- AUTONOMOUS WORKFLOW mounts HERE, inside #hud-shell, as a sibling of
+     .container (the true main-content host). It replaces the dashboard content
+     within the same shell rather than adding a second top-level column. -->
+<section id="arch-section" aria-label="Autonomous Workflow">
+  <div class="aw-header">
+    <span class="aw-title">⚡ AUTONOMOUS WORKFLOW</span>
+    <div class="aw-hi"><span class="aw-hl">Project</span><span class="aw-hv" id="aw-project">—</span></div>
+    <div class="aw-hi"><span class="aw-hl">Status</span><span class="aw-hstatus"><span class="aw-dot" id="aw-dot"></span><span id="aw-state">IDLE</span></span></div>
+    <div class="aw-hi"><span class="aw-hl">Phase</span><span class="aw-hv" id="aw-phase">—</span></div>
+    <div class="aw-hi"><span class="aw-hl">Iteration</span><span class="aw-hv" id="aw-iter">0</span></div>
+    <div class="aw-hi"><span class="aw-hl">Elapsed</span><span class="aw-hv" id="aw-elapsed">00:00</span></div>
+    <div class="aw-spacer"></div>
+    <div class="aw-conn"><span class="aw-dot" id="aw-conn-dot"></span><span id="aw-conn-text">Waiting for workflow</span></div>
+    <select class="aw-select" id="aw-select" onchange="AW.select(this.value)" aria-label="Select workflow" style="display:none"></select>
+    <button class="aw-btn" id="aw-new" onclick="AW.showSetup()" style="display:none">+ New Workflow</button>
+    <button class="aw-btn go" id="aw-start" onclick="AW.startWorkflow()" style="display:none" title="Start the Autonomous Workflow (ChatGPT bootstrap)">▶ Start Workflow</button>
+    <button class="aw-btn warn" id="aw-pause" onclick="AW.pause()" style="display:none">⏸ Pause</button>
+    <button class="aw-btn go" id="aw-resume" onclick="AW.resume()" style="display:none">▶ Resume</button>
+    <button class="aw-btn danger" id="aw-cancel" onclick="AW.cancel()" style="display:none">✕ Cancel</button>
+  </div>
+
+  <div class="aw-overlay" id="aw-overlay"></div>
+
+  <!-- Setup / empty state (professional first-run) -->
+  <div id="aw-setup-wrap" class="aw-empty-wrap" style="display:none">
+    <div class="aw-setup">
+      <h2>Autonomous Workflow</h2>
+      <p class="aw-sub" id="aw-setup-sub">No workflow configured yet.</p>
+      <div class="aw-field"><label>Project Name</label><input id="aw-in-name" type="text" placeholder="Project name"></div>
+      <div class="aw-field"><label>Project Path</label><input id="aw-in-path" type="text" placeholder="C:\\path\\to\\project"></div>
+      <div class="aw-field"><label>Master Requirement</label><textarea id="aw-in-prompt" placeholder="The initial GPT instruction for this project…"></textarea></div>
+      <div class="aw-field"><label>Chrome Profile</label><div class="aw-reserved-note">Not configured yet · Available in Part 3</div></div>
+      <div class="aw-frow"><span class="aw-savestate" id="aw-setup-msg"></span>
+        <span><button class="aw-btn" id="aw-setup-cancel" onclick="AW.cancelSetup()" style="display:none">Cancel</button>
+        <button class="aw-btn primary" onclick="AW.create()">Create Workflow</button></span></div>
+    </div>
+  </div>
+
+  <!-- Architecture canvas + timeline -->
+  <div id="aw-workspace" class="aw-main" style="display:none">
+    <div class="aw-canvas">
+      <div class="aw-canvas-title">Realtime Workflow Architecture</div>
+      <div class="aw-flow" id="aw-flow"></div>
+    </div>
+    <div class="aw-timeline-pane">
+      <div class="aw-pane-title">Event Timeline</div>
+      <div class="aw-timeline" id="aw-timeline"><div class="aw-tl-empty">No events yet.</div></div>
+    </div>
+  </div>
+</section>
 </div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     AUTONOMOUS WORKFLOW (Part 2) — embedded Architecture experience.
+     Toggled with the main .container by openArchitecture()/closeArchitecture().
+     Reuses the Part 2 REST + WebSocket API. All JS is namespaced under AW.*
+     to avoid clashing with the global dashboard script.
+     ══════════════════════════════════════════════════════════════════════ -->
+<style>
+  /* #arch-section is a sibling of .container INSIDE #hud-shell. When active it
+     becomes the flex main-content child, filling all space beside the sidebar
+     (no margin/width hacks — the sidebar is a real flex sibling). */
+  #arch-section { display:none; }
+  #arch-section.aw-visible { display:flex; flex-direction:column; flex:1 1 auto;
+    min-width:0; align-self:stretch; padding:18px 22px 28px; overflow:auto; }
+  @media (max-width:700px){ #arch-section.aw-visible { padding:14px 12px 28px; } }
+  .aw-header { display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-bottom:16px;
+    padding:12px 16px; background:var(--q-panel); border:1px solid var(--q-line); border-radius:14px; }
+  .aw-title { font-weight:800; letter-spacing:.12em; color:#c4b5fd; text-shadow:0 0 14px rgba(139,92,246,.5); font-size:15px; white-space:nowrap; }
+  .aw-hi { display:flex; flex-direction:column; gap:2px; min-width:64px; }
+  .aw-hl { font-size:10px; letter-spacing:.12em; color:var(--q-mut,#5d6a96); text-transform:uppercase; }
+  .aw-hv { font-size:14px; font-weight:600; color:#e8edff; }
+  .aw-hstatus { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700; }
+  .aw-dot { width:9px; height:9px; border-radius:50%; background:#64748b; flex:none; }
+  .aw-dot.active { background:#22d3ee; box-shadow:0 0 10px #22d3ee; animation:awPulse 1.4s infinite; }
+  .aw-dot.waiting { background:#fbbf24; box-shadow:0 0 10px #fbbf24; }
+  .aw-dot.success { background:#34d399; box-shadow:0 0 10px #34d399; }
+  .aw-dot.failed { background:#f87171; box-shadow:0 0 10px #f87171; }
+  .aw-dot.paused { background:#8b5cf6; box-shadow:0 0 10px #8b5cf6; }
+  @keyframes awPulse { 50% { opacity:.4; } }
+  .aw-spacer { flex:1 1 auto; }
+  .aw-conn { display:flex; align-items:center; gap:7px; font-size:12px; color:#9aa7d7; }
+  .aw-conn .aw-dot { width:8px; height:8px; }
+  #arch-section select.aw-select, .aw-btn { background:var(--q-panel-2,rgba(16,21,40,.72)); color:#e8edff;
+    border:1px solid var(--q-line); border-radius:9px; padding:7px 12px; font-size:13px; font-family:inherit; cursor:pointer; }
+  .aw-btn { font-weight:600; transition:.15s; }
+  .aw-btn:hover:not(:disabled) { border-color:var(--q-line-hi,rgba(167,139,250,.5)); background:rgba(139,92,246,.16); }
+  .aw-btn:disabled { opacity:.35; cursor:not-allowed; }
+  .aw-btn.warn { color:#fbbf24; } .aw-btn.danger { color:#f87171; } .aw-btn.go { color:#34d399; }
+  .aw-btn.primary { background:linear-gradient(135deg,#8b5cf6,#7c3aed); border:none; color:#fff; }
+
+  .aw-main { display:flex; gap:18px; align-items:flex-start; width:100%; }
+  .aw-canvas { flex:1 1 auto; min-width:0; }         /* ~75-80% */
+  .aw-timeline-pane { flex:0 0 clamp(240px, 22%, 340px); }  /* compact ~20-25% */
+  .aw-pane-title, .aw-canvas-title { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:#9aa7d7; margin:0 0 10px; font-weight:700; }
+
+  .aw-flow { display:flex; flex-direction:column; align-items:center; width:100%; }
+  .aw-row { display:flex; align-items:center; justify-content:center; width:100%; }
+  .aw-arrow { color:#5d6a96; font-size:18px; padding:5px 0; }
+  .aw-block { position:relative; width:100%; max-width:560px; background:var(--q-panel); border:1px solid var(--q-line);
+    border-radius:16px; padding:14px 18px; cursor:pointer; transition:.15s; overflow:hidden; }
+  .aw-block:hover { border-color:var(--q-line-hi,rgba(167,139,250,.5)); transform:translateY(-1px); }
+  .aw-block:focus-visible { outline:2px solid #8b5cf6; outline-offset:2px; }
+  .aw-bhead { display:flex; align-items:center; gap:10px; }
+  .aw-bicon { font-size:20px; width:26px; text-align:center; flex:none; }
+  .aw-btitle { font-size:13px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; flex:1 1 auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .aw-bbadge { font-size:15px; flex:none; width:20px; text-align:center; }
+  .aw-bstatus { margin-top:6px; font-size:12px; color:#9aa7d7; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .aw-bsummary { margin-top:3px; font-size:11px; color:#5d6a96; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .aw-belapsed { margin-top:5px; font-size:11px; color:#22d3ee; font-variant-numeric:tabular-nums; }
+  .aw-bnum { position:absolute; top:8px; right:10px; font-size:10px; color:#5d6a96; }
+  .aw-block[data-pstate="PENDING"] { opacity:.62; }
+  .aw-block[data-pstate="ACTIVE"] { border-color:#22d3ee; box-shadow:0 0 20px rgba(34,211,238,.28); }
+  .aw-block[data-pstate="WAITING"] { border-color:#fbbf24; box-shadow:0 0 18px rgba(251,191,36,.24); }
+  .aw-block[data-pstate="SUCCESS"] { border-color:rgba(52,211,153,.5); }
+  .aw-block[data-pstate="FAILED"] { border-color:#f87171; box-shadow:0 0 18px rgba(248,113,113,.3); }
+  .aw-block[data-pstate="PAUSED"] { border-color:#8b5cf6; }
+  .aw-block[data-pstate="CANCELLED"] { border-color:#64748b; opacity:.55; }
+  .aw-loop { display:flex; align-items:center; gap:10px; margin:8px 0; font-size:12px; color:#9aa7d7; }
+  .aw-loop-pill { border:1px dashed var(--q-line-hi,rgba(167,139,250,.5)); border-radius:99px; padding:4px 12px; color:#8b5cf6; }
+
+  .aw-overlay { display:none; margin:0 0 14px; padding:10px 16px; border-radius:12px; font-weight:700; letter-spacing:.05em; text-align:center; }
+  .aw-overlay.show { display:block; }
+  .aw-overlay.PAUSED { background:rgba(139,92,246,.15); border:1px solid #8b5cf6; color:#c4b5fd; }
+  .aw-overlay.FAILED { background:rgba(248,113,113,.14); border:1px solid #f87171; color:#fecaca; }
+  .aw-overlay.CANCELLED { background:rgba(100,116,139,.16); border:1px solid #64748b; color:#cbd5e1; }
+
+  .aw-timeline { background:var(--q-panel); border:1px solid var(--q-line); border-radius:16px; padding:12px; max-height:66vh; overflow-y:auto; }
+  .aw-tl-item { display:flex; gap:10px; padding:7px 4px; border-bottom:1px solid rgba(148,163,255,.06); cursor:pointer; }
+  .aw-tl-item:hover { background:rgba(139,92,246,.08); }
+  .aw-tl-time { font-size:11px; color:#5d6a96; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .aw-tl-msg { font-size:12px; color:#9aa7d7; flex:1 1 auto; }
+  .aw-tl-empty { color:#5d6a96; font-size:12px; padding:8px; }
+
+  /* Setup / empty state */
+  .aw-setup { max-width:640px; margin:8px auto; background:var(--q-panel); border:1px solid var(--q-line); border-radius:16px; padding:24px 26px; }
+  .aw-setup h2 { color:#c4b5fd; font-size:18px; margin:0 0 4px; letter-spacing:.05em; }
+  .aw-setup .aw-sub { color:#9aa7d7; font-size:13px; margin:0 0 18px; }
+  .aw-field { margin-bottom:14px; }
+  .aw-field label { display:block; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:#7b8aad; margin-bottom:5px; }
+  .aw-field input, .aw-field textarea { width:100%; background:#05070d; color:#e8edff; border:1px solid var(--q-line);
+    border-radius:9px; padding:10px; font-family:inherit; font-size:13px; }
+  .aw-field textarea { min-height:110px; resize:vertical; font-family:ui-monospace,Consolas,monospace; }
+  .aw-field input:focus, .aw-field textarea:focus { outline:none; border-color:var(--q-line-hi,rgba(167,139,250,.5)); }
+  .aw-reserved-note { color:#fbbf24; font-size:11px; border:1px solid rgba(251,191,36,.4); border-radius:8px; padding:8px 10px; background:rgba(251,191,36,.06); }
+  .aw-empty-wrap { text-align:center; }
+
+  /* Details drawer */
+  .aw-scrim { position:fixed; inset:0; background:rgba(2,4,8,.6); backdrop-filter:blur(2px); z-index:40; opacity:0; pointer-events:none; transition:.18s; }
+  .aw-scrim.open { opacity:1; pointer-events:auto; }
+  .aw-drawer { position:fixed; top:0; right:0; height:100vh; width:520px; max-width:94vw; z-index:41;
+    background:linear-gradient(180deg,rgba(12,16,30,.98),rgba(7,10,18,.99)); border-left:1px solid var(--q-line-hi,rgba(167,139,250,.5));
+    box-shadow:-20px 0 60px rgba(0,0,0,.5); transform:translateX(100%); transition:transform .2s ease; display:flex; flex-direction:column; }
+  .aw-drawer.open { transform:translateX(0); }
+  .aw-dhead { display:flex; align-items:center; gap:12px; padding:16px 18px; border-bottom:1px solid var(--q-line); }
+  .aw-dtitle { font-size:16px; font-weight:800; letter-spacing:.04em; flex:1 1 auto; color:#e8edff; }
+  .aw-dclose { background:transparent; border:1px solid var(--q-line); color:#9aa7d7; border-radius:8px; width:34px; height:34px; font-size:18px; cursor:pointer; }
+  .aw-dbody { padding:16px 18px; overflow-y:auto; flex:1 1 auto; }
+  .aw-sec { margin-bottom:18px; }
+  .aw-sec-title { font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#8b5cf6; margin:0 0 8px; font-weight:700; }
+  .aw-kv { display:flex; justify-content:space-between; gap:12px; padding:4px 0; font-size:13px; border-bottom:1px solid rgba(148,163,255,.06); }
+  .aw-kv .k { color:#5d6a96; } .aw-kv .v { color:#e8edff; text-align:right; word-break:break-word; }
+  .aw-pbox { background:#05070d; border:1px solid var(--q-line); border-radius:10px; padding:10px; font-family:ui-monospace,Consolas,monospace;
+    font-size:12px; color:#9aa7d7; max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
+  .aw-pedit { width:100%; min-height:160px; resize:vertical; background:#05070d; color:#e8edff; border:1px solid var(--q-line);
+    border-radius:10px; padding:10px; font-family:ui-monospace,Consolas,monospace; font-size:12px; line-height:1.5; }
+  .aw-frow { display:flex; align-items:center; justify-content:space-between; margin-top:8px; gap:10px; }
+  .aw-charcount { font-size:11px; color:#5d6a96; }
+  .aw-savestate { font-size:11px; color:#34d399; }
+  .aw-reserved { display:inline-block; margin-left:8px; font-size:10px; color:#fbbf24; border:1px solid rgba(251,191,36,.4); border-radius:6px; padding:1px 6px; }
+  .aw-empty { color:#5d6a96; font-size:13px; font-style:italic; }
+  .aw-perm-row { display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid rgba(148,163,255,.06); }
+  .aw-perm-name { flex:1 1 auto; font-size:12px; color:#9aa7d7; }
+  .aw-perm-seg { display:flex; border:1px solid var(--q-line); border-radius:8px; overflow:hidden; }
+  .aw-perm-seg button { background:transparent; border:none; color:#5d6a96; font-size:11px; padding:4px 9px; cursor:pointer; font-weight:700; }
+  .aw-perm-seg button.sel[data-d="ALLOW"] { background:rgba(52,211,153,.25); color:#34d399; }
+  .aw-perm-seg button.sel[data-d="ASK"] { background:rgba(251,191,36,.22); color:#fbbf24; }
+  .aw-perm-seg button.sel[data-d="DENY"] { background:rgba(248,113,113,.22); color:#f87171; }
+</style>
+
+<div class="aw-scrim" id="aw-scrim" onclick="AW.closeDrawer()"></div>
+<aside class="aw-drawer" id="aw-drawer" role="dialog" aria-modal="true" aria-label="Block details">
+  <div class="aw-dhead"><span class="aw-bicon" id="aw-dicon">◻</span><span class="aw-dtitle" id="aw-dtitle">Block</span>
+    <button class="aw-dclose" onclick="AW.closeDrawer()" aria-label="Close details">×</button></div>
+  <div class="aw-dbody" id="aw-dbody"></div>
+</aside>
 
 <div id="monitor-overlay" class="confirm-overlay hidden">
   <div class="monitor-dialog">
@@ -3921,6 +4183,20 @@
   <div class="lt-dialog" id="lt-dlg"></div>
 </div>
 
+<!-- Cancel Feature confirmation -->
+<div id="feature-cancel-overlay" class="confirm-overlay hidden">
+  <div class="confirm-dialog" style="width:min(440px,92vw);">
+    <h3>🚫 Cancel this feature request?</h3>
+    <p><b>Feature:</b> <span id="fc-feature-name"></span><br>
+    <b>Current stage:</b> <span id="fc-feature-stage"></span></p>
+    <p style="font-size:12px;color:#94a3b8;">Completed research/history will be preserved. Jarvis will not continue to the next stage or Cline handoff.</p>
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="closeFeatureCancelDialog()">Keep Running</button>
+      <button class="btn" style="background:#ef4444;border-color:#ef4444;color:#fff;" onclick="confirmFeatureCancel()">Cancel Feature</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
 let pendingConfirmTaskId = null;
@@ -4061,6 +4337,9 @@ async function submitCommand() {
           addChatMsg("jarvis error", r.message || "This action is blocked for safety.");
         } else if (r.action === "error") {
           addChatMsg("jarvis error", r.message || "Could not create the task.");
+                } else if (r.action === "feature_created") {
+          // Feature request accepted — progress shows in LIVE TASKS panel.
+          addChatMsg("jarvis", r.message || "Feature request received. Researching…");
         } else if (r.action === "created") {
           if (r.status === "waiting_for_confirmation") {
             pendingConfirmTaskId = r.task_id;
@@ -4146,8 +4425,122 @@ function _ltRank(status) {
     case "partially_completed": return 4;
     case "failed": return 5;
     case "cancelled": return 6;
-    default: return 99;
+      default: return 99;
   }
+}
+
+// ── Feature Orchestrator compact card renderers ──────────────────────────────
+
+function _fpPhaseBadge(status) {
+  // Map phase status → icon + colour class
+  switch (status) {
+    case "done":        return { icon: "&#9989;", cls: "lt-fp done" };
+    case "running":     return { icon: "&#x1F504;", cls: "lt-fp running" };
+    case "waiting":     return { icon: "&#9208;", cls: "lt-fp waiting" };
+    case "pending":     return { icon: "&#9714;", cls: "lt-fp pending" };
+    case "skipped":     return { icon: "&#9998;", cls: "lt-fp skipped" };
+    case "cancelled":   return { icon: "&#128683;", cls: "lt-fp cancelled" };
+    case "failed":      return { icon: "&#10060;", cls: "lt-fp cancelled" };
+    default:            return { icon: "&#9714;", cls: "lt-fp pending" };
+  }
+}
+
+function _renderFeatureCard(t) {
+  const fp = t.feature_progress || {};
+  const phases = fp.phases || [];
+  const overall = fp.overall_status || "RUNNING";
+  const pct = fp.progress_percent || 0;
+  const elapsed = fp.elapsed_seconds != null ? fmtLT(fp.elapsed_seconds * 1000) : "—";
+  const stageElapsed = fp.stage_elapsed_seconds != null ? fmtLT(fp.stage_elapsed_seconds * 1000) : "";
+  const etaReason = fp.eta_reason || "";
+  const cancelAllowed = fp.cancel_allowed !== false;
+
+  // Determine the three phase statuses from the structured backend data
+  const phaseStatuses = phases.map(p => p.status);
+  const phaseLabels = phases.map(p => p.label);
+  const phaseIcons = phases.map(p => _fpPhaseBadge(p.status));
+
+  // Build a human-readable status line (PART 4: waiting states must read
+  // "WAITING FOR YOU", never RUNNING)
+  let statusText = overall;
+  let subText = "";
+  if (overall === "WAITING FOR CHATGPT REVIEW") {
+    statusText = "WAITING FOR YOU";
+    subText = "ChatGPT review prompt ready";
+  } else if (overall === "WAITING FOR APPROVAL") {
+    statusText = "WAITING FOR YOU";
+    subText = "Telegram approval requested";
+  } else if (overall === "WAITING FOR HIGH-RISK CONFIRMATION") {
+    statusText = "WAITING FOR YOU";
+    subText = "High-risk confirmation required";
+  } else if (overall === "RUNNING") {
+    subText = fp.current_stage || fp.current_phase || "";
+  } else if (overall === "COMPLETED") {
+    subText = "Cline task ready";
+  } else if (overall === "CANCELLED") {
+    subText = "Feature was cancelled";
+  }
+
+  // Elapsed — use stage_started_at for running, created_at for overall
+  let elapsedLabel = "Processing";
+  const ts = t.created_at ? new Date(t.created_at).getTime() : null;
+  let elapsedVal = "—";
+  if (ts) {
+    if (overall === "COMPLETED" || overall === "CANCELLED" || overall === "FAILED") {
+      const endTs = t.completed_at ? new Date(t.completed_at).getTime() : null;
+      elapsedVal = fmtLT((endTs && ts ? endTs - ts : 0)) || "—";
+      elapsedLabel = "Total";
+    } else {
+      elapsedVal = fmtLT(Date.now() - ts) || "—";
+    }
+  }
+
+  // ETA
+  let etaText = "";
+  if (overall === "COMPLETED" || overall === "CANCELLED" || overall === "FAILED") {
+    etaText = "Done";
+  } else if (etaReason && /waiting/i.test(etaReason)) {
+    etaText = etaReason;
+  } else if (fp.eta_seconds != null) {
+    etaText = fmtLT(fp.eta_seconds * 1000) + " left (" + etaReason + ")";
+  } else {
+    etaText = etaReason || "Calculating...";
+  }
+
+  const stopper = "event.stopPropagation();";
+  const cancelBtn = cancelAllowed
+    ? `<button class="lt-cancel-feature-btn" onclick="${stopper} openFeatureCancelDialog('${t.task_id}', '${fp.feature_id || t.task_id}')">🚫 Cancel Feature</button>`
+    : "";
+
+  let phasesHtml = "";
+  for (let i = 0; i < phases.length; i++) {
+    const b = phaseIcons[i] || { icon: "&#9714;", cls: "lt-fp pending" };
+    phasesHtml += `<div class="${b.cls}">${b.icon} ${phaseLabels[i] || ""}</div>`;
+  }
+
+  // Status badge class from overall status (real backend state only)
+  const badgeCls = overall === "COMPLETED" ? "b-completed"
+    : overall === "CANCELLED" ? "b-cancelled"
+    : overall === "FAILED" ? "b-failed"
+    : overall.startsWith("WAITING") ? "b-waiting" : "b-running";
+  const badgeLabel = overall.startsWith("WAITING") ? "Waiting" : overall.charAt(0) + overall.slice(1).toLowerCase();
+
+  return `<div class="lt-card lt-feature" data-task="${escapeHtml(t.task_id)}" data-feature="${escapeHtml(fp.feature_id || t.task_id)}" onclick="openTaskModal('${t.task_id}')">
+    <div class="lt-row1"><span class="lt-text">${escapeHtml(t.original_input || t.task_id)}</span><span class="lt-badge ${badgeCls}">${badgeLabel}</span></div>
+    <div class="lt-feature-phases">${phasesHtml}</div>
+    <div class="lt-feature-meta">
+      <span class="lt-cur"><b>${escapeHtml(statusText)}</b> ${subText ? escapeHtml(subText) : ""}</span>
+      <span class="lt-timer">${elapsedLabel}: <span${(!["COMPLETED","CANCELLED","FAILED"].includes(overall) && ts) ? ` data-ts="${ts}"` : ""}>${elapsedVal}</span></span>
+    </div>
+    <div class="lt-feature-meta">
+      <span class="lt-cur">Progress: ${pct}%</span>
+      <span class="lt-timer">ETA: ${escapeHtml(etaText)}</span>
+    </div>
+    <div class="lt-feature-actions">
+      <button class="lt-btn ok" onclick="${stopper} openTaskModal('${t.task_id}')">View Details</button>
+      ${cancelBtn}
+    </div>
+  </div>`;
 }
 
 function renderTasks(tasks) {
@@ -4178,8 +4571,14 @@ function renderTasks(tasks) {
     return String(a.created_at || "").localeCompare(String(b.created_at || ""));
   });
 
-  let html = "";
+    let html = "";
   for (const t of list) {
+    // Feature Orchestrator tasks get a compact 3-phase card.
+    if (t.task_type === "feature" && t.feature_progress) {
+      html += _renderFeatureCard(t);
+      continue;
+    }
+
     const meta = _ltStatusMeta(t.status);
     const msg = _ltMsg(t, meta);
     const isWaiting = t.status === "waiting_for_confirmation";
@@ -4288,8 +4687,226 @@ function closeTaskModal() {
   if (ov) ov.classList.add("hidden");
 }
 
+// ── Feature Orchestrator: full architecture timeline (detailed view) ─────────
+function _renderFeatureModal(t, fp) {
+  const body = document.getElementById("lt-dlg");
+  if (!body) return;
+
+  const phases = fp.phases || [];
+  const pct = fp.progress_percent || 0;
+  const cancelAllowed = fp.cancel_allowed !== false;
+  const cancelRequested = fp.cancel_requested || false;
+  const featureId = fp.feature_id || t.task_id;
+  const createdMs = t.created_at ? new Date(t.created_at).getTime() : null;
+  const isTerminal = ["completed", "cancelled", "failed"].includes(fp.overall_status);
+
+  // Timers
+  const elapsedSec = fp.elapsed_seconds || 0;
+  const stageElapsedSec = fp.stage_elapsed_seconds || 0;
+  const stageStarted = fp.stage_started_at ? new Date(fp.stage_started_at).getTime() : null;
+  let stageNow = "";
+  if (!isTerminal && stageStarted) {
+    stageNow = fmtLT(Date.now() - stageStarted) || "";
+  }
+
+  // ETA
+  let etaText = "";
+  if (fp.eta_reason && /waiting/i.test(fp.eta_reason)) {
+    etaText = "Waiting for user action";
+  } else if (fp.eta_seconds != null && !isTerminal) {
+    etaText = "~" + fmtLT(fp.eta_seconds * 1000) + " left (" + (fp.eta_reason || "") + ")";
+  } else if (isTerminal) {
+    etaText = "Done";
+  } else {
+    etaText = fp.eta_reason || "Calculating…";
+  }
+
+  // Phases / steps timeline
+  let phasesHtml = "";
+  for (const phase of phases) {
+    const pBadge = _fpPhaseBadge(phase.status);
+    let stepsHtml = "";
+    for (const step of (phase.steps || [])) {
+      const sBadge = _fpPhaseBadge(step.status);
+      stepsHtml += `<div class="lt-fstep ${step.status}">` +
+        `<span class="m">${sBadge.icon}</span>` +
+        `<span class="lt-fs-txt">${escapeHtml(step.label)}</span>` +
+        (step.status === "running" ? `<span class="lt-fs-meta">⏳ ${stageNow || fmtLT((stageElapsedSec||0)*1000)}</span>` : "") +
+        (step.status === "waiting" ? `<span class="lt-fs-meta">⏸ ${escapeHtml(etaText)}</span>` : "") +
+      `</div>`;
+    }
+    phasesHtml += `<div class="lt-fphase ${phase.status}">` +
+      `<div class="lt-fphase-head"><span class="mark">${pBadge.icon}</span> ${escapeHtml(phase.label || "")}</div>` +
+      `${stepsHtml}` +
+    `</div>`;
+  }
+
+  // Cancel button
+  let cancelBtn = "";
+  if (cancelAllowed && !cancelRequested) {
+    cancelBtn = `<button class="btn btn-danger btn-sm" onclick="openFeatureCancelDialog('${t.task_id}', '${featureId}')">🚫 Cancel Feature</button>`;
+  }
+
+  body.innerHTML = `
+    <button class="lt-dlg-close" onclick="closeTaskModal()" aria-label="Close">×</button>
+    <div class="lt-dlg-head">
+      <span class="lt-dlg-title">${escapeHtml(t.original_input || t.task_id)}</span>
+      <span class="lt-dlg-badge b-${fp.overall_status === "COMPLETED" ? "completed" : fp.overall_status === "CANCELLED" ? "cancelled" : fp.overall_status === "FAILED" ? "failed" : "waiting"}">${escapeHtml(fp.overall_status)}</span>
+    </div>
+
+    <div class="lt-orch">
+      <div class="lt-orch-prog">
+        <div class="lt-orch-bar"><span style="width:${pct}%"></span></div>
+        <span class="lt-orch-pct">${pct}%</span>
+      </div>
+
+      <div class="lt-orch-curnext">
+        <div class="lt-orch-cn">
+          <div class="k">Current phase</div>
+          <div class="v">${escapeHtml(fp.current_phase || "-")}</div>
+        </div>
+        <div class="lt-orch-cn">
+          <div class="k">Current stage</div>
+          <div class="v">${escapeHtml(fp.current_stage || "-")}</div>
+        </div>
+        <div class="lt-orch-cn">
+          <div class="k">Next stage</div>
+          <div class="v">${escapeHtml(fp.next_stage || "-")}</div>
+        </div>
+      </div>
+
+      <div class="lt-orch-timers">
+        <b>Processing elapsed:</b> <span>${fmtLT(elapsedSec * 1000)}</span>
+        <b>Stage elapsed:</b> <span>${fmtLT(stageElapsedSec * 1000)}</span>
+        <b>ETA:</b> <span>${escapeHtml(etaText)}</span>
+      </div>
+    </div>
+
+    <div class="lt-orch-sec">Architecture timeline — 3 phases, real steps</div>
+    ${phasesHtml}
+
+    <div class="lt-orch-timers">
+      <b>Feature ID:</b> <span>${escapeHtml(featureId)}</span>
+      <b>Started:</b> <span>${createdMs ? new Date(createdMs).toISOString().slice(11,19) : "-"}</span>
+    </div>
+
+    <div id="feature-review-section"></div>
+
+    ${cancelBtn}
+  `;
+
+  // When waiting for the user's ChatGPT review, load the prepared prompt and
+  // render Skip / Analyze controls from the real feature detail endpoint.
+  if (fp.overall_status === "WAITING FOR CHATGPT REVIEW") {
+    loadFeatureReviewSection(featureId);
+  }
+}
+
+// ── Feature ChatGPT review controls (web side of the user-assisted flow) ─────
+async function loadFeatureReviewSection(featureId) {
+  const box = document.getElementById("feature-review-section");
+  if (!box) return;
+  try {
+    const res = await fetch(`/features/${featureId}`);
+    const data = await res.json();
+    if (!data || data.status !== "ok" || !data.feature) return;
+    const f = data.feature;
+    if (f.status !== "chatgpt_review_pending") { box.innerHTML = ""; return; }
+    const promptText = f.chatgpt_prompt || "";
+    box.innerHTML = `
+      <div class="lt-orch-sec">🧠 ChatGPT review — waiting for you</div>
+      <details class="fc-prompt-wrap">
+        <summary>Show ChatGPT Prompt</summary>
+        <pre class="fc-prompt">${escapeHtml(promptText)}</pre>
+        <button class="btn btn-ghost btn-sm" onclick="copyFeaturePrompt(this)">Copy prompt</button>
+      </details>
+      <textarea id="fc-review-text" class="fc-review-input" rows="4"
+        placeholder="Paste the ChatGPT response here…"></textarea>
+      <div class="lt-feature-actions">
+        <button class="lt-btn ok" onclick="submitFeatureReview('${featureId}')">🧠 Analyze Review</button>
+        <button class="lt-btn no" onclick="skipFeatureChatgpt('${featureId}')">⏭ Skip ChatGPT</button>
+      </div>`;
+  } catch (e) { /* non-fatal */ }
+}
+
+function copyFeaturePrompt(btn) {
+  const pre = btn.parentElement.querySelector(".fc-prompt");
+  if (!pre) return;
+  navigator.clipboard && navigator.clipboard.writeText(pre.textContent).then(() => {
+    btn.textContent = "Copied ✓";
+    setTimeout(() => { btn.textContent = "Copy prompt"; }, 1500);
+  });
+}
+
+async function submitFeatureReview(featureId) {
+  const ta = document.getElementById("fc-review-text");
+  const review = ta ? ta.value.trim() : "";
+  if (!review) return;
+  try {
+    await fetch(`/features/${featureId}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ review })
+    });
+    refreshTasks();
+  } catch (e) { /* toast via refresh failure is enough in V1 */ }
+}
+
+async function skipFeatureChatgpt(featureId) {
+  try {
+    await fetch(`/features/${featureId}/skip-review`, { method: "POST" });
+    refreshTasks();
+  } catch (e) { /* non-fatal */ }
+}
+
+
+
+
+// ── Cancel Feature ────────────────────────────────────────────────────────────
+let _pendingFeatureCancel = { task_id: null, feature_id: null };
+
+function openFeatureCancelDialog(taskId, featureId) {
+  _pendingFeatureCancel = { task_id: taskId, feature_id: featureId };
+  const t = _ltTaskMap[taskId] || {};
+  const fp = t.feature_progress || {};
+  const nameEl = document.getElementById("fc-feature-name");
+  const stageEl = document.getElementById("fc-feature-stage");
+  if (nameEl) nameEl.textContent = t.original_input || fp.feature_id || taskId;
+  if (stageEl) stageEl.textContent = fp.current_stage || fp.current_phase || t.status || "-";
+  const ov = document.getElementById("feature-cancel-overlay");
+  if (ov) ov.classList.remove("hidden");
+}
+
+function closeFeatureCancelDialog() {
+  _pendingFeatureCancel = { task_id: null, feature_id: null };
+  const ov = document.getElementById("feature-cancel-overlay");
+  if (ov) ov.classList.add("hidden");
+}
+
+async function confirmFeatureCancel() {
+  const { task_id, feature_id } = _pendingFeatureCancel;
+  if (!feature_id) { closeFeatureCancelDialog(); return; }
+  try {
+    await fetch(`/features/${feature_id}/decision`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: "cancel" })
+    });
+    closeFeatureCancelDialog();
+    refreshTasks();
+  } catch (e) {
+    closeFeatureCancelDialog();
+  }
+}
+
 // Build the detail view from REAL backend data (events, steps, result, error)
 function renderTaskModal(t) {
+  // ── Feature Orchestrator detail: full architecture timeline ──────────────
+  if (t.task_type === "feature" && t.feature_progress) {
+    _renderFeatureModal(t, t.feature_progress);
+    return;
+  }
+
   const body = document.getElementById("lt-dlg");
   if (!body) return;
   const meta = _ltStatusMeta(t.status);
@@ -7644,6 +8261,656 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(hudTick, 1000);
   hudTick();
 })();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     AUTONOMOUS WORKFLOW module — namespaced (AW.*). Reuses the Part 2 REST +
+     WebSocket API. Embedded inside the Jarvis shell; no iframe, no reload.
+     ══════════════════════════════════════════════════════════════════════ -->
+<script>
+const AW = (function(){
+  const BLOCKS = [
+    { id:"chrome_profile",      n:1,  icon:"🌐", title:"Chrome Profile" },
+    { id:"gpt_conversation",    n:2,  icon:"💬", title:"GPT Conversation" },
+    { id:"master_requirement",  n:3,  icon:"📋", title:"Master Requirement" },
+    { id:"telegram_command",    n:4,  icon:"📨", title:"Telegram Command" },
+    { id:"gpt_architect",       n:5,  icon:"🧠", title:"GPT Architect" },
+    { id:"gpt_output_capture",  n:6,  icon:"📥", title:"GPT Output Capture" },
+    { id:"your_approval",       n:7,  icon:"✅", title:"Your Approval" },
+    { id:"kiro_executor",       n:8,  icon:"⚙️", title:"Kiro Executor" },
+    { id:"permission_guard",    n:9,  icon:"🛡️", title:"Permission Guard" },
+    { id:"kiro_monitor",        n:10, icon:"📡", title:"Kiro Monitor" },
+    { id:"kiro_result_capture", n:11, icon:"📦", title:"Kiro Result Capture" },
+    { id:"gpt_review",          n:12, icon:"🔎", title:"GPT Review" },
+    { id:"complete",            n:13, icon:"🏁", title:"Complete" },
+  ];
+  const BY_ID = Object.fromEntries(BLOCKS.map(b => [b.id, b]));
+  const BADGE = { PENDING:"○", ACTIVE:"●", WAITING:"◐", SUCCESS:"✓", FAILED:"✕", PAUSED:"⏸", CANCELLED:"⊘" };
+  const TERMINAL = ["COMPLETED","CANCELLED"];
+  const OVERLAY = ["PAUSED","FAILED","CANCELLED"];
+  const PERM_LABELS = {
+    read_project_files:"Read project files", write_edit_project_files:"Write / edit project files",
+    run_tests:"Run tests", normal_python_commands:"Normal python commands",
+    normal_npm_node_commands:"Normal npm / node commands", delete_files:"Delete files",
+    install_unusual_packages:"Install unusual software / packages", git_push:"git push",
+    deployment:"Deployment", external_side_effects:"External side effects",
+    git_reset:"git reset", git_clean:"git clean",
+    destructive_repo_operations:"Destructive repository operations",
+    credential_secret_operations:"Credential / secrets operations",
+  };
+  // Sensible per-project defaults for the setup form (NOT hardcoded as the only project).
+  const DEFAULTS = { name:"Project Opus", path:"C:\\Project Opus" };
+
+  let wfId=null, wf=null, events=[], ws=null, wsDelay=1000, wsRun=false, wsConnectedOnce=false;
+  let openBlock=null, elapsedTimer=null, mrDirty=false, built=false, permPolicy={};
+  let chromeProfiles=[], chromePicked=null;
+
+  const $ = id => document.getElementById(id);
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function fmtDur(ms){ if(ms==null||isNaN(ms)||ms<0) return "00:00"; const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60,p=n=>String(n).padStart(2,"0"); return (h>0?p(h)+":":"")+p(m)+":"+p(ss); }
+  function fmtClock(iso){ if(!iso) return ""; try{ return new Date(iso).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"}); }catch(e){ return iso; } }
+  async function api(method,url,body){
+    const opt={method,headers:{"Content-Type":"application/json"}};
+    if(body!==undefined) opt.body=JSON.stringify(body);
+    const res=await fetch(url,opt); const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.detail||("HTTP "+res.status));
+    return data;
+  }
+  function toast(m){ if(window.showToast){ try{ window.showToast(m); return; }catch(e){} } console.log("[AW]",m); }
+
+  /* ── Entry: open/close within the shell ── */
+  function open(){
+    if(!built){ buildBlocks(); built=true; if(!elapsedTimer) elapsedTimer=setInterval(tickElapsed,1000); }
+    refreshList().then(()=>{
+      if(wfId) select(wfId);
+      else showSetupOrEmpty();
+    });
+  }
+  function close(){ /* just hidden by shell; keep WS + state alive so returning restores */ }
+
+  async function refreshList(){
+    try {
+      const data = await api("GET","/api/workflows");
+      const wfs = data.workflows || [];
+      const sel = $("aw-select"); sel.innerHTML="";
+      wfs.forEach(w=>{ const o=document.createElement("option"); o.value=w.workflow_id; o.textContent=(w.project_name||"Untitled")+" · "+w.state; sel.appendChild(o); });
+      if(!wfId && wfs.length) wfId = wfs[0].workflow_id;
+      if(wfId) sel.value=wfId;
+      // Selector + New only meaningful when workflows exist.
+      sel.style.display = wfs.length ? "" : "none";
+      $("aw-new").style.display = wfs.length ? "" : "none";
+      return wfs;
+    } catch(e){ setConn("offline","Offline"); return []; }
+  }
+
+  function showSetupOrEmpty(){
+    // No workflow selected → professional setup form (prefilled defaults).
+    wfId=null; wf=null; events=[];
+    $("aw-workspace").style.display="none";
+    $("aw-setup-wrap").style.display="";
+    $("aw-setup-sub").textContent="No workflow configured yet.";
+    $("aw-setup-cancel").style.display="none";
+    $("aw-in-name").value = DEFAULTS.name;
+    $("aw-in-path").value = DEFAULTS.path;
+    $("aw-in-prompt").value = "";
+    $("aw-project").textContent="—";
+    setState("IDLE"); updateControls("IDLE"); updateOverlay("IDLE");
+    $("aw-select").style.display="none";
+    setConn("waiting","Waiting for workflow");
+    disconnectWs();
+  }
+  function showSetup(){ // + New Workflow → same form, cancellable
+    $("aw-workspace").style.display="none";
+    $("aw-setup-wrap").style.display="";
+    $("aw-setup-sub").textContent="Create a new workflow.";
+    $("aw-setup-cancel").style.display = wfId ? "" : "none";
+    $("aw-in-name").value=DEFAULTS.name; $("aw-in-path").value=DEFAULTS.path; $("aw-in-prompt").value="";
+    $("aw-setup-msg").textContent="";
+  }
+  function cancelSetup(){ if(wfId){ $("aw-setup-wrap").style.display="none"; select(wfId); } }
+
+  async function create(){
+    const name=$("aw-in-name").value.trim();
+    if(!name){ $("aw-setup-msg").textContent="Project name is required"; $("aw-setup-msg").style.color="#fbbf24"; return; }
+    const body={ project_name:name, project_path:$("aw-in-path").value.trim()||null, master_gpt_prompt:$("aw-in-prompt").value };
+    try {
+      const data = await api("POST","/api/workflows",body);        // PRODUCTION endpoint
+      const id = data.workflow.workflow_id;
+      $("aw-setup-wrap").style.display="none";
+      await refreshList();
+      wfId=id; select(id);
+      toast("Workflow created");
+    } catch(e){ $("aw-setup-msg").textContent="Create failed: "+e.message; $("aw-setup-msg").style.color="#f87171"; }
+  }
+
+  async function select(id){
+    if(!id){ showSetupOrEmpty(); return; }
+    wfId=id; wf=null; events=[]; openBlock=null; mrDirty=false; closeDrawer();
+    $("aw-setup-wrap").style.display="none";
+    $("aw-workspace").style.display="";
+    $("aw-select").style.display=""; $("aw-select").value=id; $("aw-new").style.display="";
+    try {
+      const data = await api("GET","/api/workflows/"+encodeURIComponent(id));
+      applyWorkflow(data.workflow);
+      const ev = await api("GET","/api/workflows/"+encodeURIComponent(id)+"/events");
+      events = ev.events||[]; renderTimeline();
+    } catch(e){ toast("Load failed: "+e.message); }
+    connectWs(id);
+  }
+
+  /* ── Blocks ── */
+  function buildBlocks(){
+    const flow=$("aw-flow"); flow.innerHTML="";
+    BLOCKS.forEach((b,i)=>{
+      if(i>0){ const r=document.createElement("div"); r.className="aw-row"; r.innerHTML='<span class="aw-arrow">↓</span>'; flow.appendChild(r); }
+      if(b.id==="complete"){ const l=document.createElement("div"); l.className="aw-row"; l.innerHTML='<div class="aw-loop"><span class="aw-loop-pill">More Work?</span><span style="color:#8b5cf6">YES ↺ back to Kiro Executor</span><span>· NO ↓</span></div>'; flow.appendChild(l); }
+      const r=document.createElement("div"); r.className="aw-row";
+      const el=document.createElement("div"); el.className="aw-block"; el.id="aw-block-"+b.id; el.tabIndex=0;
+      el.setAttribute("role","button"); el.setAttribute("data-block",b.id); el.setAttribute("data-pstate","PENDING");
+      el.setAttribute("aria-label", b.title+" block");
+      el.onclick=()=>openDrawer(b.id);
+      el.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); openDrawer(b.id); } };
+      el.innerHTML='<span class="aw-bnum">'+b.n+'</span><div class="aw-bhead"><span class="aw-bicon">'+b.icon+'</span>'+
+        '<span class="aw-btitle">'+esc(b.title)+'</span><span class="aw-bbadge" id="aw-badge-'+b.id+'">○</span></div>'+
+        '<div class="aw-bstatus" id="aw-status-'+b.id+'">Pending</div>'+
+        '<div class="aw-bsummary" id="aw-summary-'+b.id+'"></div>'+
+        '<div class="aw-belapsed" id="aw-elapsed-'+b.id+'"></div>';
+      r.appendChild(el); flow.appendChild(r);
+    });
+  }
+  function applyWorkflow(w){
+    if(!w) return; wf=w;
+    $("aw-project").textContent = w.project_name||"Untitled";
+    $("aw-iter").textContent = w.iteration_number??0;
+    $("aw-phase").textContent = phaseLabel(w.state);
+    setState(w.state); updateControls(w.state); updateOverlay(w.state,w);
+    const blocks=w.blocks||{};
+    BLOCKS.forEach(b=>paintBlock(b.id, blocks[b.id]||"PENDING", w));
+    if(openBlock) renderDrawerBody(openBlock);
+    const sel=$("aw-select"); if(sel && sel.value===w.workflow_id){ const o=sel.options[sel.selectedIndex]; if(o) o.textContent=(w.project_name||"Untitled")+" · "+w.state; }
+  }
+  function paintBlock(id,pstate,w){
+    const el=$("aw-block-"+id); if(!el) return;
+    el.setAttribute("data-pstate",pstate);
+    $("aw-badge-"+id).textContent=BADGE[pstate]||"○";
+    const info=blockInfo(id,w,pstate);
+    $("aw-status-"+id).textContent=info.status;
+    $("aw-summary-"+id).textContent=info.summary||"";
+    $("aw-elapsed-"+id).textContent=(pstate==="ACTIVE"&&info.showElapsed)?("Elapsed: "+fmtDur(activeMs(w))):"";
+  }
+  function blockInfo(id,w,pstate){
+    w=w||{}; const P={PENDING:"Pending",ACTIVE:"Active",WAITING:"Waiting",SUCCESS:"Complete",FAILED:"Failed",PAUSED:"Paused",CANCELLED:"Cancelled"};
+    let status=P[pstate]||"Pending", summary="", showElapsed=true;
+    switch(id){
+      case "chrome_profile": status=w.selected_chrome_account_email?w.selected_chrome_account_email:(w.selected_chrome_profile_key?w.selected_chrome_profile_key.replace('chrome-profile:',''):"No profile selected"); summary=w.selected_chrome_profile_key?("Key: "+w.selected_chrome_profile_key):"Click to select a Chrome profile"; break;
+      case "gpt_conversation": status=w.chatgpt_conversation_url?"Conversation linked":P[pstate]; summary=w.chatgpt_tab_id?("Tab "+w.chatgpt_tab_id):""; break;
+      case "master_requirement": status=w.master_gpt_prompt?"Requirement set":(pstate==="PENDING"?"Not set":P[pstate]); summary=w.master_gpt_prompt?w.master_gpt_prompt.slice(0,120):"Click to edit the master prompt"; break;
+      case "telegram_command": { const wn=w.telegram_waiting_notification||{}; status=w.current_user_command?"Command received":(pstate==="WAITING"?(wn.sent?"Waiting for your Telegram requirement":"Notifying you on Telegram…"):P[pstate]); summary=w.current_user_command?w.current_user_command.slice(0,120):(wn.sent?("Telegram notified (msg "+(wn.message_id??"—")+")"):""); } break;
+      case "gpt_architect": status=pstate==="ACTIVE"?"Thinking…":P[pstate]; summary=(w.latest_gpt_output||"").slice(0,120); break;
+      case "gpt_output_capture": status=(w.latest_gpt_output_len>0)?("Captured ("+w.latest_gpt_output_len+" chars)"):(w.state==="GPT_OUTPUT_READY"?"Capturing…":(pstate==="ACTIVE"?"Ready to capture":(pstate==="PENDING"?"Not captured":P[pstate]))); summary=(w.latest_gpt_output||"").slice(0,120); break;
+      case "your_approval": { const ast=((w.approval||{}).status||"").toLowerCase(); status=ast==="approved"?"Approved · Ready for Kiro":ast==="edited"?"Edited · Ready for Kiro":ast==="cancelled"?"Cancelled":(pstate==="WAITING"?"Awaiting your approval":P[pstate]); summary=(w.approved_gpt_prompt||w.latest_gpt_output||"").slice(0,120); } break;
+      case "kiro_executor": { const k=w.kiro||{}; status=w.state==="KIRO_RUNNING"?(k.status==="waiting_permission"?"Running · awaiting permission":"Running"):w.state==="KIRO_STARTING"?"Opening Kiro…":((w.approval||{}).status==="approved"||(w.approval||{}).status==="edited")&&w.state==="WAITING_FOR_APPROVAL"?"APPROVED · Ready for Kiro":(k.status||P[pstate]); summary=w.kiro_session_id?("Session "+w.kiro_session_id):("Iteration "+(w.iteration_number??0)); } break;
+      case "permission_guard": status=pstate==="WAITING"?"Permission required":"Policy configured"; summary="Click to configure ALLOW / ASK / DENY"; showElapsed=false; break;
+      case "kiro_monitor": status=(pstate==="ACTIVE")?"Monitoring Kiro…":(pstate==="PENDING"?"Kiro has not started.":P[pstate]); break;
+      case "kiro_result_capture": status=(w.latest_kiro_result_len>0)?("Result captured ("+w.latest_kiro_result_len+" chars)"):(pstate==="PENDING"?"No result yet":P[pstate]); summary=(w.latest_kiro_result||"").slice(0,120); break;
+      case "gpt_review": status=pstate==="ACTIVE"?"GPT reviewing result…":P[pstate]; summary="Iteration "+(w.iteration_number??0); break;
+      case "complete": status=(w.state==="COMPLETED")?"Workflow complete":P[pstate]; summary=w.completed_at?("Finished "+fmtClock(w.completed_at)):""; showElapsed=false; break;
+    }
+    return { status, summary, showElapsed };
+  }
+
+  function flavor(s){
+    if(s==="COMPLETED") return "success"; if(s==="FAILED") return "failed"; if(s==="CANCELLED") return "";
+    if(s==="PAUSED") return "paused";
+    if(s==="WAITING_FOR_COMMAND"||s==="WAITING_FOR_APPROVAL"||s==="KIRO_WAITING_PERMISSION") return "waiting";
+    if(s==="IDLE") return ""; return "active";
+  }
+  function setState(s){ $("aw-state").textContent=(s||"IDLE").replace(/_/g," "); $("aw-dot").className="aw-dot "+flavor(s); }
+  function phaseLabel(s){ const m={IDLE:"Idle",INITIALIZING:"Startup",GPT_BOOTSTRAPPING:"GPT bootstrap",WAITING_FOR_COMMAND:"Awaiting command",GPT_RUNNING:"GPT architect",GPT_OUTPUT_READY:"GPT output",WAITING_FOR_APPROVAL:"Approval",KIRO_STARTING:"Kiro start",KIRO_RUNNING:"Kiro running",KIRO_WAITING_PERMISSION:"Permission",KIRO_RESULT_READY:"Kiro result",GPT_REVIEWING:"GPT review",COMPLETED:"Complete",PAUSED:"Paused",FAILED:"Failed",CANCELLED:"Cancelled"}; return m[s]||s||"—"; }
+  function updateControls(s){
+    const term=TERMINAL.includes(s);
+    const canPause=["GPT_BOOTSTRAPPING","WAITING_FOR_COMMAND","GPT_RUNNING","WAITING_FOR_APPROVAL","KIRO_STARTING","KIRO_RUNNING","GPT_REVIEWING"].includes(s);
+    const has=!!wfId;
+    // Start Workflow: only when IDLE/FAILED AND a Chrome profile is selected
+    // AND the Master Requirement is non-empty.
+    const ready = wf && wf.selected_chrome_profile_key && (wf.master_gpt_prompt||"").trim().length>0;
+    const canStart = has && (s==="IDLE" || s==="FAILED") && ready;
+    const startBtn=$("aw-start");
+    if(startBtn){
+      startBtn.style.display = (has && (s==="IDLE"||s==="FAILED")) ? "" : "none";
+      startBtn.disabled = !canStart;
+      startBtn.title = canStart ? "Start the Autonomous Workflow (ChatGPT bootstrap)"
+        : "Select a Chrome profile and set the Master Requirement first";
+    }
+    $("aw-pause").style.display = has?"":"none"; $("aw-resume").style.display=has?"":"none"; $("aw-cancel").style.display=has?"":"none";
+    $("aw-pause").disabled=!canPause; $("aw-resume").disabled=s!=="PAUSED"; $("aw-cancel").disabled=term;
+  }
+  function updateOverlay(s,w){
+    const el=$("aw-overlay"); el.className="aw-overlay";
+    if(OVERLAY.includes(s)){ el.classList.add("show",s);
+      let t=s;
+      if(s==="PAUSED") t="⏸ PAUSED"+(w&&w.pause_reason?(" — "+w.pause_reason):"")+(w&&w.resume_state?(" (resume → "+w.resume_state.replace(/_/g," ")+")"):"");
+      if(s==="FAILED") t="✕ FAILED"+(w&&w.last_error?(" — "+w.last_error):"")+(w&&w.last_error_code?(" ["+w.last_error_code+"]"):"");
+      if(s==="CANCELLED") t="⊘ CANCELLED"+(w&&w.cancel_reason?(" — "+w.cancel_reason):"");
+      el.textContent=t;
+    }
+  }
+  function activeMs(w){ const start=w&&(w.started_at||w.created_at); if(!start) return 0; const end=(w&&w.completed_at)?new Date(w.completed_at):new Date(); return end-new Date(start); }
+  function tickElapsed(){
+    if(!wf||!isVisible()) return;
+    $("aw-elapsed").textContent=fmtDur(activeMs(wf));
+    const blocks=wf.blocks||{};
+    BLOCKS.forEach(b=>{ if(blocks[b.id]==="ACTIVE"){ const info=blockInfo(b.id,wf,"ACTIVE"); const e=$("aw-elapsed-"+b.id); if(e&&info.showElapsed) e.textContent="Elapsed: "+fmtDur(activeMs(wf)); } });
+  }
+  function isVisible(){ return $("arch-section").classList.contains("aw-visible"); }
+
+  /* ── Timeline ── */
+  function renderTimeline(){ const tl=$("aw-timeline"); if(!events.length){ tl.innerHTML='<div class="aw-tl-empty">No events yet.</div>'; return; } tl.innerHTML=""; events.forEach(ev=>tl.appendChild(tlItem(ev))); tl.scrollTop=tl.scrollHeight; }
+  function tlItem(ev){ const it=document.createElement("div"); it.className="aw-tl-item"; it.innerHTML='<span class="aw-tl-time">'+esc(fmtClock(ev.timestamp))+'</span><span class="aw-tl-msg">'+esc(ev.message||ev.event_type||"")+'</span>'; it.onclick=()=>showEventMeta(ev); return it; }
+  function addEvent(ev){ if(!ev) return; if(events.some(e=>e.event_id===ev.event_id)) return; events.push(ev); const tl=$("aw-timeline"); if(tl.querySelector(".aw-tl-empty")) tl.innerHTML=""; tl.appendChild(tlItem(ev)); tl.scrollTop=tl.scrollHeight; }
+  function showEventMeta(ev){ const meta=ev.metadata&&Object.keys(ev.metadata).length?JSON.stringify(ev.metadata,null,2):"(no metadata)"; openBlock=null;
+    openDrawerRaw("🗂",(ev.event_type||"Event"),
+      sec("Event", kv("Type",ev.event_type)+kv("From → To",(ev.from_state||"—")+" → "+(ev.to_state||"—"))+kv("Time",fmtClock(ev.timestamp))+kv("Iteration",ev.iteration_number))+
+      sec("Metadata",'<div class="aw-pbox">'+esc(meta)+'</div>')); }
+
+  /* ── Controls ── */
+  async function ctl(action,body){ if(!wfId) return; try{ const d=await api("POST","/api/workflows/"+encodeURIComponent(wfId)+"/"+action,body||{}); applyWorkflow(d.workflow); toast("Workflow "+action+"d"); }catch(e){ toast(action+" failed: "+e.message); } }
+  function pause(){ ctl("pause",{reason:"Paused from Autonomous Workflow UI"}); }
+  function resume(){ ctl("resume"); }
+  function cancel(){ if(!confirm("Cancel this workflow? This is terminal.")) return; ctl("cancel",{reason:"Cancelled from Autonomous Workflow UI"}); }
+
+  /* ── Drawer ── */
+  function kv(k,v){ return '<div class="aw-kv"><span class="k">'+esc(k)+'</span><span class="v">'+esc(v==null||v===""?"—":v)+'</span></div>'; }
+  function sec(t,inner){ return '<div class="aw-sec"><div class="aw-sec-title">'+esc(t)+'</div>'+inner+'</div>'; }
+  function pbox(text,empty){ return text?'<div class="aw-pbox">'+esc(text)+'</div>':'<div class="aw-empty">'+esc(empty||"Nothing to show yet.")+'</div>'; }
+  function openDrawer(id){ openBlock=id; const b=BY_ID[id]; $("aw-dicon").textContent=b.icon; $("aw-dtitle").textContent=b.title; renderDrawerBody(id); $("aw-drawer").classList.add("open"); $("aw-scrim").classList.add("open"); }
+  function openDrawerRaw(icon,title,html){ $("aw-dicon").textContent=icon; $("aw-dtitle").textContent=title; $("aw-dbody").innerHTML=html; $("aw-drawer").classList.add("open"); $("aw-scrim").classList.add("open"); }
+  function closeDrawer(){ if(mrDirty&&!confirm("Discard unsaved Master Requirement changes?")) return; mrDirty=false; openBlock=null; $("aw-drawer").classList.remove("open"); $("aw-scrim").classList.remove("open"); }
+  function renderDrawerBody(id){
+    const w=wf||{}; const blocks=w.blocks||{}; const pstate=blocks[id]||"PENDING";
+    let html=sec("Status", kv("Presentation",pstate)+kv("Workflow state",w.state||"—")+kv("Iteration",w.iteration_number??0));
+    switch(id){
+      case "chrome_profile":
+        html+=sec("Selected Profile",
+          kv("Account email", w.selected_chrome_account_email) +
+          kv("Profile key", w.selected_chrome_profile_key) +
+          '<div id="aw-chrome-status" class="aw-empty" style="margin-top:6px">—</div>');
+        html+=sec("Available Profiles",
+          '<div id="aw-chrome-list" class="aw-empty">Loading profiles…</div>'+
+          '<div class="aw-frow" style="margin-top:10px"><span class="aw-savestate" id="aw-chrome-msg"></span>'+
+          '<span><button class="aw-btn" onclick="AW.loadChromeProfiles()">Refresh Profiles</button> '+
+          '<button class="aw-btn primary" onclick="AW.saveChrome()">Save Selection</button> '+
+          '<button class="aw-btn go" onclick="AW.testOpenChrome()">Test Open</button></span></div>');
+        break;
+      case "gpt_conversation":
+        html+=sec("Conversation",
+          '<div id="aw-gpt-status" class="aw-empty">Loading…</div>' +
+          kv("Selected Chrome Profile", w.selected_chrome_account_email || w.selected_chrome_profile_key) +
+          kv("Conversation URL", w.chatgpt_conversation_url) +
+          kv("Window HWND", w.chatgpt_window_hwnd) +
+          kv("Updated", fmtClock(w.updated_at)));
+        if(w.chatgpt_conversation_url) html+=sec("Conversation URL (full)", pbox(w.chatgpt_conversation_url));
+        html+=sec("Controls",
+          '<div class="aw-frow"><span class="aw-savestate" id="aw-gpt-msg"></span>'+
+          '<button class="aw-btn go" onclick="AW.openConversation()">Open Conversation</button></div>'+
+          '<div class="aw-empty" style="margin-top:6px">Open Conversation focuses the selected Chrome profile and navigates to the saved conversation (no new chat).</div>');
+        break;
+      case "master_requirement":
+        var mrEditable = (w.state==="IDLE" || w.state==="FAILED");
+        html+=sec("Prompt / Config",'<textarea class="aw-pedit" id="aw-mr-text" oninput="AW.mrInput()"'+(mrEditable?'':' disabled')+'>'+esc(w.master_gpt_prompt||"")+'</textarea>'+
+          '<div class="aw-frow"><span class="aw-charcount" id="aw-mr-count">'+((w.master_gpt_prompt||"").length)+' chars</span><span class="aw-savestate" id="aw-mr-saved">'+(w.master_gpt_prompt?"Saved":"Not set")+'</span></div>'+
+          (mrEditable
+            ? '<div class="aw-frow"><span></span><button class="aw-btn primary" id="aw-mr-save" onclick="AW.saveMR()">Save</button></div>'
+            : '<div class="aw-empty">Locked while the workflow is running. Editing is available when the workflow is IDLE or FAILED.</div>')); break;
+      case "telegram_command":
+        { const cm=w.current_command_meta||{}; const wn=w.telegram_waiting_notification||{};
+          const notifLabel = wn.sent?"Sent":(w.state==="WAITING_FOR_COMMAND"?"Sending / not yet confirmed":"—");
+          html+=sec("Readiness notification",
+            kv("Status",(w.state==="WAITING_FOR_COMMAND"&&!wn.sent)?"Notifying you on Telegram…":notifLabel)+
+            kv("Telegram message id",wn.message_id??"—")+
+            kv("Sent at",fmtClock(wn.sent_at))+
+            ((w.state==="WAITING_FOR_COMMAND"&&!wn.sent)?kv("Note","Telegram notification failed — will retry"):""));
+          if(w.state==="WAITING_FOR_COMMAND")
+            html+=sec("Waiting","<div class=\"aw-empty\">"+(wn.sent?"Waiting for your Telegram requirement. Send your next requirement to Jarvis.":"Preparing to notify you on Telegram.")+"</div>");
+          html+=sec("Input", kv("Current command",w.current_user_command)+kv("State",w.current_user_command?"Received":(pstate==="WAITING"?"Waiting":"—"))+kv("Received",fmtClock(cm.received_at))+kv("Telegram msg id",cm.telegram_message_id));
+          if(w.current_user_command) html+=sec("Command (exact)",pbox(w.current_user_command));
+          html+=sec("Delivery",'<div class="aw-empty">Sent to the SAME saved ChatGPT conversation via the existing Telegram bot.</div>'); }
+        break;
+      case "gpt_architect":
+        { const rr=w.latest_gpt_response||{};
+          html+=sec("Input",kv("Command",w.current_user_command));
+          html+=sec("Generation",kv("State",w.state)+kv("Response ready",rr.ready_at?"Yes":(w.state==="GPT_RUNNING"?"Running…":"—"))+kv("Ready at",fmtClock(rr.ready_at))+kv("Iteration",rr.iteration??(w.iteration_number??0)));
+          html+=sec("Output (latest)",pbox(w.latest_gpt_output,"Part 5 detects completion but does not read the response text (that is a later Part)."));
+          if(w.last_error) html+=sec("Errors",pbox(w.last_error));
+          html+=sec("Timing",kv("Started",fmtClock(w.started_at))+kv("Updated",fmtClock(w.updated_at)));
+          html+=sec("Controls",'<button class="aw-btn" disabled>Open GPT</button><span class="aw-reserved">Available in a later Part</span><br><br><button class="aw-btn" disabled>Retry</button><span class="aw-reserved">Available in a later Part</span>'); }
+        break;
+      case "gpt_output_capture":
+        { const rr=w.latest_gpt_response||{}; const captured=(w.latest_gpt_output_len||0)>0;
+          const capState = captured?"SUCCESS":(w.state==="GPT_OUTPUT_READY"?"Capturing…":(pstate==="ACTIVE"?"Ready to capture":P[pstate]));
+          html+=sec("Status",kv("Capture",captured?("Captured ("+w.latest_gpt_output_len+" chars)"):capState)+kv("Workflow state",w.state)+kv("Conversation URL",w.chatgpt_conversation_url||"—"));
+          html+=sec("Response",kv("Iteration",w.latest_gpt_output_iteration??rr.iteration??(w.iteration_number??0))+kv("Copy detected",captured?"Yes":(rr.copy_available?"Available":"—"))+kv("Captured length",(w.latest_gpt_output_len||0)+" chars")+kv("SHA-256",w.latest_gpt_output_hash||"—")+kv("Captured at",fmtClock(w.latest_gpt_output_captured_at)));
+          html+=sec("Captured GPT Output (exact)",'<div class="aw-pbox" style="max-height:260px;overflow:auto;white-space:pre-wrap">'+(w.latest_gpt_output?esc(w.latest_gpt_output):'<span class="aw-empty">Nothing captured yet.</span>')+'</div>');
+          html+=sec("Controls",'<button class="aw-btn" onclick="AW.openConversation()">Open Conversation</button>'+(captured?'':' <button class="aw-btn" disabled>Retry Capture</button><span class="aw-reserved">Available while not yet captured</span>')); }
+        break;
+      case "your_approval":
+        { const ap=w.approval||{}; const st=(ap.status||"").toLowerCase();
+          const label = st==="approved"?"Approved":(st==="edited"?"Edited (approved)":(st==="cancelled"?"Cancelled":(st==="edit_requested"||st==="edited_pending_confirmation")?"Edit in progress":(w.state==="WAITING_FOR_APPROVAL"?"Waiting for approval":"—")));
+          html+=sec("Status",kv("Approval",label)+kv("Workflow state",w.state)+kv("Iteration",ap.iteration??(w.iteration_number??0))+kv("Output hash",ap.output_hash||w.latest_gpt_output_hash||"—")+kv("Telegram message id",ap.message_id??"—")+kv("Decision at",fmtClock(ap.approved_at||ap.cancelled_at||ap.requested_at)));
+          html+=sec("GPT Output",pbox(w.latest_gpt_output,"No GPT output captured yet."));
+          if(w.edited_gpt_prompt) html+=sec("Edited Prompt",pbox(w.edited_gpt_prompt));
+          html+=sec("Approved Prompt",pbox(w.approved_gpt_prompt,(st==="approved"||st==="edited")?"—":"Not approved yet."));
+          html+=sec("Controls",'<div class="aw-empty">Approve / Edit / Cancel via the Telegram approval buttons. When approved, the workflow waits at APPROVED — Ready for Kiro (Part 7).</div>'); }
+        break;
+      case "kiro_executor":
+        { const k=w.kiro||{}; const st=w.state;
+          const kstatus = st==="KIRO_RUNNING"?(k.status==="waiting_permission"?"Running · awaiting permission":"Running"):
+                          st==="KIRO_STARTING"?(k.status==="session_ready"?"Preparing session…":"Opening Kiro…"):
+                          st==="WAITING_FOR_APPROVAL"?((w.approval||{}).status==="approved"||(w.approval||{}).status==="edited"?"APPROVED · Ready for Kiro":"Waiting for approval"):
+                          (k.status||P[pstate]);
+          html+=sec("Status",kv("Kiro",kstatus)+kv("Workflow state",st)+kv("Iteration",w.iteration_number??0));
+          html+=sec("Session",kv("Project path",w.kiro_project_path||k.project_path||"—")+kv("Observed project",k.observed_project||"—")+kv("Window HWND",k.window_hwnd??"—")+kv("Session ID",w.kiro_session_id||k.kiro_session_id||"—")+kv("Automation lock owner",(k.lock_owner||"—"))+kv("Last verified",fmtClock(k.last_verified_at)));
+          html+=sec("Approved prompt (submitted to Kiro)",pbox(w.approved_gpt_prompt,"No approved prompt yet."));
+          const le=(w.kiro_last_error||{}); if(le.error) html+=sec("Last error",pbox(le.error));
+          const canFocus = !!k.window_hwnd;
+          const aprStatus=((w.approval||{}).status||"");
+          const approvedOk = st==="WAITING_FOR_APPROVAL" && (aprStatus==="approved"||aprStatus==="edited") && !!(w.approved_gpt_prompt||"").trim();
+          const ho=(w.kiro_manual_handoff||{});
+          const handoffConfirmed = !!ho.confirmed && !ho.consumed;
+          // Exclusive-control handoff (user-confirmed; NOT inferred).
+          if(approvedOk){
+            if(handoffConfirmed){
+              html+=sec("Exclusive Handoff",kv("Status","CONFIRMED")+kv("Target HWND",ho.target_hwnd??"—")+kv("Project",ho.project_path||"C:\\Project Opus")+kv("Confirmed at",fmtClock(ho.confirmed_at)));
+            } else {
+              html+=sec("Exclusive Handoff",
+                '<div class="aw-empty" style="margin-bottom:8px">Before Jarvis can control Kiro, open a blank Kiro <b>New Session</b> for C:\\Project Opus and stop touching Kiro until this test finishes.</div>'+
+                '<label style="display:block;margin-bottom:6px"><input type="checkbox" id="aw-kiro-ho-ack"> I have opened a blank Kiro New Session for C:\\Project Opus and will not touch Kiro until this test finishes.</label>'+
+                '<button class="aw-btn warn" onclick="AW.kiroGrantHandoff()">Grant Exclusive Control</button>');
+            }
+          }
+          const canStartKiro = approvedOk && handoffConfirmed;
+          html+=sec("Controls",
+            '<button class="aw-btn go" '+(canStartKiro?'':'disabled ')+'onclick="AW.kiroStart()">\u25b6 Start Kiro</button> '+
+            '<button class="aw-btn" '+(canFocus?'':'disabled ')+'onclick="AW.kiroFocus()">Open/Focus Kiro</button> '+
+            '<button class="aw-btn" '+(canFocus?'':'disabled ')+'onclick="AW.kiroVerifyProject()">Verify Project</button>'+
+            '<div class="aw-empty" style="margin-top:8px">Start Kiro submits the exact approved prompt into the confirmed C:\\Project Opus Kiro window (requires Exclusive Handoff). Permission handling arrives in Part 8.</div>'); }
+        break;
+      case "permission_guard":
+        html+=sec("Permission Policy",'<div class="aw-empty">Policy only — this does not control Kiro yet (Part 9 will enforce it).</div><div id="aw-perm-list" style="margin-top:8px"></div><div class="aw-frow"><span class="aw-savestate" id="aw-perm-saved"></span><button class="aw-btn primary" onclick="AW.savePerm()">Save Policy</button></div>'); break;
+      case "kiro_monitor":
+        html+=sec("Monitor",kv("Status",pstate==="ACTIVE"?"Monitoring":"Kiro has not started.")+kv("Elapsed",pstate==="ACTIVE"?fmtDur(activeMs(w)):"—")+kv("Current action","—")+kv("Files changed","—")+kv("Commands","—")+kv("Tests","—")+kv("Permissions","—"));
+        html+=sec("Latest activity",'<div class="aw-empty">Live Kiro activity arrives in a later Part.</div>');
+        if(w.last_error) html+=sec("Errors",pbox(w.last_error)); break;
+      case "kiro_result_capture":
+        html+=sec("Result",kv("Captured",w.latest_kiro_result_len>0?"Yes":"No")+kv("Length",(w.latest_kiro_result_len||0)+" chars")+kv("Iteration",w.iteration_number??0));
+        html+=sec("Kiro result",pbox(w.latest_kiro_result,"No Kiro result yet.")); break;
+      case "gpt_review":
+        html+=sec("Review context",kv("Iteration",w.iteration_number??0)+kv("Review state",w.state));
+        html+=sec("Kiro result under review",pbox(w.latest_kiro_result,"No Kiro result to review yet."));
+        html+=sec("Latest GPT output",pbox(w.latest_gpt_output,"—")); break;
+      case "complete":
+        if(w.state==="COMPLETED"){ html+=sec("Completion",kv("Completed at",fmtClock(w.completed_at))+kv("Iterations",w.iteration_number??0)+kv("Duration",fmtDur(activeMs(w)))+kv("Events",events.length)); html+=sec("Final result",pbox(w.latest_kiro_result||w.latest_gpt_output,"—")); }
+        else html+=sec("Completion",'<div class="aw-empty">Workflow has not completed yet.</div>'); break;
+    }
+    $("aw-dbody").innerHTML=html;
+    if(id==="permission_guard") loadPerm();
+    if(id==="master_requirement") mrDirty=false;
+    if(id==="chrome_profile"){ chromePicked = w.selected_chrome_profile_key || null; loadChromeProfiles(); refreshChromeStatus(); }
+    if(id==="gpt_conversation") refreshGptStatus();
+  }
+
+  /* ── Start Workflow + GPT Conversation (Part 4) ── */
+  async function startWorkflow(){
+    if(!wfId) return;
+    const btn=$("aw-start"); if(btn) btn.disabled=true;
+    try {
+      const d = await api("POST","/api/workflows/"+encodeURIComponent(wfId)+"/start",{});
+      if(d.workflow) applyWorkflow(d.workflow);
+      toast("Workflow starting — ChatGPT bootstrap in progress");
+    } catch(e){
+      toast("Start failed: "+e.message);
+      if(btn) btn.disabled=false;
+    }
+  }
+  async function refreshGptStatus(){
+    if(!wfId) return;
+    const el=$("aw-gpt-status"); if(!el) return;
+    try {
+      const s = await api("GET","/api/workflows/"+encodeURIComponent(wfId)+"/chatgpt/status");
+      let t = "Status: "+(s.status||"—");
+      if(s.state) t += " · "+s.state.replace(/_/g," ");
+      if(s.active) t += " · working…";
+      if(s.last_error) t += " · error: "+s.last_error;
+      el.textContent = t;
+    } catch(e){ el.textContent="—"; }
+  }
+  async function openConversation(){
+    if(!wfId) return;
+    const m=$("aw-gpt-msg"); if(m){ m.textContent="Opening conversation…"; m.style.color="#22d3ee"; }
+    try {
+      const d = await api("POST","/api/workflows/"+encodeURIComponent(wfId)+"/chatgpt/open-conversation",{});
+      const r=d.result||{};
+      if(m){ m.textContent = r.same ? "Opened same conversation ✓" : "Opened (verify mismatch)"; m.style.color = r.same ? "#34d399" : "#fbbf24"; }
+      toast(r.same ? "Conversation opened in selected profile" : "Opened but URL mismatch");
+    } catch(e){ if(m){ m.textContent="Open failed: "+e.message; m.style.color="#f87171"; } }
+  }
+
+  /* ── Kiro Executor (Part 7) ── */
+  async function kiroGrantHandoff(){
+    if(!wfId) return;
+    const ack=$("aw-kiro-ho-ack");
+    if(ack && !ack.checked){ toast("Please confirm you have opened a blank Kiro New Session first."); return; }
+    try {
+      await api("POST","/api/workflows/"+encodeURIComponent(wfId)+"/kiro/grant-handoff",{});
+      toast("Exclusive control granted");
+      const d = await api("GET","/api/workflows/"+encodeURIComponent(wfId));
+      if(d.workflow) applyWorkflow(d.workflow);
+      if(openBlock==="kiro_executor") renderDrawerBody("kiro_executor");
+    } catch(e){ toast("Grant handoff failed: "+e.message); }
+  }
+  async function kiroStart(){
+    if(!wfId) return;
+    // Delegate entirely to the authoritative backend; no Part 7 logic here.
+    try {
+      await api("POST","/api/workflows/"+encodeURIComponent(wfId)+"/kiro/start",{});
+      toast("Starting Kiro…");
+      // Optimistic status nudge; realtime events + snapshot drive the rest.
+      if(openBlock==="kiro_executor") renderDrawerBody("kiro_executor");
+    } catch(e){ toast("Start Kiro failed: "+e.message); }
+  }
+  async function kiroFocus(){
+    if(!wfId) return;
+    try {
+      const d = await api("POST","/api/workflows/"+encodeURIComponent(wfId)+"/kiro/focus",{});
+      toast((d.result&&d.result.focused)?"Focused Kiro window":"Kiro focus attempted");
+    } catch(e){ toast("Kiro focus failed: "+e.message); }
+  }
+  async function kiroVerifyProject(){
+    if(!wfId) return;
+    try {
+      const d = await api("POST","/api/workflows/"+encodeURIComponent(wfId)+"/kiro/verify-project",{});
+      const r=d.result||{};
+      toast(r.verified?("Project verified: "+(r.observed||"")):("Project mismatch: "+(r.observed||"—")));
+      if(openBlock==="kiro_executor") renderDrawerBody("kiro_executor");
+    } catch(e){ toast("Verify failed: "+e.message); }
+  }
+
+  /* ── Chrome Profile (Part 3) ── */
+  async function loadChromeProfiles(){
+    const list=$("aw-chrome-list"); if(!list) return;
+    try {
+      const data = await api("GET","/api/chrome/profiles");
+      chromeProfiles = data.profiles || [];
+      if(!data.chrome_executable_found){
+        const m=$("aw-chrome-msg"); if(m){ m.textContent="Chrome executable not found on this machine"; m.style.color="#f87171"; }
+      }
+      renderChromeList();
+    } catch(e){ list.innerHTML='<div class="aw-empty">Failed to load profiles: '+esc(e.message)+'</div>'; }
+  }
+  function renderChromeList(){
+    const list=$("aw-chrome-list"); if(!list) return;
+    if(!chromeProfiles.length){ list.innerHTML='<div class="aw-empty">No Chrome profiles found.</div>'; return; }
+    list.innerHTML="";
+    chromeProfiles.forEach(p=>{
+      const sel = (chromePicked===p.profile_key);
+      const label = p.account_email || p.display_name || p.profile_directory;
+      const open = p.currently_open ? ('Open · '+p.window_count+' window'+(p.window_count===1?'':'s')) : 'Closed';
+      const row=document.createElement("div");
+      row.className="aw-perm-row"; row.style.cursor="pointer";
+      row.onclick=()=>{ chromePicked=p.profile_key; renderChromeList(); };
+      row.innerHTML =
+        '<span style="flex:0 0 auto;color:'+(sel?'#8b5cf6':'#5d6a96')+';font-size:15px">'+(sel?'●':'○')+'</span>'+
+        '<span class="aw-perm-name" style="display:flex;flex-direction:column;gap:1px">'+
+          '<span style="color:#e8edff">'+esc(label)+'</span>'+
+          '<span style="font-size:10px;color:#5d6a96">'+esc(p.profile_directory)+' · '+esc(open)+(p.verified_identity?'':' · unverified')+'</span>'+
+        '</span>';
+      list.appendChild(row);
+    });
+  }
+  async function saveChrome(){
+    if(!wfId) return;
+    if(!chromePicked){ const m=$("aw-chrome-msg"); if(m){ m.textContent="Select a profile first"; m.style.color="#fbbf24"; } return; }
+    try {
+      const d = await api("POST","/api/workflows/"+encodeURIComponent(wfId)+"/chrome-profile",{profile_key:chromePicked});
+      applyWorkflow(d.workflow);
+      // re-render drawer to reflect the saved selection
+      if(openBlock==="chrome_profile") renderDrawerBody("chrome_profile");
+      const m=$("aw-chrome-msg"); if(m){ m.textContent="Saved ✓"; m.style.color="#34d399"; }
+      toast("Chrome profile saved");
+    } catch(e){ const m=$("aw-chrome-msg"); if(m){ m.textContent="Save failed: "+e.message; m.style.color="#f87171"; } }
+  }
+  async function testOpenChrome(){
+    if(!wfId) return;
+    const key = chromePicked || (wf && wf.selected_chrome_profile_key);
+    if(!key){ const m=$("aw-chrome-msg"); if(m){ m.textContent="Select a profile first"; m.style.color="#fbbf24"; } return; }
+    const m=$("aw-chrome-msg"); if(m){ m.textContent="Opening / focusing…"; m.style.color="#22d3ee"; }
+    try {
+      const d = await api("POST","/api/workflows/"+encodeURIComponent(wfId)+"/chrome-profile/test-open",
+        {profile_key:key, request_id:(Date.now().toString(36))});
+      if(d.duplicate){ if(m){ m.textContent="Already handled (no duplicate launch)"; m.style.color="#9aa7d7"; } return; }
+      const r=d.result||{};
+      if(m){ m.textContent = r.verified ? ("Verified ✓ ("+r.action+", hwnd "+r.hwnd+")"+(r.focus_failed?" — focus blocked":"")) : "Verification failed"; m.style.color = r.verified ? "#34d399" : "#f87171"; }
+      refreshChromeStatus();
+      toast(r.verified ? "Chrome profile verified" : "Verification failed");
+    } catch(e){ if(m){ m.textContent="Test Open failed: "+e.message; m.style.color="#f87171"; } }
+  }
+  async function refreshChromeStatus(){
+    if(!wfId) return;
+    const el=$("aw-chrome-status"); if(!el) return;
+    try {
+      const s = await api("GET","/api/workflows/"+encodeURIComponent(wfId)+"/chrome-profile/status");
+      if(!s.selected_profile_key){ el.textContent="No profile selected yet."; return; }
+      let t = (s.currently_open? ("Open · "+s.window_count+" window"+(s.window_count===1?'':'s')) : "Closed");
+      if(s.verified) t += " · verified ✓";
+      if(s.last_error) t += " · last error: "+s.last_error;
+      el.textContent = t;
+    } catch(e){ el.textContent="—"; }
+  }
+
+  /* ── Master Requirement ── */
+  function mrInput(){ const ta=$("aw-mr-text"); if(!ta) return; $("aw-mr-count").textContent=ta.value.length+" chars"; const s=$("aw-mr-saved"); s.textContent="Unsaved changes"; s.style.color="#fbbf24"; mrDirty=true; }
+  async function saveMR(){ if(!wfId) return; const ta=$("aw-mr-text"); if(!ta) return; const btn=$("aw-mr-save"); btn.disabled=true;
+    try{ const d=await api("PATCH","/api/workflows/"+encodeURIComponent(wfId)+"/context",{fields:{master_gpt_prompt:ta.value}}); mrDirty=false; applyWorkflow(d.workflow);
+      const s=$("aw-mr-saved"); if(s){ s.textContent="Saved ✓"; s.style.color="#34d399"; } toast("Master Requirement saved"); }
+    catch(e){ toast("Save failed: "+e.message); } finally{ btn.disabled=false; } }
+
+  /* ── Permission Guard ── */
+  async function loadPerm(){ if(!wfId) return; try{ const d=await api("GET","/api/workflows/"+encodeURIComponent(wfId)+"/permission-policy"); permPolicy=d.policy||{}; renderPerm(); }catch(e){} }
+  function renderPerm(){ const list=$("aw-perm-list"); if(!list) return; list.innerHTML="";
+    Object.keys(PERM_LABELS).forEach(key=>{ const cur=permPolicy[key]||"ASK"; const row=document.createElement("div"); row.className="aw-perm-row";
+      row.innerHTML='<span class="aw-perm-name">'+esc(PERM_LABELS[key])+'</span><span class="aw-perm-seg" data-key="'+key+'">'+['ALLOW','ASK','DENY'].map(d=>'<button data-d="'+d+'" class="'+(cur===d?'sel':'')+'" onclick="AW.setPerm(\''+key+'\',\''+d+'\')">'+d+'</button>').join('')+'</span>';
+      list.appendChild(row); }); }
+  function setPerm(k,d){ permPolicy[k]=d; renderPerm(); const s=$("aw-perm-saved"); if(s){ s.textContent="Unsaved"; s.style.color="#fbbf24"; } }
+  async function savePerm(){ if(!wfId) return; try{ await api("PUT","/api/workflows/"+encodeURIComponent(wfId)+"/permission-policy",{policy:permPolicy}); const s=$("aw-perm-saved"); if(s){ s.textContent="Saved ✓"; s.style.color="#34d399"; } toast("Permission policy saved"); }catch(e){ toast("Save failed: "+e.message); } }
+
+  /* ── WebSocket (single connection; reused across navigation) ── */
+  function connectWs(id){
+    wsRun=true;
+    // Reuse an existing OPEN/CONNECTING socket for the same workflow → no duplicates.
+    if(ws && ws._wfId===id && (ws.readyState===0 || ws.readyState===1)) return;
+    disconnectWs();
+    const proto=location.protocol==="https:"?"wss":"ws";
+    const url=proto+"://"+location.host+"/ws/workflows/"+encodeURIComponent(id);
+    setConn("waiting","Connecting…");
+    let sock; try{ sock=new WebSocket(url); }catch(e){ scheduleReconnect(id); return; }
+    sock._wfId=id; sock._reconnect=wsConnectedOnce; ws=sock;
+    sock.onopen=()=>{ wsDelay=1000; setConn("ok","Connected");
+      // Reconnect reconciliation: after ANY (re)connect, fetch the AUTHORITATIVE
+      // workflow snapshot before continuing incremental events, so events missed
+      // while the socket was down cannot leave the UI stale. The server also
+      // pushes a snapshot on connect, but we do not depend on it arriving/ordering.
+      wsConnectedOnce=true; reconcileSnapshot(id); };
+    sock.onmessage=e=>{ let m; try{ m=JSON.parse(e.data); }catch(err){ return; } if(m.workflow_id&&wfId&&m.workflow_id!==wfId) return; handleWs(m); };
+    sock.onclose=()=>{ if(ws===sock){ setConn("waiting","Reconnecting…"); if(wsRun&&wfId===id) scheduleReconnect(id); } };
+    sock.onerror=()=>{ try{ sock.close(); }catch(e){} };
+  }
+  // Fetch + reconcile the authoritative persisted workflow state (and timeline)
+  // for the currently selected workflow. Idempotent; safe to call on every
+  // (re)connect. Guards against a stale local snapshot after a WS gap.
+  function reconcileSnapshot(id){
+    if(!id || wfId!==id) return;
+    api("GET","/api/workflows/"+encodeURIComponent(id)).then(d=>{
+      if(d && d.workflow && wfId===id) applyWorkflow(d.workflow);
+    }).catch(()=>{});
+    api("GET","/api/workflows/"+encodeURIComponent(id)+"/events").then(ev=>{
+      if(wfId===id){ events=ev.events||events; renderTimeline(); }
+    }).catch(()=>{});
+  }
+  function disconnectWs(){ if(ws){ const s=ws; ws=null; try{ s.onclose=null; s.close(); }catch(e){} } }
+  function scheduleReconnect(id){ if(!wsRun) return; setTimeout(()=>{ if(wsRun&&wfId===id) connectWs(id); }, wsDelay); wsDelay=Math.min(wsDelay*2,15000); }
+  function handleWs(m){ if(!m||!m.type) return;
+    if(m.type==="snapshot"){ if(m.workflow) applyWorkflow(m.workflow); if(m.events){ events=m.events; renderTimeline(); } }
+    else if(m.type==="event_added"){ addEvent(m.event); }
+    else if(m.type && m.type.indexOf("chrome_profile")===0){
+      // Chrome realtime events → refresh the block's live status if open.
+      if(openBlock==="chrome_profile") refreshChromeStatus();
+    }
+    else if(m.type && (m.type.indexOf("chatgpt")===0 || m.type.indexOf("workflow_start")===0 || m.type.indexOf("chrome_profile_resolving")===0
+                       || m.type.indexOf("telegram_command")===0 || m.type==="gpt_output_ready"
+                       || m.type.indexOf("gpt_output")===0 || m.type.indexOf("gpt_latest")===0 || m.type.indexOf("gpt_copy")===0
+                       || m.type.indexOf("gpt_clipboard")===0 || m.type.indexOf("telegram_gpt")===0 || m.type.indexOf("telegram_approval")===0
+                       || m.type.indexOf("telegram_awaiting")===0
+                       || m.type.indexOf("approval")===0 || m.type.indexOf("kiro")===0)){
+      // Part 4 bootstrap + Part 5 command events → refresh GPT status/timeline;
+      // workflow snapshot (state/blocks) refreshes come via the workflow GET.
+      if(openBlock==="gpt_conversation") refreshGptStatus();
+      // Nudge the workflow view so block progression + header stay current.
+      if(wfId) api("GET","/api/workflows/"+encodeURIComponent(wfId)).then(d=>{ if(d.workflow) applyWorkflow(d.workflow); }).catch(()=>{});
+    }
+    else { if(m.workflow) applyWorkflow(m.workflow); }
+  }
+  function setConn(kind,text){ const dot=$("aw-conn-dot"); dot.className="aw-dot "+(kind==="ok"?"success":(kind==="offline"?"failed":(kind==="waiting"?"waiting":""))); $("aw-conn-text").textContent=text; }
+
+  return { open, close, refreshList, select, showSetup, cancelSetup, create,
+           pause, resume, cancel, closeDrawer, mrInput, saveMR, loadPerm, setPerm, savePerm,
+           loadChromeProfiles, saveChrome, testOpenChrome, refreshChromeStatus,
+           startWorkflow, openConversation, refreshGptStatus,
+           kiroStart, kiroFocus, kiroVerifyProject, kiroGrantHandoff };
+})();
+
+/* Shell navigation: show Autonomous Workflow, hide the dashboard container. */
+function openArchitecture(){
+  const c=document.querySelector(".container"); if(c) c.style.display="none";
+  const s=document.getElementById("arch-section"); s.classList.add("aw-visible");
+  document.querySelectorAll(".sidebar .nav-btn").forEach(b=>b.classList.remove("active"));
+  const nav=document.getElementById("nav-autonomous"); if(nav) nav.classList.add("active");
+  AW.open();
+}
+function closeArchitecture(){
+  const s=document.getElementById("arch-section"); s.classList.remove("aw-visible");
+  const c=document.querySelector(".container"); if(c) c.style.display="";
+  const nav=document.getElementById("nav-autonomous"); if(nav) nav.classList.remove("active");
+}
+/* Any other sidebar nav-btn (except Autonomous) returns to the dashboard. */
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".sidebar .nav-btn").forEach(btn => {
+    if (btn.id === "nav-autonomous") return;
+    btn.addEventListener("click", () => {
+      if (document.getElementById("arch-section").classList.contains("aw-visible")) closeArchitecture();
+    });
+  });
+});
+document.addEventListener("keydown", e => { if(e.key==="Escape") AW.closeDrawer(); });
 </script>
 </body>
 </html>

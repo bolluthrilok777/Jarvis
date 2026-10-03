@@ -6,6 +6,9 @@ python-dotenv~=1.2.0
 psutil~=7.2.0
 Pillow~=12.3.0
 playwright~=1.61.0
+pywinauto~=0.6.9
+pywinauto~=0.6.9
+comtypes~=1.4.16
 pyautogui~=0.9.54
 pygetwindow==0.0.9
 faster-whisper==1.1.1

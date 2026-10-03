@@ -70,7 +70,8 @@ class TelegramBotAPI:
                 description = _extract_description(exc.response)
             raise TelegramAPIError(
                 f"Telegram API request failed "
-                f"(HTTP {status or 'unknown'} / {type(exc).__name__}).",
+                f"(HTTP {status or 'unknown'} / {type(exc).__name__})"
+                + (f": {description[:150]}" if description else ""),
                 status_code=status,
                 error_type=type(exc).__name__,
                 is_duplicate_poller=_duplicate_poller_conflict(status, description),
@@ -123,6 +124,69 @@ class TelegramBotAPI:
         if reply_markup is not None:
             data["reply_markup"] = reply_markup
         result = self._request("sendMessage", json=data, timeout=(10, 30))
+        return result if isinstance(result, dict) else {}
+
+    def send_photo(
+        self,
+        chat_id: int,
+        photo_path: str,
+        *,
+        caption: str = "",
+        reply_markup: Optional[dict] = None,
+    ) -> dict:
+        """Upload a PNG/JPEG screenshot via multipart ``sendPhoto``.
+
+        Validates the file BEFORE the request (missing/empty files fail fast
+        with a safe error) and uses strictly bounded timeouts so a slow upload
+        can never hang the caller indefinitely. The bot token is never part of
+        any raised message.
+        """
+        import os
+
+        data: dict[str, Any] = {"chat_id": chat_id}
+        if caption:
+            data["caption"] = str(caption)[:1024]
+        if reply_markup is not None:
+            data["reply_markup"] = reply_markup
+
+        path = str(photo_path or "")
+        if not path or not os.path.isfile(path):
+            raise TelegramAPIError("Screenshot file is missing before upload.")
+        size = os.path.getsize(path)
+        if size <= 0:
+            raise TelegramAPIError("Screenshot file is empty (0 bytes).")
+
+        lowered = path.lower()
+        mime = "image/jpeg" if lowered.endswith((".jpg", ".jpeg")) else "image/png"
+        file_name = os.path.basename(path) or "screenshot.png"
+        with open(path, "rb") as handle:
+            files = {"photo": (file_name, handle, mime)}
+            result = self._request(
+                "sendPhoto", data=data, files=files, timeout=(10, 60),
+            )
+        return result if isinstance(result, dict) else {}
+
+    def edit_message_text(
+        self,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        *,
+        reply_markup: Optional[dict] = None,
+    ) -> dict:
+        """Edit an existing bot message's text and inline keyboard in place.
+
+        Used by the resource menus so navigation (open window, refresh, close
+        tab) updates the SAME Telegram message instead of stacking new ones.
+        """
+        data: dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+        }
+        if reply_markup is not None:
+            data["reply_markup"] = reply_markup
+        result = self._request("editMessageText", json=data, timeout=(10, 30))
         return result if isinstance(result, dict) else {}
 
     def answer_callback_query(self, callback_query_id: str, text: str = "") -> None:

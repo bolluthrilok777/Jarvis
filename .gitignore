@@ -32,6 +32,35 @@ notes/gmail_drafts/
 
 # Separate project with its own git repo and remote
 TelegramForward/
+tele-ops/
+
+# Database files
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Logs and runtime artifacts
+*.log
+*.pid
+app.pid
+
+# Scratch and temporary files
+.*.txt
+.*.py
+.*.json
+.*.log
+.tmp_read/
+_*.py
+_*.txt
+_*.log
+tests/_*.py
+tests_out.txt
+tests_output.txt
+orch_git.txt
+t2.txt
+
+# Autonomous Feature Orchestrator — runtime state
+data/features/
 
 # Local development artifacts (diagnostics, logs, scratch patches, backups)
 _v*.py
@@ -58,4 +87,5 @@ scratch_rendered_hud.png
 uvicorn_*.txt
 ui_before_*.html
 .vscode/
+
 

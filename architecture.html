@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jarvis — Architecture</title>
+<style>
+  /* ── Jarvis visual language (mirrors ui.html --q-* tokens) ── */
+  :root {
+    --q-bg-0:#04060a; --q-bg-1:#070a12; --q-panel:rgba(11,16,32,.62);
+    --q-panel-2:rgba(16,21,40,.72); --q-line:rgba(148,163,255,.14);
+    --q-line-hi:rgba(167,139,250,.5);
+    --q-violet:#8b5cf6; --q-purple:#7c3aed; --q-cyan:#22d3ee; --q-green:#34d399;
+    --q-amber:#fbbf24; --q-red:#f87171; --q-slate:#64748b;
+    --q-txt:#e8edff; --q-txt-2:#9aa7d7; --q-mut:#5d6a96; --q-txt-sub:#7b8aad;
+    --q-radius:16px;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; padding:0; }
+  body {
+    background:var(--q-bg-0); color:var(--q-txt);
+    font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+    min-height:100vh;
+  }
+  ::-webkit-scrollbar { width:9px; height:9px; }
+  ::-webkit-scrollbar-track { background:#05070d; }
+  ::-webkit-scrollbar-thumb { background:rgba(139,92,246,.35); border-radius:99px; border:2px solid #05070d; }
+  a { color:var(--q-cyan); }
+
+  /* ── App shell ── */
+  .app { display:flex; flex-direction:column; min-height:100vh; }
+
+  /* ── Status header ── */
+  .arch-header {
+    position:sticky; top:0; z-index:20;
+    display:flex; align-items:center; gap:22px; flex-wrap:wrap;
+    padding:14px 24px; background:linear-gradient(180deg, rgba(9,11,22,.96), rgba(6,8,16,.9));
+    border-bottom:1px solid var(--q-line); backdrop-filter:blur(12px);
+  }
+  .arch-brand { font-weight:800; letter-spacing:.14em; color:#c4b5fd;
+    text-shadow:0 0 16px rgba(139,92,246,.6); font-size:16px; white-space:nowrap; }
+  .hdr-item { display:flex; flex-direction:column; gap:2px; min-width:70px; }
+  .hdr-label { font-size:10px; letter-spacing:.12em; color:var(--q-mut); text-transform:uppercase; }
+  .hdr-value { font-size:14px; font-weight:600; color:var(--q-txt); }
+  .hdr-status { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--q-slate); flex:none; }
+  .dot.active { background:var(--q-cyan); box-shadow:0 0 10px var(--q-cyan); animation:pulse 1.4s infinite; }
+  .dot.waiting { background:var(--q-amber); box-shadow:0 0 10px var(--q-amber); }
+  .dot.success { background:var(--q-green); box-shadow:0 0 10px var(--q-green); }
+  .dot.failed { background:var(--q-red); box-shadow:0 0 10px var(--q-red); }
+  .dot.paused { background:var(--q-violet); box-shadow:0 0 10px var(--q-violet); }
+  @keyframes pulse { 50% { opacity:.4; } }
+  .hdr-spacer { flex:1 1 auto; }
+  .conn { display:flex; align-items:center; gap:7px; font-size:12px; color:var(--q-txt-2); }
+  .conn .dot { width:8px; height:8px; }
+
+  /* Workflow selector */
+  select.wf-select, .hdr-btn {
+    background:var(--q-panel-2); color:var(--q-txt); border:1px solid var(--q-line);
+    border-radius:9px; padding:7px 12px; font-size:13px; font-family:inherit; cursor:pointer;
+  }
+  select.wf-select:focus { outline:none; border-color:var(--q-line-hi); }
+  .hdr-controls { display:flex; gap:8px; }
+  .hdr-btn { font-weight:600; transition:.15s; }
+  .hdr-btn:hover:not(:disabled) { border-color:var(--q-line-hi); background:rgba(139,92,246,.16); }
+  .hdr-btn:disabled { opacity:.35; cursor:not-allowed; }
+  .hdr-btn.warn { color:var(--q-amber); }
+  .hdr-btn.danger { color:var(--q-red); }
+  .hdr-btn.go { color:var(--q-green); }
+
+  /* ── Main layout: architecture canvas + timeline ── */
+  .arch-main { display:flex; gap:18px; padding:20px 24px; align-items:flex-start; }
+  .arch-canvas { flex:1 1 auto; min-width:0; }
+  .timeline-pane { flex:0 0 300px; }
+
+  /* Architecture flow — compact vertical column with loop */
+  .flow { display:flex; flex-direction:column; align-items:center; gap:0; }
+  .flow-row { display:flex; align-items:center; justify-content:center; gap:14px; width:100%; }
+  .arrow { color:var(--q-mut); font-size:18px; line-height:1; padding:5px 0; }
+
+  /* Block card — fixed controlled dimensions */
+  .block {
+    position:relative; width:340px; max-width:100%;
+    background:var(--q-panel); border:1px solid var(--q-line); border-radius:var(--q-radius);
+    padding:12px 14px; cursor:pointer; transition:.15s; overflow:hidden;
+  }
+  .block:hover { border-color:var(--q-line-hi); background:var(--q-panel-2); transform:translateY(-1px); }
+  .block:focus-visible { outline:2px solid var(--q-violet); outline-offset:2px; }
+  .block-head { display:flex; align-items:center; gap:10px; }
+  .block-icon { font-size:20px; width:26px; text-align:center; flex:none; }
+  .block-title { font-size:13px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; flex:1 1 auto;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .block-badge { font-size:15px; flex:none; width:20px; text-align:center; }
+  .block-status { margin-top:6px; font-size:12px; color:var(--q-txt-2);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .block-summary { margin-top:3px; font-size:11px; color:var(--q-mut);
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .block-elapsed { margin-top:5px; font-size:11px; color:var(--q-cyan); font-variant-numeric:tabular-nums; }
+  .block-num { position:absolute; top:8px; right:10px; font-size:10px; color:var(--q-mut); }
+
+  /* Presentation states */
+  .block[data-pstate="PENDING"] { opacity:.62; }
+  .block[data-pstate="ACTIVE"] { border-color:var(--q-cyan); box-shadow:0 0 20px rgba(34,211,238,.28); }
+  .block[data-pstate="ACTIVE"] .block-icon { filter:drop-shadow(0 0 6px var(--q-cyan)); }
+  .block[data-pstate="WAITING"] { border-color:var(--q-amber); box-shadow:0 0 18px rgba(251,191,36,.24); }
+  .block[data-pstate="SUCCESS"] { border-color:rgba(52,211,153,.5); }
+  .block[data-pstate="FAILED"] { border-color:var(--q-red); box-shadow:0 0 18px rgba(248,113,113,.3); }
+  .block[data-pstate="PAUSED"] { border-color:var(--q-violet); }
+  .block[data-pstate="CANCELLED"] { border-color:var(--q-slate); opacity:.55; }
+
+  /* Loop back visual */
+  .loop-wrap { display:flex; flex-direction:column; align-items:center; margin-top:2px; }
+  .loop-branch {
+    display:flex; align-items:center; gap:10px; margin:8px 0;
+    font-size:12px; color:var(--q-txt-2);
+  }
+  .loop-pill { border:1px dashed var(--q-line-hi); border-radius:99px; padding:4px 12px; color:var(--q-violet); }
+  .loop-arrow-yes { color:var(--q-violet); }
+
+  /* Overlay banner for PAUSED/FAILED/CANCELLED */
+  .overlay-banner {
+    display:none; margin:0 24px 12px; padding:10px 16px; border-radius:12px;
+    font-weight:700; letter-spacing:.05em; text-align:center;
+  }
+  .overlay-banner.show { display:block; }
+  .overlay-banner.PAUSED { background:rgba(139,92,246,.15); border:1px solid var(--q-violet); color:#c4b5fd; }
+  .overlay-banner.FAILED { background:rgba(248,113,113,.14); border:1px solid var(--q-red); color:#fecaca; }
+  .overlay-banner.CANCELLED { background:rgba(100,116,139,.16); border:1px solid var(--q-slate); color:#cbd5e1; }
+
+  /* ── Timeline ── */
+  .timeline-pane .pane-title, .canvas-title {
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--q-txt-2);
+    margin:0 0 10px; font-weight:700;
+  }
+  .timeline {
+    background:var(--q-panel); border:1px solid var(--q-line); border-radius:var(--q-radius);
+    padding:12px; max-height:70vh; overflow-y:auto;
+  }
+  .tl-item { display:flex; gap:10px; padding:7px 4px; border-bottom:1px solid rgba(148,163,255,.06); cursor:pointer; }
+  .tl-item:hover { background:rgba(139,92,246,.08); }
+  .tl-time { font-size:11px; color:var(--q-mut); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .tl-msg { font-size:12px; color:var(--q-txt-2); flex:1 1 auto; }
+  .tl-empty { color:var(--q-mut); font-size:12px; padding:8px; }
+
+  /* ── Details drawer ── */
+  .drawer-scrim {
+    position:fixed; inset:0; background:rgba(2,4,8,.6); backdrop-filter:blur(2px);
+    z-index:40; opacity:0; pointer-events:none; transition:.18s;
+  }
+  .drawer-scrim.open { opacity:1; pointer-events:auto; }
+  .drawer {
+    position:fixed; top:0; right:0; height:100vh; width:520px; max-width:94vw; z-index:41;
+    background:linear-gradient(180deg, rgba(12,16,30,.98), rgba(7,10,18,.99));
+    border-left:1px solid var(--q-line-hi); box-shadow:-20px 0 60px rgba(0,0,0,.5);
+    transform:translateX(100%); transition:transform .2s ease; display:flex; flex-direction:column;
+  }
+  .drawer.open { transform:translateX(0); }
+  .drawer-head { display:flex; align-items:center; gap:12px; padding:16px 18px; border-bottom:1px solid var(--q-line); }
+  .drawer-head .block-icon { font-size:24px; }
+  .drawer-title { font-size:16px; font-weight:800; letter-spacing:.04em; flex:1 1 auto; }
+  .drawer-close { background:transparent; border:1px solid var(--q-line); color:var(--q-txt-2);
+    border-radius:8px; width:34px; height:34px; font-size:18px; cursor:pointer; }
+  .drawer-close:hover { border-color:var(--q-line-hi); color:var(--q-txt); }
+  .drawer-body { padding:16px 18px; overflow-y:auto; flex:1 1 auto; }
+  .sec { margin-bottom:18px; }
+  .sec-title { font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--q-violet);
+    margin:0 0 8px; font-weight:700; }
+  .kv { display:flex; justify-content:space-between; gap:12px; padding:4px 0; font-size:13px; border-bottom:1px solid rgba(148,163,255,.06); }
+  .kv .k { color:var(--q-mut); } .kv .v { color:var(--q-txt); text-align:right; word-break:break-word; }
+  .prompt-box {
+    background:#05070d; border:1px solid var(--q-line); border-radius:10px; padding:10px;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; font-size:12px; color:var(--q-txt-2);
+    max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-word;
+  }
+  textarea.prompt-edit {
+    width:100%; min-height:160px; resize:vertical; background:#05070d; color:var(--q-txt);
+    border:1px solid var(--q-line); border-radius:10px; padding:10px; font-family:ui-monospace,Consolas,monospace;
+    font-size:12px; line-height:1.5;
+  }
+  textarea.prompt-edit:focus { outline:none; border-color:var(--q-line-hi); }
+  .field-row { display:flex; align-items:center; justify-content:space-between; margin-top:8px; gap:10px; }
+  .charcount { font-size:11px; color:var(--q-mut); font-variant-numeric:tabular-nums; }
+  .save-state { font-size:11px; color:var(--q-green); }
+  .btn { padding:8px 16px; border-radius:9px; border:1px solid var(--q-line); background:var(--q-panel-2);
+    color:var(--q-txt); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:.15s; }
+  .btn:hover:not(:disabled) { border-color:var(--q-line-hi); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .btn.primary { background:linear-gradient(135deg,#8b5cf6,#7c3aed); border:none; }
+  .btn.go { color:var(--q-green); } .btn.warn { color:var(--q-amber); } .btn.danger { color:var(--q-red); }
+  .reserved { display:inline-block; margin-left:8px; font-size:10px; color:var(--q-amber);
+    border:1px solid rgba(251,191,36,.4); border-radius:6px; padding:1px 6px; letter-spacing:.04em; }
+  .empty-state { color:var(--q-mut); font-size:13px; font-style:italic; }
+
+  /* Permission Guard editor */
+  .perm-row { display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid rgba(148,163,255,.06); }
+  .perm-name { flex:1 1 auto; font-size:12px; color:var(--q-txt-2); }
+  .perm-seg { display:flex; border:1px solid var(--q-line); border-radius:8px; overflow:hidden; }
+  .perm-seg button { background:transparent; border:none; color:var(--q-mut); font-size:11px; padding:4px 9px;
+    cursor:pointer; font-weight:700; }
+  .perm-seg button.sel[data-d="ALLOW"] { background:rgba(52,211,153,.25); color:var(--q-green); }
+  .perm-seg button.sel[data-d="ASK"] { background:rgba(251,191,36,.22); color:var(--q-amber); }
+  .perm-seg button.sel[data-d="DENY"] { background:rgba(248,113,113,.22); color:var(--q-red); }
+
+  .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:60;
+    background:var(--q-panel-2); border:1px solid var(--q-line-hi); border-radius:10px;
+    padding:10px 18px; font-size:13px; color:var(--q-txt); opacity:0; transition:.2s; pointer-events:none; }
+  .toast.show { opacity:1; }
+  .no-wf { text-align:center; color:var(--q-mut); padding:60px 20px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ══ STATUS HEADER ══ -->
+  <header class="arch-header">
+    <div class="arch-brand">JARVIS · ARCHITECTURE</div>
+    <div class="hdr-item">
+      <span class="hdr-label">Project</span>
+      <span class="hdr-value" id="hdr-project">—</span>
+    </div>
+    <div class="hdr-item">
+      <span class="hdr-label">Status</span>
+      <span class="hdr-status"><span class="dot" id="hdr-dot"></span><span id="hdr-state">IDLE</span></span>
+    </div>
+    <div class="hdr-item">
+      <span class="hdr-label">Phase</span>
+      <span class="hdr-value" id="hdr-phase">—</span>
+    </div>
+    <div class="hdr-item">
+      <span class="hdr-label">Iteration</span>
+      <span class="hdr-value" id="hdr-iter">0</span>
+    </div>
+    <div class="hdr-item">
+      <span class="hdr-label">Elapsed</span>
+      <span class="hdr-value" id="hdr-elapsed">00:00</span>
+    </div>
+    <div class="hdr-spacer"></div>
+    <div class="conn" title="Realtime connection">
+      <span class="dot" id="conn-dot"></span><span id="conn-text">Connecting…</span>
+    </div>
+    <select class="wf-select" id="wf-select" onchange="selectWorkflow(this.value)" aria-label="Select workflow"></select>
+    <button class="hdr-btn" id="btn-new" onclick="renderNoWorkflow()">+ New Workflow</button>
+    <div class="hdr-controls">
+      <button class="hdr-btn warn" id="ctl-pause" onclick="ctlPause()">⏸ Pause</button>
+      <button class="hdr-btn go" id="ctl-resume" onclick="ctlResume()">▶ Resume</button>
+      <button class="hdr-btn danger" id="ctl-cancel" onclick="ctlCancel()">✕ Cancel</button>
+    </div>
+  </header>
+
+  <!-- Overlay banner (PAUSED / FAILED / CANCELLED) -->
+  <div class="overlay-banner" id="overlay-banner"></div>
+
+  <!-- ══ MAIN: architecture canvas + timeline ══ -->
+  <div class="arch-main">
+    <div class="arch-canvas">
+      <div class="canvas-title">Realtime Workflow Architecture</div>
+      <div id="no-wf" class="no-wf" style="display:none">
+        <div style="max-width:640px;margin:0 auto;background:var(--q-panel);border:1px solid var(--q-line);border-radius:16px;padding:24px 26px;text-align:left">
+          <h2 style="color:#c4b5fd;font-size:18px;margin:0 0 4px;letter-spacing:.05em">Autonomous Workflow</h2>
+          <p style="color:var(--q-txt-2);font-size:13px;margin:0 0 18px" id="setup-sub">No workflow configured yet.</p>
+          <div class="field-row" style="display:block;margin-bottom:14px"><label style="display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--q-txt-sub);margin-bottom:5px">Project Name</label>
+            <input id="in-name" type="text" style="width:100%;background:#05070d;color:var(--q-txt);border:1px solid var(--q-line);border-radius:9px;padding:10px;font-family:inherit;font-size:13px" placeholder="Project name"></div>
+          <div class="field-row" style="display:block;margin-bottom:14px"><label style="display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--q-txt-sub);margin-bottom:5px">Project Path</label>
+            <input id="in-path" type="text" style="width:100%;background:#05070d;color:var(--q-txt);border:1px solid var(--q-line);border-radius:9px;padding:10px;font-family:inherit;font-size:13px" placeholder="C:\\path\\to\\project"></div>
+          <div class="field-row" style="display:block;margin-bottom:14px"><label style="display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--q-txt-sub);margin-bottom:5px">Master Requirement</label>
+            <textarea id="in-prompt" style="width:100%;min-height:110px;resize:vertical;background:#05070d;color:var(--q-txt);border:1px solid var(--q-line);border-radius:9px;padding:10px;font-family:ui-monospace,Consolas,monospace;font-size:13px" placeholder="The initial GPT instruction for this project…"></textarea></div>
+          <div class="field-row" style="display:block;margin-bottom:14px"><label style="display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--q-txt-sub);margin-bottom:5px">Chrome Profile</label>
+            <div class="reserved" style="margin-left:0">Not configured yet · Available in Part 3</div></div>
+          <div class="field-row"><span class="save-state" id="setup-msg"></span>
+            <span><button class="btn" id="setup-cancel" onclick="cancelSetup()" style="display:none">Cancel</button>
+            <button class="btn primary" onclick="createWorkflow()">Create Workflow</button></span></div>
+        </div>
+      </div>
+      <div class="flow" id="flow"></div>
+    </div>
+    <div class="timeline-pane">
+      <div class="pane-title">Event Timeline</div>
+      <div class="timeline" id="timeline"><div class="tl-empty">No events yet.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ DETAILS DRAWER ══ -->
+<div class="drawer-scrim" id="drawer-scrim" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Block details">
+  <div class="drawer-head">
+    <span class="block-icon" id="drawer-icon">◻</span>
+    <span class="drawer-title" id="drawer-title">Block</span>
+    <button class="drawer-close" onclick="closeDrawer()" aria-label="Close details">×</button>
+  </div>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════════
+   Jarvis Architecture — Part 2 realtime control layer.
+   Talks ONLY to /api/workflows/* (which use WorkflowEngine). Live updates via
+   WebSocket /ws/workflows/{id} with an initial REST snapshot; reconnect with
+   backoff. No fake data — everything comes from real Workflow fields/events.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// The 13 architecture blocks, in flow order (must match backend BLOCK_IDS).
+const BLOCKS = [
+  { id:"chrome_profile",      n:1,  icon:"🌐", title:"Chrome Profile" },
+  { id:"gpt_conversation",    n:2,  icon:"💬", title:"GPT Conversation" },
+  { id:"master_requirement",  n:3,  icon:"📋", title:"Master Requirement" },
+  { id:"telegram_command",    n:4,  icon:"📨", title:"Telegram Command" },
+  { id:"gpt_architect",       n:5,  icon:"🧠", title:"GPT Architect" },
+  { id:"gpt_output_capture",  n:6,  icon:"📥", title:"GPT Output Capture" },
+  { id:"your_approval",       n:7,  icon:"✅", title:"Your Approval" },
+  { id:"kiro_executor",       n:8,  icon:"⚙️", title:"Kiro Executor" },
+  { id:"permission_guard",    n:9,  icon:"🛡️", title:"Permission Guard" },
+  { id:"kiro_monitor",        n:10, icon:"📡", title:"Kiro Monitor" },
+  { id:"kiro_result_capture", n:11, icon:"📦", title:"Kiro Result Capture" },
+  { id:"gpt_review",          n:12, icon:"🔎", title:"GPT Review" },
+  { id:"complete",            n:13, icon:"🏁", title:"Complete" },
+];
+const BLOCK_BY_ID = Object.fromEntries(BLOCKS.map(b => [b.id, b]));
+
+// Presentation-state → badge glyph.
+const BADGE = { PENDING:"○", ACTIVE:"●", WAITING:"◐", SUCCESS:"✓", FAILED:"✕", PAUSED:"⏸", CANCELLED:"⊘" };
+
+const TERMINAL_STATES = ["COMPLETED", "CANCELLED"];
+const OVERLAY_STATES = ["PAUSED", "FAILED", "CANCELLED"];
+
+let currentWorkflowId = null;
+let currentWorkflow = null;
+let currentEvents = [];
+let ws = null;
+let wsReconnectDelay = 1000;
+let wsShouldRun = false;
+let openBlockId = null;      // which drawer block is open (for live refresh)
+let elapsedTimer = null;
+let mrDirty = false;         // Master Requirement unsaved-edit guard
+
+/* ── Small helpers ─────────────────────────────────────────────────────── */
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDur(ms){ if(ms==null||isNaN(ms)||ms<0) return "00:00"; const s=Math.floor(ms/1000); const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60; const p=n=>String(n).padStart(2,"0"); return (h>0?p(h)+":":"")+p(m)+":"+p(ss); }
+function fmtClock(iso){ if(!iso) return ""; try{ const d=new Date(iso); return d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"}); }catch(e){ return iso; } }
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._to); t._to=setTimeout(()=>t.classList.remove("show"),2200); }
+async function api(method, url, body){
+  const opt = { method, headers:{"Content-Type":"application/json"} };
+  if(body!==undefined) opt.body = JSON.stringify(body);
+  const res = await fetch(url, opt);
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok){ throw new Error(data.detail || ("HTTP "+res.status)); }
+  return data;
+}
+
+/* ── Boot ──────────────────────────────────────────────────────────────── */
+document.addEventListener("DOMContentLoaded", () => {
+  renderBlocks();
+  loadWorkflowList().then(() => {
+    const params = new URLSearchParams(location.search);
+    const wanted = params.get("workflow_id");
+    if (wanted) selectWorkflow(wanted);
+    else if (currentWorkflowId) selectWorkflow(currentWorkflowId);
+    else renderNoWorkflow();
+  });
+  elapsedTimer = setInterval(tickElapsed, 1000);
+  document.addEventListener("keydown", e => { if(e.key==="Escape") closeDrawer(); });
+});
+window.addEventListener("beforeunload", () => { wsShouldRun=false; if(ws) ws.close(); });
+
+/* ── Workflow list + selection ─────────────────────────────────────────── */
+async function loadWorkflowList(){
+  try {
+    const data = await api("GET", "/api/workflows");
+    const sel = document.getElementById("wf-select");
+    const wfs = data.workflows || [];
+    sel.innerHTML = "";
+    if (!wfs.length){
+      const o=document.createElement("option"); o.value=""; o.textContent="No workflows"; sel.appendChild(o);
+    }
+    wfs.forEach(w => {
+      const o=document.createElement("option");
+      o.value=w.workflow_id;
+      o.textContent = `${w.project_name||"Untitled"} · ${w.state}`;
+      sel.appendChild(o);
+    });
+    if (!currentWorkflowId && wfs.length) currentWorkflowId = wfs[0].workflow_id;
+    if (currentWorkflowId) sel.value = currentWorkflowId;
+  } catch(e){ /* header shows disconnected */ }
+}
+
+async function selectWorkflow(id){
+  if (!id){ renderNoWorkflow(); return; }
+  // Switching workflows must not leak old state.
+  currentWorkflowId = id;
+  currentWorkflow = null; currentEvents = []; openBlockId = null; mrDirty = false;
+  closeDrawer();
+  document.getElementById("wf-select").value = id;
+  document.getElementById("no-wf").style.display = "none";
+  document.getElementById("flow").style.display = "";
+  try {
+    const data = await api("GET", "/api/workflows/"+encodeURIComponent(id));
+    applyWorkflow(data.workflow);
+    const ev = await api("GET", "/api/workflows/"+encodeURIComponent(id)+"/events");
+    currentEvents = ev.events || [];
+    renderTimeline();
+  } catch(e){ toast("Failed to load workflow: "+e.message); }
+  connectWs(id);
+}
+
+// Sensible defaults for the setup form (NOT hardcoded as the only project).
+const SETUP_DEFAULTS = { name:"Project Opus", path:"C:\\Project Opus" };
+
+function renderNoWorkflow(){
+  currentWorkflow=null; currentWorkflowId=null;
+  wsShouldRun=false; if(ws){ try{ ws.close(); }catch(e){} ws=null; }
+  document.getElementById("no-wf").style.display="";
+  document.getElementById("flow").style.display="none";
+  document.getElementById("setup-sub").textContent="No workflow configured yet.";
+  document.getElementById("setup-cancel").style.display="none";
+  document.getElementById("in-name").value = SETUP_DEFAULTS.name;
+  document.getElementById("in-path").value = SETUP_DEFAULTS.path;
+  document.getElementById("in-prompt").value = "";
+  document.getElementById("hdr-project").textContent="—";
+  setHeaderState("IDLE");
+  setConn(false, "Waiting for workflow");
+}
+
+async function createWorkflow(){
+  const name = document.getElementById("in-name").value.trim();
+  const msg = document.getElementById("setup-msg");
+  if(!name){ msg.textContent="Project name is required"; msg.style.color="var(--q-amber)"; return; }
+  try {
+    const data = await api("POST", "/api/workflows", {
+      project_name: name,
+      project_path: document.getElementById("in-path").value.trim() || null,
+      master_gpt_prompt: document.getElementById("in-prompt").value,
+    });
+    await loadWorkflowList();
+    selectWorkflow(data.workflow.workflow_id);
+    toast("Workflow created");
+  } catch(e){ msg.textContent="Create failed: "+e.message; msg.style.color="var(--q-red)"; }
+}
+function cancelSetup(){ if(currentWorkflowId) selectWorkflow(currentWorkflowId); }
+
+/* ── Render architecture blocks + loop ─────────────────────────────────── */
+function renderBlocks(){
+  const flow = document.getElementById("flow");
+  flow.innerHTML = "";
+  BLOCKS.forEach((b, i) => {
+    if (i>0){
+      const row=document.createElement("div"); row.className="flow-row";
+      row.innerHTML = '<span class="arrow">↓</span>'; flow.appendChild(row);
+    }
+    // Insert the "More Work?" loop just before the Complete block (index 12).
+    if (b.id === "complete"){
+      const loop=document.createElement("div"); loop.className="loop-wrap";
+      loop.innerHTML =
+        '<div class="loop-branch"><span class="loop-pill">More Work?</span>'+
+        '<span class="loop-arrow-yes">YES ↺ back to Kiro Executor</span>'+
+        '<span>· NO ↓</span></div>';
+      flow.appendChild(loop);
+    }
+    const row=document.createElement("div"); row.className="flow-row";
+    const el=document.createElement("div");
+    el.className="block"; el.id="block-"+b.id; el.tabIndex=0;
+    el.setAttribute("role","button");
+    el.setAttribute("data-block", b.id);
+    el.setAttribute("data-pstate","PENDING");
+    el.setAttribute("aria-label", b.title+" block");
+    el.onclick = () => openDrawer(b.id);
+    el.onkeydown = e => { if(e.key==="Enter"||e.key===" "){ e.preventDefault(); openDrawer(b.id); } };
+    el.innerHTML =
+      '<span class="block-num">'+b.n+'</span>'+
+      '<div class="block-head"><span class="block-icon">'+b.icon+'</span>'+
+      '<span class="block-title">'+esc(b.title)+'</span>'+
+      '<span class="block-badge" id="badge-'+b.id+'">○</span></div>'+
+      '<div class="block-status" id="status-'+b.id+'">Pending</div>'+
+      '<div class="block-summary" id="summary-'+b.id+'"></div>'+
+      '<div class="block-elapsed" id="elapsed-'+b.id+'"></div>';
+    row.appendChild(el); flow.appendChild(row);
+  });
+}
+
+/* ── Apply a workflow payload to the UI (header + blocks) ───────────────── */
+function applyWorkflow(wf){
+  if (!wf) return;
+  currentWorkflow = wf;
+  document.getElementById("hdr-project").textContent = wf.project_name || "Untitled";
+  document.getElementById("hdr-iter").textContent = wf.iteration_number ?? 0;
+  document.getElementById("hdr-phase").textContent = phaseLabel(wf.state);
+  setHeaderState(wf.state);
+  updateControls(wf.state);
+  updateOverlay(wf.state, wf);
+  const blocks = wf.blocks || {};
+  BLOCKS.forEach(b => paintBlock(b.id, blocks[b.id] || "PENDING", wf));
+  // Keep an open drawer fresh.
+  if (openBlockId) renderDrawerBody(openBlockId);
+  // Keep the selector label in sync.
+  const sel=document.getElementById("wf-select");
+  if (sel && sel.value===wf.workflow_id){
+    const opt=sel.options[sel.selectedIndex];
+    if(opt) opt.textContent = `${wf.project_name||"Untitled"} · ${wf.state}`;
+  }
+}
+
+function paintBlock(id, pstate, wf){
+  const el=document.getElementById("block-"+id); if(!el) return;
+  el.setAttribute("data-pstate", pstate);
+  document.getElementById("badge-"+id).textContent = BADGE[pstate] || "○";
+  const st=document.getElementById("status-"+id);
+  const sm=document.getElementById("summary-"+id);
+  const elp=document.getElementById("elapsed-"+id);
+  const info = blockInfo(id, wf, pstate);
+  st.textContent = info.status;
+  sm.textContent = info.summary || "";
+  elp.textContent = (pstate==="ACTIVE" && info.showElapsed) ? ("Elapsed: "+fmtDur(activeElapsedMs(wf))) : "";
+}
+
+/* Human-readable per-block status/summary derived from REAL workflow fields. */
+function blockInfo(id, wf, pstate){
+  const w = wf||{};
+  const P = { PENDING:"Pending", ACTIVE:"Active", WAITING:"Waiting", SUCCESS:"Complete", FAILED:"Failed", PAUSED:"Paused", CANCELLED:"Cancelled" };
+  let status = P[pstate] || "Pending", summary = "", showElapsed = true;
+  switch(id){
+    case "chrome_profile":
+      status = w.selected_chrome_profile_key ? "Profile: "+w.selected_chrome_profile_key : P[pstate];
+      summary = w.selected_chrome_account_email || "Available in Part 3"; break;
+    case "gpt_conversation":
+      status = w.chatgpt_conversation_url ? "Conversation linked" : P[pstate];
+      summary = w.chatgpt_tab_id ? ("Tab "+w.chatgpt_tab_id) : ""; break;
+    case "master_requirement":
+      status = w.master_gpt_prompt ? "Requirement set" : (pstate==="PENDING"?"Not set":P[pstate]);
+      summary = w.master_gpt_prompt ? (w.master_gpt_prompt.slice(0,120)) : "Click to edit the master prompt"; break;
+    case "telegram_command":
+      status = w.current_user_command ? "Command received" : (pstate==="WAITING"?"Waiting for command":P[pstate]);
+      summary = w.current_user_command ? w.current_user_command.slice(0,120) : ""; break;
+    case "gpt_architect":
+      status = pstate==="ACTIVE" ? "Thinking…" : P[pstate];
+      summary = (w.latest_gpt_output||"").slice(0,120); break;
+    case "gpt_output_capture":
+      status = (w.latest_gpt_output_len>0) ? "Captured ("+w.latest_gpt_output_len+" chars)" : (pstate==="PENDING"?"Not captured":P[pstate]);
+      summary = (w.latest_gpt_output||"").slice(0,120); break;
+    case "your_approval":
+      status = pstate==="WAITING" ? "Awaiting your approval" : P[pstate];
+      summary = (w.approved_gpt_prompt||w.latest_gpt_output||"").slice(0,120); break;
+    case "kiro_executor":
+      status = w.kiro_session_id ? ("Session "+w.kiro_session_id) : P[pstate];
+      summary = "Iteration "+(w.iteration_number??0); break;
+    case "permission_guard":
+      status = pstate==="WAITING" ? "Permission required" : "Policy configured";
+      summary = "Click to configure ALLOW / ASK / DENY"; showElapsed=false; break;
+    case "kiro_monitor":
+      status = (pstate==="ACTIVE") ? "Monitoring Kiro…" : (pstate==="PENDING"?"Kiro has not started.":P[pstate]);
+      summary = ""; break;
+    case "kiro_result_capture":
+      status = (w.latest_kiro_result_len>0) ? "Result captured ("+w.latest_kiro_result_len+" chars)" : (pstate==="PENDING"?"No result yet":P[pstate]);
+      summary = (w.latest_kiro_result||"").slice(0,120); break;
+    case "gpt_review":
+      status = pstate==="ACTIVE" ? "GPT reviewing result…" : P[pstate];
+      summary = "Iteration "+(w.iteration_number??0); break;
+    case "complete":
+      status = (w.state==="COMPLETED") ? "Workflow complete" : P[pstate];
+      summary = w.completed_at ? ("Finished "+fmtClock(w.completed_at)) : ""; showElapsed=false; break;
+  }
+  return { status, summary, showElapsed };
+}
+
+/* ── Header state / controls / overlay ─────────────────────────────────── */
+function stateFlavor(state){
+  if (state==="COMPLETED") return "success";
+  if (state==="FAILED") return "failed";
+  if (state==="CANCELLED") return "";
+  if (state==="PAUSED") return "paused";
+  if (state==="WAITING_FOR_COMMAND"||state==="WAITING_FOR_APPROVAL"||state==="KIRO_WAITING_PERMISSION") return "waiting";
+  if (state==="IDLE") return "";
+  return "active";
+}
+function setHeaderState(state){
+  document.getElementById("hdr-state").textContent = (state||"IDLE").replace(/_/g," ");
+  const dot=document.getElementById("hdr-dot");
+  dot.className = "dot " + stateFlavor(state);
+}
+function phaseLabel(state){
+  const map = {
+    IDLE:"Idle", INITIALIZING:"Startup", GPT_BOOTSTRAPPING:"GPT bootstrap",
+    WAITING_FOR_COMMAND:"Awaiting command", GPT_RUNNING:"GPT architect",
+    GPT_OUTPUT_READY:"GPT output", WAITING_FOR_APPROVAL:"Approval",
+    KIRO_STARTING:"Kiro start", KIRO_RUNNING:"Kiro running",
+    KIRO_WAITING_PERMISSION:"Permission", KIRO_RESULT_READY:"Kiro result",
+    GPT_REVIEWING:"GPT review", COMPLETED:"Complete", PAUSED:"Paused",
+    FAILED:"Failed", CANCELLED:"Cancelled"
+  };
+  return map[state] || state || "—";
+}
+function updateControls(state){
+  const isTerminal = TERMINAL_STATES.includes(state);
+  const canPause = ["GPT_BOOTSTRAPPING","WAITING_FOR_COMMAND","GPT_RUNNING","WAITING_FOR_APPROVAL",
+                    "KIRO_STARTING","KIRO_RUNNING","GPT_REVIEWING"].includes(state);
+  const canResume = state==="PAUSED";
+  const canCancel = !isTerminal;
+  document.getElementById("ctl-pause").disabled = !canPause;
+  document.getElementById("ctl-resume").disabled = !canResume;
+  document.getElementById("ctl-cancel").disabled = !canCancel;
+}
+function updateOverlay(state, wf){
+  const el=document.getElementById("overlay-banner");
+  el.className="overlay-banner";
+  if (OVERLAY_STATES.includes(state)){
+    el.classList.add("show", state);
+    let txt = state;
+    if (state==="PAUSED") txt = "⏸ PAUSED"+(wf&&wf.pause_reason?(" — "+wf.pause_reason):"")+(wf&&wf.resume_state?(" (resume → "+wf.resume_state.replace(/_/g," ")+")"):"");
+    if (state==="FAILED") txt = "✕ FAILED"+(wf&&wf.last_error?(" — "+wf.last_error):"")+(wf&&wf.last_error_code?(" ["+wf.last_error_code+"]"):"");
+    if (state==="CANCELLED") txt = "⊘ CANCELLED"+(wf&&wf.cancel_reason?(" — "+wf.cancel_reason):"");
+    el.textContent = txt;
+  }
+}
+
+/* ── Elapsed timers ────────────────────────────────────────────────────── */
+function activeElapsedMs(wf){
+  const start = wf && (wf.started_at || wf.created_at);
+  if (!start) return 0;
+  const end = (wf && wf.completed_at) ? new Date(wf.completed_at) : new Date();
+  return end - new Date(start);
+}
+function tickElapsed(){
+  if (!currentWorkflow) return;
+  document.getElementById("hdr-elapsed").textContent = fmtDur(activeElapsedMs(currentWorkflow));
+  // Refresh active-block elapsed lines.
+  const blocks = currentWorkflow.blocks || {};
+  BLOCKS.forEach(b => {
+    if (blocks[b.id]==="ACTIVE"){
+      const info=blockInfo(b.id, currentWorkflow, "ACTIVE");
+      const elp=document.getElementById("elapsed-"+b.id);
+      if (elp && info.showElapsed) elp.textContent = "Elapsed: "+fmtDur(activeElapsedMs(currentWorkflow));
+    }
+  });
+}
+
+/* ── Event timeline ────────────────────────────────────────────────────── */
+function renderTimeline(){
+  const tl=document.getElementById("timeline");
+  if (!currentEvents.length){ tl.innerHTML='<div class="tl-empty">No events yet.</div>'; return; }
+  tl.innerHTML="";
+  currentEvents.forEach(ev => tl.appendChild(timelineItem(ev)));
+  tl.scrollTop = tl.scrollHeight;
+}
+function timelineItem(ev){
+  const it=document.createElement("div"); it.className="tl-item";
+  const msg = ev.message || ev.event_type || "";
+  it.innerHTML = '<span class="tl-time">'+esc(fmtClock(ev.timestamp))+'</span>'+
+                 '<span class="tl-msg">'+esc(msg)+'</span>';
+  it.onclick = () => showEventMeta(ev);
+  return it;
+}
+function addEvent(ev){
+  if (!ev) return;
+  // Dedup by event_id.
+  if (currentEvents.some(e => e.event_id === ev.event_id)) return;
+  currentEvents.push(ev);
+  const tl=document.getElementById("timeline");
+  if (tl.querySelector(".tl-empty")) tl.innerHTML="";
+  tl.appendChild(timelineItem(ev));
+  tl.scrollTop = tl.scrollHeight;
+}
+function showEventMeta(ev){
+  const meta = ev.metadata && Object.keys(ev.metadata).length ? JSON.stringify(ev.metadata,null,2) : "(no metadata)";
+  toast((ev.event_type||"event")+" @ "+fmtClock(ev.timestamp));
+  openBlockId=null;
+  openDrawerRaw("🗂", (ev.event_type||"Event"),
+    '<div class="sec"><div class="sec-title">Event</div>'+
+    '<div class="kv"><span class="k">Type</span><span class="v">'+esc(ev.event_type)+'</span></div>'+
+    '<div class="kv"><span class="k">From → To</span><span class="v">'+esc(ev.from_state||"—")+' → '+esc(ev.to_state||"—")+'</span></div>'+
+    '<div class="kv"><span class="k">Time</span><span class="v">'+esc(fmtClock(ev.timestamp))+'</span></div>'+
+    '<div class="kv"><span class="k">Iteration</span><span class="v">'+esc(ev.iteration_number)+'</span></div></div>'+
+    '<div class="sec"><div class="sec-title">Metadata</div><div class="prompt-box">'+esc(meta)+'</div></div>');
+}
+
+/* ── Header controls → engine (via API) ────────────────────────────────── */
+async function ctlPause(){ await ctlAction("pause", {reason:"Paused from Architecture UI"}); }
+async function ctlResume(){ await ctlAction("resume"); }
+async function ctlCancel(){ if(!confirm("Cancel this workflow? This is terminal.")) return; await ctlAction("cancel", {reason:"Cancelled from Architecture UI"}); }
+async function ctlAction(action, body){
+  if (!currentWorkflowId) return;
+  try {
+    const data = await api("POST", "/api/workflows/"+encodeURIComponent(currentWorkflowId)+"/"+action, body||{});
+    applyWorkflow(data.workflow);
+    toast("Workflow "+action+"d");
+  } catch(e){ toast(action+" failed: "+e.message); }
+}
+
+/* ══ DETAILS DRAWER ══════════════════════════════════════════════════════ */
+function openDrawer(blockId){
+  openBlockId = blockId;
+  const b = BLOCK_BY_ID[blockId];
+  document.getElementById("drawer-icon").textContent = b.icon;
+  document.getElementById("drawer-title").textContent = b.title;
+  renderDrawerBody(blockId);
+  document.getElementById("drawer").classList.add("open");
+  document.getElementById("drawer-scrim").classList.add("open");
+}
+function openDrawerRaw(icon, title, html){
+  document.getElementById("drawer-icon").textContent = icon;
+  document.getElementById("drawer-title").textContent = title;
+  document.getElementById("drawer-body").innerHTML = html;
+  document.getElementById("drawer").classList.add("open");
+  document.getElementById("drawer-scrim").classList.add("open");
+}
+function closeDrawer(){
+  if (mrDirty && !confirm("Discard unsaved Master Requirement changes?")) return;
+  mrDirty=false; openBlockId=null;
+  document.getElementById("drawer").classList.remove("open");
+  document.getElementById("drawer-scrim").classList.remove("open");
+}
+
+function kv(k,v){ return '<div class="kv"><span class="k">'+esc(k)+'</span><span class="v">'+esc(v==null||v===""?"—":v)+'</span></div>'; }
+function sec(title, inner){ return '<div class="sec"><div class="sec-title">'+esc(title)+'</div>'+inner+'</div>'; }
+function promptBox(text, empty){ return text ? '<div class="prompt-box">'+esc(text)+'</div>' : '<div class="empty-state">'+esc(empty||"Nothing to show yet.")+'</div>'; }
+
+function renderDrawerBody(blockId){
+  const w = currentWorkflow || {};
+  const body = document.getElementById("drawer-body");
+  const blocks = w.blocks || {};
+  const pstate = blocks[blockId] || "PENDING";
+  let html = sec("Status",
+    kv("Presentation", pstate) + kv("Workflow state", (w.state||"—")) + kv("Iteration", w.iteration_number??0));
+
+  switch(blockId){
+    case "chrome_profile":
+      html += sec("Config",
+        kv("Selected profile", w.selected_chrome_profile_key) +
+        kv("Account email", w.selected_chrome_account_email) +
+        kv("Profile key", w.selected_chrome_profile_key) +
+        kv("Last verified", "—"));
+      html += sec("Controls",
+        '<button class="btn" disabled>Select Profile</button><span class="reserved">Available in Part 3</span><br><br>'+
+        '<button class="btn" disabled>Test Open</button><span class="reserved">Available in Part 3</span>');
+      break;
+    case "gpt_conversation":
+      html += sec("Conversation",
+        kv("Status", w.chatgpt_conversation_url ? "Linked" : "Not created") +
+        kv("Conversation URL", w.chatgpt_conversation_url) +
+        kv("Tab ID", w.chatgpt_tab_id) +
+        kv("Window HWND", w.chatgpt_window_hwnd) +
+        kv("Updated", fmtClock(w.updated_at)));
+      html += sec("Controls",
+        '<button class="btn" disabled>Open Conversation</button><span class="reserved">Available in Part 4</span><br><br>'+
+        '<button class="btn" disabled>Reset Conversation</button><span class="reserved">Available in Part 4</span>');
+      break;
+    case "master_requirement":
+      html += sec("Prompt / Config",
+        '<textarea class="prompt-edit" id="mr-text" oninput="mrInput()">'+esc(w.master_gpt_prompt||"")+'</textarea>'+
+        '<div class="field-row"><span class="charcount" id="mr-count">'+((w.master_gpt_prompt||"").length)+' chars</span>'+
+        '<span class="save-state" id="mr-saved">'+(w.master_gpt_prompt?"Saved":"Not set")+'</span></div>'+
+        '<div class="field-row"><span></span><button class="btn primary" id="mr-save" onclick="saveMasterRequirement()">Save</button></div>');
+      break;
+    case "telegram_command":
+      html += sec("Input",
+        kv("Current command", w.current_user_command) +
+        kv("State", w.current_user_command ? "Received" : (pstate==="WAITING"?"Waiting":"—")));
+      if (w.current_user_command) html += sec("Command", promptBox(w.current_user_command));
+      break;
+    case "gpt_architect":
+      html += sec("Input", kv("Command", w.current_user_command));
+      html += sec("Output (latest)", promptBox(w.latest_gpt_output, "No GPT output yet."));
+      if (w.last_error) html += sec("Errors", promptBox(w.last_error));
+      html += sec("Timing", kv("Started", fmtClock(w.started_at)) + kv("Updated", fmtClock(w.updated_at)));
+      html += sec("Controls",
+        '<button class="btn" disabled>Open GPT</button><span class="reserved">Available in Part 4</span><br><br>'+
+        '<button class="btn" disabled>Retry</button><span class="reserved">Available in Part 4</span>');
+      break;
+    case "gpt_output_capture":
+      html += sec("Output",
+        kv("Captured", w.latest_gpt_output_len>0 ? "Yes" : "No") +
+        kv("Length", (w.latest_gpt_output_len||0)+" chars") +
+        kv("Updated", fmtClock(w.updated_at)));
+      html += sec("Captured GPT Output", promptBox(w.latest_gpt_output, "Nothing captured yet."));
+      break;
+    case "your_approval":
+      html += sec("Prompt to approve", promptBox(w.approved_gpt_prompt || w.latest_gpt_output, "No prompt awaiting approval yet."));
+      html += sec("Latest GPT output", promptBox(w.latest_gpt_output, "—"));
+      html += sec("Controls",
+        '<button class="btn go" disabled>Proceed</button> '+
+        '<button class="btn warn" disabled>Edit Prompt</button> '+
+        '<button class="btn danger" disabled>Cancel</button>'+
+        '<div class="empty-state" style="margin-top:8px">Approval routing arrives in a later Part; use the header Cancel for workflow control.</div>');
+      break;
+    case "kiro_executor":
+      html += sec("Config",
+        kv("Kiro session id", w.kiro_session_id) +
+        kv("Kiro project path", w.kiro_project_path) +
+        kv("Iteration", w.iteration_number??0));
+      html += sec("Approved prompt (intended for Kiro)", promptBox(w.approved_gpt_prompt, "No approved prompt yet."));
+      break;
+    case "permission_guard":
+      html += sec("Permission Policy",
+        '<div class="empty-state">Policy only — this does not control Kiro yet (Part 9 will enforce it).</div>'+
+        '<div id="perm-list" style="margin-top:8px"></div>'+
+        '<div class="field-row"><span class="save-state" id="perm-saved"></span>'+
+        '<button class="btn primary" onclick="savePermissionPolicy()">Save Policy</button></div>');
+      break;
+    case "kiro_monitor":
+      html += sec("Monitor",
+        kv("Status", pstate==="ACTIVE"?"Monitoring":"Kiro has not started.") +
+        kv("Elapsed", pstate==="ACTIVE"?fmtDur(activeElapsedMs(w)):"—") +
+        kv("Current action", "—") + kv("Files changed", "—") +
+        kv("Commands", "—") + kv("Tests", "—") + kv("Permissions", "—"));
+      html += sec("Latest activity", '<div class="empty-state">Live Kiro activity arrives in a later Part.</div>');
+      if (w.last_error) html += sec("Errors", promptBox(w.last_error));
+      break;
+    case "kiro_result_capture":
+      html += sec("Result",
+        kv("Captured", w.latest_kiro_result_len>0 ? "Yes" : "No") +
+        kv("Length", (w.latest_kiro_result_len||0)+" chars") +
+        kv("Iteration", w.iteration_number??0));
+      html += sec("Kiro result", promptBox(w.latest_kiro_result, "No Kiro result yet."));
+      break;
+    case "gpt_review":
+      html += sec("Review context", kv("Iteration", w.iteration_number??0) + kv("Review state", w.state));
+      html += sec("Kiro result under review", promptBox(w.latest_kiro_result, "No Kiro result to review yet."));
+      html += sec("Latest GPT output", promptBox(w.latest_gpt_output, "—"));
+      break;
+    case "complete":
+      if (w.state==="COMPLETED"){
+        html += sec("Completion",
+          kv("Completed at", fmtClock(w.completed_at)) +
+          kv("Iterations", w.iteration_number??0) +
+          kv("Duration", fmtDur(activeElapsedMs(w))) +
+          kv("Events", currentEvents.length));
+        html += sec("Final result", promptBox(w.latest_kiro_result || w.latest_gpt_output, "—"));
+      } else {
+        html += sec("Completion", '<div class="empty-state">Workflow has not completed yet.</div>');
+      }
+      break;
+  }
+  body.innerHTML = html;
+  if (blockId==="permission_guard") loadPermissionPolicy();
+  if (blockId==="master_requirement"){ mrDirty=false; }
+}
+
+/* ── Master Requirement save (via engine context update) ───────────────── */
+function mrInput(){
+  const ta=document.getElementById("mr-text"); if(!ta) return;
+  document.getElementById("mr-count").textContent = ta.value.length + " chars";
+  document.getElementById("mr-saved").textContent = "Unsaved changes";
+  document.getElementById("mr-saved").style.color = "var(--q-amber)";
+  mrDirty = true;
+}
+async function saveMasterRequirement(){
+  if (!currentWorkflowId) return;
+  const ta=document.getElementById("mr-text"); if(!ta) return;
+  const btn=document.getElementById("mr-save"); btn.disabled=true;
+  try {
+    const data = await api("PATCH", "/api/workflows/"+encodeURIComponent(currentWorkflowId)+"/context",
+      { fields: { master_gpt_prompt: ta.value } });
+    mrDirty=false;
+    applyWorkflow(data.workflow);
+    // Re-render drawer to reflect saved state.
+    if (openBlockId==="master_requirement"){
+      const saved=document.getElementById("mr-saved");
+      if (saved){ saved.textContent="Saved ✓"; saved.style.color="var(--q-green)"; }
+    }
+    toast("Master Requirement saved");
+  } catch(e){ toast("Save failed: "+e.message); }
+  finally { btn.disabled=false; }
+}
+
+/* ── Permission Guard policy ───────────────────────────────────────────── */
+let _permPolicy = {};
+const PERM_LABELS = {
+  read_project_files:"Read project files", write_edit_project_files:"Write / edit project files",
+  run_tests:"Run tests", normal_python_commands:"Normal python commands",
+  normal_npm_node_commands:"Normal npm / node commands", delete_files:"Delete files",
+  install_unusual_packages:"Install unusual software / packages", git_push:"git push",
+  deployment:"Deployment", external_side_effects:"External side effects",
+  git_reset:"git reset", git_clean:"git clean",
+  destructive_repo_operations:"Destructive repository operations",
+  credential_secret_operations:"Credential / secrets operations",
+};
+async function loadPermissionPolicy(){
+  if (!currentWorkflowId) return;
+  try {
+    const data = await api("GET", "/api/workflows/"+encodeURIComponent(currentWorkflowId)+"/permission-policy");
+    _permPolicy = data.policy || {};
+    renderPermissionList();
+  } catch(e){ /* ignore */ }
+}
+function renderPermissionList(){
+  const list=document.getElementById("perm-list"); if(!list) return;
+  list.innerHTML="";
+  Object.keys(PERM_LABELS).forEach(key => {
+    const cur = _permPolicy[key] || "ASK";
+    const row=document.createElement("div"); row.className="perm-row";
+    row.innerHTML='<span class="perm-name">'+esc(PERM_LABELS[key])+'</span>'+
+      '<span class="perm-seg" data-key="'+key+'">'+
+        ['ALLOW','ASK','DENY'].map(d =>
+          '<button data-d="'+d+'" class="'+(cur===d?'sel':'')+'" onclick="setPerm(\''+key+'\',\''+d+'\')">'+d+'</button>').join('')+
+      '</span>';
+    list.appendChild(row);
+  });
+}
+function setPerm(key, d){
+  _permPolicy[key]=d;
+  renderPermissionList();
+  const s=document.getElementById("perm-saved"); if(s){ s.textContent="Unsaved"; s.style.color="var(--q-amber)"; }
+}
+async function savePermissionPolicy(){
+  if (!currentWorkflowId) return;
+  try {
+    await api("PUT", "/api/workflows/"+encodeURIComponent(currentWorkflowId)+"/permission-policy", { policy:_permPolicy });
+    const s=document.getElementById("perm-saved"); if(s){ s.textContent="Saved ✓"; s.style.color="var(--q-green)"; }
+    toast("Permission policy saved");
+  } catch(e){ toast("Save failed: "+e.message); }
+}
+
+/* ══ REALTIME WEBSOCKET ══════════════════════════════════════════════════ */
+function connectWs(workflowId){
+  wsShouldRun = true;
+  if (ws){ try{ ws.close(); }catch(e){} ws=null; }
+  const proto = location.protocol==="https:" ? "wss" : "ws";
+  const url = proto+"://"+location.host+"/ws/workflows/"+encodeURIComponent(workflowId);
+  setConn(false, "Connecting…");
+  let sock;
+  try { sock = new WebSocket(url); } catch(e){ scheduleReconnect(workflowId); return; }
+  ws = sock;
+  sock.onopen = () => { wsReconnectDelay=1000; setConn(true, "Connected"); };
+  sock.onmessage = (e) => {
+    let msg; try{ msg=JSON.parse(e.data); }catch(err){ return; }
+    // Ignore messages for a workflow we're no longer viewing (switch safety).
+    if (msg.workflow_id && currentWorkflowId && msg.workflow_id!==currentWorkflowId) return;
+    handleWsMessage(msg);
+  };
+  sock.onclose = () => { setConn(false, "Reconnecting…"); if (wsShouldRun) scheduleReconnect(workflowId); };
+  sock.onerror = () => { try{ sock.close(); }catch(e){} };
+}
+function scheduleReconnect(workflowId){
+  if (!wsShouldRun) return;
+  setTimeout(() => { if (wsShouldRun && currentWorkflowId===workflowId) connectWs(workflowId); }, wsReconnectDelay);
+  wsReconnectDelay = Math.min(wsReconnectDelay*2, 15000);
+}
+function handleWsMessage(msg){
+  if (!msg || !msg.type) return;
+  switch(msg.type){
+    case "snapshot":
+      if (msg.workflow) applyWorkflow(msg.workflow);
+      if (msg.events){ currentEvents = msg.events; renderTimeline(); }
+      break;
+    case "event_added":
+      addEvent(msg.event); break;
+    default:
+      // workflow_created / updated / state_transition / paused / resumed /
+      // failed / cancelled / completed all carry a full workflow payload.
+      if (msg.workflow) applyWorkflow(msg.workflow);
+      break;
+  }
+}
+function setConn(ok, text){
+  const dot=document.getElementById("conn-dot");
+  // "Waiting for workflow" / "Connecting…" / "Reconnecting…" are amber, not red.
+  let cls = "failed";
+  if (ok) cls = "success";
+  else if (/wait|connect/i.test(text||"")) cls = "waiting";
+  dot.className = "dot " + cls;
+  document.getElementById("conn-text").textContent = text;
+}
+</script>
+</body>
+</html>

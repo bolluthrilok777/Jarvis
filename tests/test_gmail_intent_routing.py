@@ -157,11 +157,11 @@ def test_web_task_route_uses_web_scoped_gmail_context():
     from jarvis_core.models import TaskSubmitRequest
     from jarvis_core.routes import tasks_submit
 
-    with patch("jarvis_core.orchestrator.orchestrator.submit_multiple", return_value=[]) as submit:
+    with patch("jarvis_core.orchestrator.orchestrator.submit", return_value={}) as submit:
         result = tasks_submit(TaskSubmitRequest(text="check my gmail"))
 
     assert result["status"] == "ok"
-    submit.assert_called_once_with(["check my gmail"], conversation_id="web")
+    submit.assert_called_once_with("check my gmail", conversation_id="web")
 
 
 def test_telegram_uses_user_scoped_shared_gmail_context():

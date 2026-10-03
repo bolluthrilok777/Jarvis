@@ -64,6 +64,7 @@ class TaskPublic(BaseModel):
     task_id: str
     original_input: str
     source: str
+    task_type: str = "command"
     interpreted_command: str
     risk_level: str
     concurrency_group: str
@@ -101,6 +102,7 @@ class TaskPublic(BaseModel):
             task_id=task.task_id,
             original_input=task.original_input,
             source=task.source,
+            task_type=task.task_type,
             interpreted_command=task.interpreted_command,
             risk_level=task.risk_level,
             concurrency_group=task.concurrency_group,
